@@ -4,7 +4,5 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Larp listens while you hold the dictation hotkey, to turn your speech into text.</string>
-  <key>LSUIElement</key>
-  <true/>
 </dict>
 </plist>

@@ -57,5 +57,5 @@ Larp, a product of Sush: a dictation app modelled on Sush (`../sush`), whose whi
 
 ## Gotchas
 
-- macOS: `Info.plist` holds the microphone usage string and `LSUIElement`. `Entitlements.plist` holds audio-input. Pasting needs Accessibility permission, checked with `AXIsProcessTrusted` in `platform.rs`. Transparency needs `macos-private-api`.
+- macOS: Larp is a regular Dock app (no `LSUIElement`); clicking the Dock icon (`RunEvent::Reopen`) shows the hidden window. `Info.plist` holds the microphone usage string. `Entitlements.plist` holds audio-input. Pasting needs Accessibility permission, checked with `AXIsProcessTrusted` in `platform.rs`. Transparency needs `macos-private-api`.
 - On Windows, a normal app can't send keystrokes into elevated (admin) windows. There the paste silently does nothing, but the text is still in History.

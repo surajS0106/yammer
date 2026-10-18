@@ -38,7 +38,8 @@ export default function App() {
       <div className="flex h-svh">
         <nav className="flex w-52 shrink-0 flex-col gap-0.5 border-r bg-sidebar p-3">
           <div className="mb-4 flex items-center gap-2 px-2 pt-1">
-            <img src="/sush-mark.png" alt="" className="size-6 rounded-md" />
+            <img src="/larp-icon-light.png" alt="" className="size-6 rounded-md dark:hidden" />
+            <img src="/larp-icon-dark.png" alt="" className="hidden size-6 rounded-md dark:block" />
             <span className="font-semibold tracking-tight">Larp</span>
           </div>
           {pages.map(({ id, label, icon: Icon }) => (

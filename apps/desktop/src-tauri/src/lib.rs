@@ -4,6 +4,8 @@
 
 mod commands;
 mod dictation;
+#[cfg(target_os = "macos")]
+mod dock;
 mod error;
 mod hotkey;
 mod overlay;
@@ -44,10 +46,6 @@ pub fn run() {
             app.manage(state::AppState::new(config_dir, data_dir)?);
             app.manage(dictation::spawn(app.handle().clone()));
 
-            // A menu-bar app on macOS: no Dock icon.
-            #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
             let settings = app.state::<state::AppState>().settings();
             overlay::create(app.handle())?;
             overlay::set_always_visible(app.handle(), settings.overlay_always_visible);
@@ -70,6 +68,8 @@ pub fn run() {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            #[cfg(target_os = "macos")]
+            WindowEvent::ThemeChanged(theme) => dock::set_icon(*theme),
             WindowEvent::Moved(pos) if window.label() == overlay::LABEL => overlay::moved(window.app_handle(), *pos),
             _ => {}
         })
@@ -99,10 +99,19 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building Larp")
-        .run(|_app, event| {
+        .run(|app, event| match event {
             // Keep running in the tray when the last window is hidden or closed.
-            if let tauri::RunEvent::ExitRequested { api, code: None, .. } = event {
-                api.prevent_exit();
+            tauri::RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(),
+            // After Tauri's own startup icon (dev builds set one on Ready), so ours wins.
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Ready => {
+                if let Some(window) = app.get_webview_window("main") {
+                    dock::set_icon(window.theme().unwrap_or(tauri::Theme::Light));
+                }
             }
+            // Clicking the Dock icon brings back the hidden window.
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => tray::show_main(app),
+            _ => {}
         });
 }
