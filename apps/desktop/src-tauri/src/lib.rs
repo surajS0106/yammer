@@ -116,9 +116,11 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building Larp")
-        .run(|#[cfg_attr(not(target_os = "macos"), allow(unused_variables))] app, event| match event {
+        .run(|app, event| match event {
             // Keep running in the tray when the last window is hidden or closed.
             tauri::RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(),
+            // Every way out (tray Quit, Dock Quit, logout) passes here before exit() runs C++ destructors.
+            tauri::RunEvent::Exit => app.state::<whisper::Whisper>().unload(),
             // After Tauri's own startup icon (dev builds set one on Ready), so ours wins.
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Ready => {

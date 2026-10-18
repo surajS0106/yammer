@@ -142,6 +142,13 @@ impl Whisper {
         *self.ctx.lock().unwrap() = Some((id.to_string(), ctx.clone()));
         Ok(ctx)
     }
+
+    /// Free the loaded model. Must run before the process exits: ggml's Metal device is a
+    /// C++ static whose destructor aborts if any model's GPU buffers are still alive, which
+    /// turned every quit into a crash (and left the dying app's Dock tile beside a relaunch).
+    pub fn unload(&self) {
+        self.ctx.lock().unwrap_or_else(|e| e.into_inner()).take();
+    }
 }
 
 /// Transcribe 16 kHz mono samples, returning the text and the language spoken (detected when
