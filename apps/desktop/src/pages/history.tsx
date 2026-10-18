@@ -4,24 +4,17 @@ import * as React from "react";
 import { PageHeader } from "@/App";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
+import { engineLabel } from "@/lib/stats";
 import { api, errorMessage, on, type HistoryEntry } from "@/lib/tauri";
 
 const time = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
-
-function engineLabel(entry: HistoryEntry): string {
-  if (entry.engineLabel) return entry.engineLabel;
-  // Older entries only have "kind:model"; the model itself may contain ":" (saaras:v4).
-  const i = entry.engine.indexOf(":");
-  const name = entry.engine.slice(i + 1);
-  return entry.engine.slice(0, i) === "local" ? `On-device · ${name}` : `Cloud · ${name}`;
-}
 
 function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }) {
   const { toast } = useSettings();
   const [showRaw, setShowRaw] = React.useState(false);
   return (
     <div className="group space-y-1.5 px-4 py-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span>{time.format(entry.at)}</span>
         <span>·</span>
         <span>{(entry.durationMs / 1000).toFixed(1)}s</span>
@@ -32,7 +25,7 @@ function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }
             {showRaw ? "Hide original" : "Show original"}
           </button>
         )}
-        <div className="ml-auto flex opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="ml-auto flex transition-opacity pointer-fine:opacity-0 group-hover:opacity-100 focus-within:opacity-100">
           <Button
             size="icon"
             variant="ghost"
@@ -46,7 +39,7 @@ function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }
           </Button>
         </div>
       </div>
-      <p className="text-sm leading-relaxed whitespace-pre-wrap select-text">{entry.text}</p>
+      <p className="text-sm leading-relaxed break-words whitespace-pre-wrap select-text">{entry.text}</p>
       {showRaw && entry.raw && <p className="border-l-2 pl-3 text-sm leading-relaxed text-muted-foreground">{entry.raw}</p>}
     </div>
   );

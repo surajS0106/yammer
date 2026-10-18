@@ -59,7 +59,12 @@ pub fn run() {
 
             // No Dock icon until the main window opens (dock::show).
             #[cfg(target_os = "macos")]
-            dock::show(app.handle(), false);
+            {
+                dock::show(app.handle(), false);
+                if let Some(window) = app.get_webview_window("main") {
+                    dock::follow_minimize(&window);
+                }
+            }
 
             // Launched at login → stay in the tray. Otherwise, or before setup is done, show the window.
             let hidden = std::env::args().any(|a| a == "--hidden");
@@ -99,6 +104,7 @@ pub fn run() {
             commands::history_delete,
             commands::history_clear,
             commands::copy_text,
+            commands::text_rewrite,
             commands::platform_info,
             commands::autostart_get,
             commands::autostart_set,

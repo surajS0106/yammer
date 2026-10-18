@@ -2350,6 +2350,7 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
+ "block2",
  "cpal",
  "enigo",
  "futures",

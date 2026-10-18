@@ -12,6 +12,7 @@ bun run dev                  # tauri dev; Vite on fixed port 1430 (Sush uses 142
 bun run typecheck            # tsc
 bun --filter desktop build   # tsc + vite build; also needed before `cargo test` on a clean checkout (generate_context! wants dist/)
 bun run build                # release installers for this platform
+bun run build:mac            # macOS DMG only (sets MACOSX_DEPLOYMENT_TARGET=11.0 for whisper.cpp); see /build-dmg
 
 cargo test --workspace
 cargo test -p voice-core <name_substring>
@@ -28,7 +29,7 @@ There are no JS tests and no JS linter; `typecheck` is the TypeScript gate. Buil
 
 CI (`.github/workflows/ci.yml`) has a 3-minute budget. It runs typecheck, the frontend build, `cargo fmt --check`, and voice-core clippy and tests on Linux. It never builds the `larp` crate, so run `cargo test --workspace` locally. Releases are manual. Start `release.yml` from the Actions tab or with `gh workflow run release.yml`. It builds every platform and tags the release `v<version>` from `apps/desktop/src-tauri/tauri.conf.json`. Pushing a tag doesn't trigger it.
 
-Rust formatting is enforced. `rustfmt.toml` matches the code's dense style (`max_width = 150`, `use_small_heuristics = "Max"`), so run `cargo fmt --all` after Rust edits. Clippy must be warning-free, and CI runs it with `-D warnings` on voice-core. macOS-only code (`dock.rs`, `panel.rs` and the `cfg(target_os = "macos")` arms) only compiles and lints on a Mac. Project skills: `/typecheck` (fast), `/check` (the pre-push gate that mirrors CI) and `/ship` (check, commit, push).
+Rust formatting is enforced. `rustfmt.toml` matches the code's dense style (`max_width = 150`, `use_small_heuristics = "Max"`), so run `cargo fmt --all` after Rust edits. Clippy must be warning-free, and CI runs it with `-D warnings` on voice-core. macOS-only code (`dock.rs`, `panel.rs` and the `cfg(target_os = "macos")` arms) only compiles and lints on a Mac. Project skills: `/typecheck` (fast), `/check` (the pre-push gate that mirrors CI), `/ship` (check, commit, push) and `/build-dmg` (a local unsigned macOS DMG).
 
 ## Architecture
 
@@ -59,7 +60,7 @@ Larp, a product of Sush: a dictation app modelled on Sush (`../sush`), whose whi
     - Single-instance: `larp --toggle` from a second launch toggles dictation, which is the Wayland path.
     - Closing the main window hides it, and the app keeps running in the tray.
     - `--hidden` (used by autostart) skips showing the window once the user is onboarded.
-- **`apps/desktop/src`**: React 19, Vite and Tailwind 4, with hand-rolled primitives in `components/ui.tsx` (no shadcn or Radix) using Sush's theme tokens.
+- **`apps/desktop/src`**: React 19, Vite and Tailwind 4, with hand-rolled primitives in `components/ui.tsx` (no Radix) using Sush's theme tokens. Registry components from `@ui-shrushank`/`@ui-shrushank-pro` go in `components/ui/` (configured in `components.json`; the pro registry needs `SHRUSHANK_PRO_TOKEN`, which lives in the repo-root `.env`).
   - Both windows load `index.html`. `main.tsx` renders `overlay.tsx` when the window label is `overlay`, and the settings app otherwise.
   - `lib/tauri.ts` mirrors the Rust commands and serde types. **If you change a Rust command or serde type, update this file to match.**
   - `lib/settings.tsx` holds the settings context. Every change saves through `settings_set`, which rejects a hotkey it can't register.
@@ -70,7 +71,7 @@ Larp, a product of Sush: a dictation app modelled on Sush (`../sush`), whose whi
 ## Gotchas
 
 - Tauri API calls from the frontend beyond `core:default` (for example window dragging or `setTheme`) need a matching permission in `apps/desktop/src-tauri/capabilities/default.json`. That file covers both windows. Without the permission, the call fails at runtime.
-- macOS Dock icon: `dock.rs` swaps it between `icons/macos-light.png` and `icons/macos-dark.png` to follow the system theme. The bundled `icon.icns` is static. `build.rs` watches `icons/` so that a changed icon is re-embedded.
+- macOS Dock icon: `dock.rs` swaps it between `icons/macos-light.png` and `icons/macos-dark.png` to follow the system theme. The bundled `icon.icns` is static. On macOS 26, Finder, Launchpad and the pinned Dock icon follow the theme through `Assets.car`, compiled from `icons/AppIcon.icon` by `icons/build-mac-icon.sh` (needs full Xcode) and bundled with `tauri.macos-icon.conf.json`, which `release.yml` applies on its macOS runners. `Info.icon.plist` repeats `Info.plist`'s microphone string, so keep the two in sync. `build.rs` watches `icons/` so that a changed icon is re-embedded.
 
 - macOS: Larp has a Dock icon only while the main window is open (`dock::show` switches the activation policy between Regular and Accessory). With it closed, Larp is an accessory app, which is what lets the overlay appear over other apps' full-screen Spaces. Clicking the Dock icon (`RunEvent::Reopen`) shows the hidden window. `Info.plist` holds the microphone usage string. `Entitlements.plist` holds audio-input. Pasting needs Accessibility permission, checked with `AXIsProcessTrusted` in `platform.rs`. Transparency needs `macos-private-api`.
 - On Windows, a normal app can't send keystrokes into elevated (admin) windows. There the paste silently does nothing, but the text is still in History.

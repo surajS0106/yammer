@@ -1,6 +1,7 @@
 """Generate Larp's app icons from the three source images.
 
-macOS: light/dark rounded-square icons on Apple's 1024 grid (824px body, continuous-corner squircle).
+macOS: light/dark rounded-square icons on Apple's 1024 grid (824px body, continuous-corner squircle),
+plus full-bleed light/dark squares in AppIcon.icon for the macOS 26 adaptive icon (../build-mac-icon.sh).
 Windows/Linux: the transparent ribbon L.
 
 Run from anywhere: python3 make_icons.py <path to apps/desktop> <scratch dir>
@@ -57,6 +58,20 @@ def mac_icon(path):
     return out, body
 
 
+def full_bleed(path, tile):
+    """Unmasked 1024 square for AppIcon.icon: macOS 26 applies its own shape, so the art must fill the canvas.
+    The sources' rounded corners (transparent in dark, white in light) are cut with the shared tile alpha and
+    filled from a blurred, enlarged copy of the tile, so the system mask never shows a wedge."""
+    body = opaque(Image.open(path)).crop((34, 34, 1220, 1220))
+    body.putalpha(tile)
+    grow = round(body.width * 0.2)
+    fill = body.resize((body.width + 2 * grow,) * 2, Image.LANCZOS).crop((grow, grow, grow + body.width, grow + body.height))
+    fill = fill.filter(ImageFilter.GaussianBlur(24))
+    fill.putalpha(255)
+    fill.alpha_composite(body)
+    return fill.convert("RGB").resize((CANVAS, CANVAS), Image.LANCZOS)
+
+
 def clean_mark(path):
     """Drop the background-removal specks around the L and trim it to a square with a margin."""
     im = opaque(Image.open(path))
@@ -91,6 +106,12 @@ light.save(ICONS / "macos-light.png")
 dark.save(ICONS / "macos-dark.png")
 icns(light, ICONS / "icon.icns")
 icns(dark, ICONS / "icon-dark.icns")
+# The dark source's alpha is the clean tile shape; the light one has its corners baked onto white.
+tile = opaque(Image.open(DARK)).crop((34, 34, 1220, 1220)).getchannel("A")
+assets = ICONS / "AppIcon.icon/Assets"
+assets.mkdir(parents=True, exist_ok=True)
+full_bleed(LIGHT, tile).save(assets / "light.png")
+full_bleed(DARK, tile).save(assets / "dark.png")
 
 # Windows / Linux
 mark.save(ICONS / "icon.png")
@@ -101,9 +122,8 @@ for s in (30, 44, 71, 89, 107, 142, 150, 284, 310):
 mark.resize((50, 50), Image.LANCZOS).save(ICONS / "StoreLogo.png")
 mark.save(ICONS / "icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
-# In-app logo and favicon, one per theme
-light_body.resize((256, 256), Image.LANCZOS).save(PUBLIC / "larp-icon-light.png")
-dark_body.resize((256, 256), Image.LANCZOS).save(PUBLIC / "larp-icon-dark.png")
+# In-app logo: the transparent L, which reads on both themes. Favicon: one tile per theme.
+mark.resize((256, 256), Image.LANCZOS).save(PUBLIC / "larp-mark.png")
 light_body.resize((64, 64), Image.LANCZOS).save(PUBLIC / "favicon-light.png")
 dark_body.resize((64, 64), Image.LANCZOS).save(PUBLIC / "favicon-dark.png")
 print("done")

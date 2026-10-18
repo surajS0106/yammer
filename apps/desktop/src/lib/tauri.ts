@@ -26,6 +26,22 @@ export interface Cleanup {
   instructions: string;
 }
 
+export interface Replacement {
+  from: string;
+  to: string;
+}
+
+export interface Snippet {
+  trigger: string;
+  text: string;
+}
+
+export interface Transform {
+  id: string;
+  name: string;
+  instructions: string;
+}
+
 export interface Settings {
   hotkey: string;
   micDevice: string | null;
@@ -42,6 +58,12 @@ export interface Settings {
   cloud: CloudStt;
   cleanup: Cleanup;
   theme: Theme;
+  /** Dictionary corrections applied to every transcript. */
+  replacements: Replacement[];
+  snippets: Snippet[];
+  transforms: Transform[];
+  /** Id of the transform applied to dictations; "" for none. */
+  activeTransform: string;
   onboarded: boolean;
 }
 
@@ -77,6 +99,8 @@ export interface HistoryEntry {
   engine: string;
   engineLabel?: string;
   cleanup?: string;
+  /** ISO 639-1 code; missing when a cloud engine auto-detected it, and on older entries. */
+  language?: string;
 }
 
 export interface Platform {
@@ -116,6 +140,8 @@ export const api = {
   historyDelete: (id: number) => invoke<void>("history_delete", { id }),
   historyClear: () => invoke<void>("history_clear"),
   copyText: (text: string) => invoke<void>("copy_text", { text }),
+  /** Rewrite text by a transform's instructions, using the AI cleanup model. */
+  textRewrite: (text: string, instructions: string) => invoke<string>("text_rewrite", { text, instructions }),
   platformInfo: () => invoke<Platform>("platform_info"),
   autostartGet: () => invoke<boolean>("autostart_get"),
   autostartSet: (enabled: boolean) => invoke<void>("autostart_set", { enabled }),

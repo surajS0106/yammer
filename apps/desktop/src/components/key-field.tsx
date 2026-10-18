@@ -14,8 +14,9 @@ export function KeyField({ name, keyUrl }: { name: SecretName; keyUrl?: string }
 
   return (
     <div className="space-y-1.5">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 @md:flex-nowrap">
         <Input
+          className="min-w-0 flex-1 basis-48"
           type="password"
           autoComplete="off"
           spellCheck={false}
@@ -35,7 +36,7 @@ export function KeyField({ name, keyUrl }: { name: SecretName; keyUrl?: string }
           </Button>
         )}
       </div>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         {saved ? <Badge tone="brand">Key saved</Badge> : <Badge>No key</Badge>}
         <span>Stored in your system keychain, never in a file.</span>
         {keyUrl && (

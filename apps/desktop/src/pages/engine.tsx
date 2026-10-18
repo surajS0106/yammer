@@ -1,8 +1,9 @@
 import { Download, Trash2 } from "lucide-react";
 
-import { PageHeader } from "@/App";
+import { PageHeader, type PageId } from "@/App";
 import { KeyField } from "@/components/key-field";
 import { Badge, Button, CommitInput, Notice, Progress, Row, Section, Segmented, Select } from "@/components/ui";
+import { parseWords } from "@/pages/dictionary";
 import { deleteModel, downloadModel, useModels } from "@/lib/models";
 import { languages, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
@@ -127,7 +128,7 @@ function CloudProvider() {
   );
 }
 
-export function EnginePage() {
+export function EnginePage({ go }: { go: (page: PageId) => void }) {
   const { settings, update } = useSettings();
   const { models } = useModels();
   const englishOnly = settings.engine === "local" && !!models.find((m) => m.id === settings.localModel)?.englishOnly;
@@ -159,16 +160,14 @@ export function EnginePage() {
         </Row>
         <Row
           label="Vocabulary"
-          description="Names, product terms or jargon you say often, separated by commas. Helps the engine spell them right."
-          stacked
+          description={(() => {
+            const n = parseWords(settings.vocabulary).length;
+            return n ? `${n} word${n === 1 ? "" : "s"} from your Dictionary help the engine spell names and jargon right.` : "Add names and jargon to your Dictionary so the engine spells them right.";
+          })()}
         >
-          <CommitInput
-            multiline
-            rows={2}
-            placeholder="Sush, Tauri, Kubernetes, Priya"
-            value={settings.vocabulary}
-            onCommit={(vocabulary) => void update({ vocabulary })}
-          />
+          <Button size="sm" variant="ghost" onClick={() => go("dictionary")}>
+            Open Dictionary
+          </Button>
         </Row>
       </Section>
     </div>

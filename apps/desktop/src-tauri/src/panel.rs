@@ -92,9 +92,7 @@ unsafe fn build(tao: &AnyClass) -> Option<&'static AnyClass> {
     let methods: [Sel; 3] = [sel!(canBecomeMainWindow), sel!(canBecomeKeyWindow), sel!(sendEvent:)];
     for sel in methods {
         let method = ffi::class_getInstanceMethod(tao, sel);
-        let Some(imp) = (!method.is_null()).then(|| ffi::method_getImplementation(method)).flatten() else {
-            return None;
-        };
+        let imp = (!method.is_null()).then(|| ffi::method_getImplementation(method)).flatten()?;
         ffi::class_addMethod(cls as *const _ as *mut _, sel, imp, ffi::method_getTypeEncoding(method));
     }
 

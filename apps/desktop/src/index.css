@@ -76,7 +76,7 @@
     --chart-4: oklch(0.82 0.08 180);
     --chart-5: oklch(0.38 0.06 205);
     --radius: 0.625rem;
-    --brand: oklch(0.58 0.105 186);
+    --brand: oklch(0.64 0.21 25); /* Sush's "Coral" accent, the logo coral. */
     --brand-foreground: oklch(1 0 0);
     --sidebar: oklch(0.982 0.006 190);
     --sidebar-foreground: oklch(0.17 0.02 205);
@@ -113,7 +113,7 @@
     --chart-3: oklch(0.55 0.09 190);
     --chart-4: oklch(0.84 0.08 180);
     --chart-5: oklch(0.42 0.06 205);
-    --brand: oklch(0.7 0.12 182);
+    --brand: oklch(0.68 0.19 25);
     --brand-foreground: oklch(1 0 0);
     --sidebar: oklch(0.145 0.006 212);
     --sidebar-foreground: oklch(0.975 0.004 190);

@@ -23,7 +23,7 @@ export function CleanupPage() {
         description="Have a language model tidy each transcript before it’s pasted. Adds a moment and sends the text (not the audio) to the model."
       />
 
-      <Card className="grid grid-cols-2 divide-x text-sm">
+      <Card className="grid divide-y text-sm @md:grid-cols-2 @md:divide-x @md:divide-y-0">
         <div className="p-4">
           <div className="mb-1.5 text-xs font-medium text-muted-foreground">You say</div>
           <p className="leading-relaxed">“um so let’s meet at 3, no wait, scratch that, 4pm on uh Thursday”</p>

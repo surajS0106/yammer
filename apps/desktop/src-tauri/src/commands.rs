@@ -144,6 +144,15 @@ pub fn history_clear(state: State<'_, AppState>) -> AppResult<()> {
     Ok(state.history.lock().unwrap().clear()?)
 }
 
+/// Rewrite `text` by `instructions` with the cleanup model (a Transform run from the Scratchpad).
+#[tauri::command]
+pub async fn text_rewrite(state: State<'_, AppState>, text: String, instructions: String) -> AppResult<String> {
+    let settings = state.settings();
+    let key = secrets::get("cleanup")?;
+    let out = voice_core::cleanup::rewrite(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, &instructions, &text).await?;
+    Ok(voice_core::text::apply(&out, &settings.replacements, &[]))
+}
+
 #[tauri::command]
 pub fn copy_text(text: String) -> AppResult<()> {
     paste::copy(&text)

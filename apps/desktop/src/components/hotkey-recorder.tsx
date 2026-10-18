@@ -69,7 +69,7 @@ export function HotkeyRecorder({ value, onChange }: { value: string; onChange: (
   }, [listening]);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {listening ? (
         <span className="flex h-8 items-center gap-1.5 rounded-md border border-primary/40 bg-primary/5 px-2.5 text-xs text-muted-foreground">
           Press a shortcut… <Kbd>Esc</Kbd> to cancel

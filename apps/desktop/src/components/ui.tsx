@@ -64,7 +64,7 @@ export function Switch({
 }
 
 const field =
-  "w-full rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-50 dark:bg-input/30";
+  "w-full max-w-full rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-50 dark:bg-input/30";
 
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(field, "h-8", className)} {...props} />;
@@ -120,7 +120,7 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return <div className={cn("rounded-xl border bg-card text-card-foreground", className)} {...props} />;
 }
 
-/** A settings row: label and description on the left, the control on the right (or below). */
+/** A settings row: label and description on the left, the control on the right (or below, when stacked or out of room). */
 export function Row({
   label,
   description,
@@ -133,12 +133,12 @@ export function Row({
   stacked?: boolean;
 }) {
   return (
-    <div className={cn("flex gap-4 px-4 py-3.5", stacked ? "flex-col gap-2.5" : "items-center justify-between")}>
-      <div className="min-w-0">
+    <div className={cn("flex px-4 py-3.5", stacked ? "flex-col gap-2.5" : "flex-wrap items-center justify-between gap-x-4 gap-y-2.5")}>
+      <div className={cn("min-w-0", !stacked && "flex-1 basis-56")}>
         <div className="text-sm font-medium">{label}</div>
         {description && <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</div>}
       </div>
-      <div className={cn(stacked ? "w-full" : "shrink-0")}>{children}</div>
+      <div className={cn(stacked ? "w-full" : "max-w-full shrink-0")}>{children}</div>
     </div>
   );
 }
@@ -206,14 +206,14 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="inline-flex rounded-lg bg-muted p-0.5">
+    <div className="inline-flex max-w-full overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none]">
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+            "shrink-0 rounded-md px-3 py-1 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
             value === o.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -244,5 +244,27 @@ export function Progress({ value }: { value: number }) {
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
       <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${Math.round(value * 100)}%` }} />
     </div>
+  );
+}
+
+/** A page's opening card: what the feature is for, with an example. */
+export function Intro({ title, children, example }: { title: string; children: React.ReactNode; example?: React.ReactNode }) {
+  return (
+    <Card className="space-y-3 bg-gradient-to-br from-primary/10 via-card to-card p-4 @md:p-5">
+      <h2 className="text-lg font-semibold tracking-tight text-balance">{title}</h2>
+      <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">{children}</p>
+      {example && <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">{example}</div>}
+    </Card>
+  );
+}
+
+/** "my linkedin" → "linkedin.com/in/…", as an example in an Intro. */
+export function Mapping({ from, to }: { from: string; to: string }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5">
+      <span className="rounded-md bg-muted px-2 py-1 font-medium">“{from}”</span>
+      <span className="text-muted-foreground">→</span>
+      <span className="truncate rounded-md border bg-card px-2 py-1">{to}</span>
+    </span>
   );
 }

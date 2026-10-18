@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use voice_core::history::Entry;
 use voice_core::settings::Engine;
-use voice_core::{audio, cleanup, models, transcribe};
+use voice_core::{audio, cleanup, models, text as fixes, transcribe};
 
 use crate::error::{AppError, AppResult};
 use crate::overlay::{self, OverlayState};
@@ -191,6 +191,15 @@ impl Controller {
     }
 }
 
+/// "Anthropic · claude-haiku-5-5", plus the transform's name when one is active.
+fn cleanup_label(settings: &voice_core::Settings) -> String {
+    let label = settings.cleanup.label();
+    match settings.transforms.iter().find(|t| settings.transform_instructions().is_some() && t.id == settings.active_transform) {
+        Some(t) => format!("{label} · {}", t.name),
+        None => label,
+    }
+}
+
 enum Done {
     Pasted { warning: Option<String> },
     Copied,
@@ -213,20 +222,20 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
     let duration_ms = audio::duration_ms(samples.len());
     let vocabulary = settings.vocabulary.clone();
 
-    let (raw, engine) = match settings.engine {
+    let (raw, engine, language) = match settings.engine {
         Engine::Local => {
             let model = models::find(&settings.local_model).ok_or_else(|| AppError::Invalid("Pick a speech model in Settings → Engine.".into()))?;
             let language = settings.whisper_language(model.english_only);
             let dir = state.models_dir.clone();
             let id = model.id.to_string();
             let handle = app.clone();
-            let text = tauri::async_runtime::spawn_blocking(move || {
+            let (text, spoken) = tauri::async_runtime::spawn_blocking(move || {
                 let ctx = handle.state::<Whisper>().context(&dir, &id)?;
                 whisper::run(&ctx, &audio::pad_for_whisper(samples), language.as_deref(), &vocabulary)
             })
             .await
             .map_err(join_err)??;
-            (text, format!("local:{}", model.id))
+            (text, format!("local:{}", model.id), spoken)
         }
         Engine::Cloud => {
             let key = secrets::get("stt")?;
@@ -236,7 +245,7 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
             };
             let opts = transcribe::Options { language: language.as_deref(), vocabulary: &settings.vocabulary };
             let text = transcribe::transcribe(&settings.cloud, key.as_deref(), &state.http, audio::encode_wav(&samples), opts).await?;
-            (text, format!("cloud:{}", settings.cloud.model.trim()))
+            (text, format!("cloud:{}", settings.cloud.model.trim()), language)
         }
     };
     let raw = raw.trim().to_string();
@@ -246,27 +255,39 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
 
     let mut text = raw.clone();
     let mut warning = None;
-    if settings.cleanup.enabled {
-        overlay::show(app, OverlayState::Polishing { model: settings.cleanup.label() });
-        let key = secrets::get("cleanup")?;
-        match cleanup::clean(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, &raw).await {
-            Ok(cleaned) if !cleaned.trim().is_empty() => text = cleaned,
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("cleanup failed: {e:?}");
-                warning = Some(format!("{e} (pasted the raw transcript)"));
+    let mut cleaned_by = None;
+    // A snippet said on its own is pasted as is: no cleanup, no corrections.
+    if let Some(snippet) = fixes::whole_snippet(&raw, &settings.snippets) {
+        text = snippet.to_string();
+    } else {
+        if settings.cleanup.enabled {
+            overlay::show(app, OverlayState::Polishing { model: settings.cleanup.label() });
+            let key = secrets::get("cleanup")?;
+            let transform = settings.transform_instructions();
+            match cleanup::clean(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, transform, &raw).await {
+                Ok(cleaned) if !cleaned.trim().is_empty() => {
+                    text = cleaned;
+                    cleaned_by = Some(cleanup_label(&settings));
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("cleanup failed: {e:?}");
+                    warning = Some(format!("{e} (pasted the raw transcript)"));
+                }
             }
         }
+        text = fixes::apply(&text, &settings.replacements, &settings.snippets);
     }
 
     let pasted = if settings.trailing_space { format!("{text} ") } else { text.clone() };
     let restore = settings.restore_clipboard;
-    let outcome = tauri::async_runtime::spawn_blocking(move || paste::paste(&pasted, restore)).await.map_err(join_err)??;
+    let handle = app.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || paste::paste(&handle, &pasted, restore)).await.map_err(join_err)??;
 
     let at = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
     let raw = (raw != text).then_some(raw);
-    let cleanup = raw.is_some().then(|| settings.cleanup.label());
-    let entry = Entry { id: 0, at, text, raw, duration_ms, engine, engine_label: Some(settings.engine_label()), cleanup };
+    let cleanup = cleaned_by.filter(|_| raw.is_some());
+    let entry = Entry { id: 0, at, text, raw, duration_ms, engine, engine_label: Some(settings.engine_label()), cleanup, language };
     let saved = state.history.lock().unwrap().push(entry);
     match saved {
         Ok(entry) => {

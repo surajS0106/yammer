@@ -35,6 +35,14 @@ pub struct Settings {
     pub cleanup: Cleanup,
     /// The settings window's colour scheme.
     pub theme: Theme,
+    /// Dictionary corrections applied to every transcript: "wisper flow" → "Wispr Flow".
+    pub replacements: Vec<Replacement>,
+    /// Say the trigger, get the text: "my linkedin" → "https://linkedin.com/in/…".
+    pub snippets: Vec<Snippet>,
+    /// Named rewrite styles. The active one is added to the cleanup prompt.
+    pub transforms: Vec<Transform>,
+    /// Id of the transform applied to dictations; empty for none.
+    pub active_transform: String,
     /// Set once the first-run walkthrough is finished or skipped.
     pub onboarded: bool,
 }
@@ -131,6 +139,50 @@ impl Default for Cleanup {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Replacement {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Snippet {
+    pub trigger: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Transform {
+    pub id: String,
+    pub name: String,
+    pub instructions: String,
+}
+
+pub fn default_transforms() -> Vec<Transform> {
+    let t = |id: &str, name: &str, instructions: &str| Transform { id: id.into(), name: name.into(), instructions: instructions.into() };
+    vec![
+        t("email", "Email", "Format the text as an email: a short greeting, the body in paragraphs, and a sign-off. Don't invent a name."),
+        t("bullets", "Bullet points", "Restructure the text as a concise bulleted list, one idea per bullet."),
+        t("concise", "Concise", "Make the text shorter and clearer. Keep every fact and request; drop repetition and hedging."),
+        t("formal", "Formal", "Rewrite the text in a professional, formal tone."),
+        t("casual", "Casual", "Rewrite the text as a friendly, casual chat message."),
+    ]
+}
+
+impl Settings {
+    /// The instructions of the active transform, if one is chosen and has any.
+    pub fn transform_instructions(&self) -> Option<&str> {
+        self.transforms
+            .iter()
+            .find(|t| !self.active_transform.is_empty() && t.id == self.active_transform)
+            .map(|t| t.instructions.trim())
+            .filter(|i| !i.is_empty())
+    }
+}
+
 /// Display name for a provider preset id.
 pub fn provider_name(preset: &str) -> &'static str {
     match preset {
@@ -178,6 +230,10 @@ impl Default for Settings {
             cloud: CloudStt::default(),
             cleanup: Cleanup::default(),
             theme: Theme::System,
+            replacements: Vec::new(),
+            snippets: Vec::new(),
+            transforms: default_transforms(),
+            active_transform: String::new(),
             onboarded: false,
         }
     }
@@ -245,6 +301,19 @@ mod tests {
         assert_eq!(s.cleanup.model, Cleanup::default().model);
         assert_eq!(s.local_model, DEFAULT_MODEL);
         assert!(s.restore_clipboard);
+        assert!(s.replacements.is_empty() && s.snippets.is_empty());
+        assert_eq!(s.transforms, default_transforms());
+        assert_eq!(s.active_transform, "");
+    }
+
+    #[test]
+    fn finds_the_active_transform() {
+        let mut s = Settings::default();
+        assert_eq!(s.transform_instructions(), None);
+        s.active_transform = "bullets".into();
+        assert!(s.transform_instructions().unwrap().contains("bulleted list"));
+        s.active_transform = "gone".into();
+        assert_eq!(s.transform_instructions(), None);
     }
 
     #[test]

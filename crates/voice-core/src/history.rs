@@ -26,6 +26,10 @@ pub struct Entry {
     /// The cleanup model ("Sarvam · sarvam-105b"), when cleanup changed the text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cleanup: Option<String>,
+    /// ISO 639-1 code of the language spoken ("en", "hi"): the one whisper detected, or the one set in
+    /// Settings. None when a cloud engine auto-detected it, and on older entries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 pub struct History {
@@ -78,7 +82,17 @@ mod tests {
     use super::*;
 
     fn entry(text: &str) -> Entry {
-        Entry { id: 0, at: 1, text: text.into(), raw: None, duration_ms: 1000, engine: "local:base.en".into(), engine_label: None, cleanup: None }
+        Entry {
+            id: 0,
+            at: 1,
+            text: text.into(),
+            raw: None,
+            duration_ms: 1000,
+            engine: "local:base.en".into(),
+            engine_label: None,
+            cleanup: None,
+            language: None,
+        }
     }
 
     #[test]

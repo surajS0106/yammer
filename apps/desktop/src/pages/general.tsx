@@ -14,7 +14,7 @@ export function GeneralPage() {
   const [autostart, setAutostart] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
-    api.micDevices().then(setDevices, () => {});
+    api.micDevices().then(setDevices, () => { });
     api.autostartGet().then(setAutostart, () => setAutostart(null));
   }, []);
 
@@ -47,7 +47,7 @@ export function GeneralPage() {
             className="w-56"
             value={settings.micDevice ?? ""}
             onChange={(e) => void update({ micDevice: e.target.value || null })}
-            onFocus={() => void api.micDevices().then(setDevices, () => {})}
+            onFocus={() => void api.micDevices().then(setDevices, () => { })}
           >
             <option value="">System default</option>
             {devices.map((d) => (
@@ -104,7 +104,7 @@ export function GeneralPage() {
         </Row>
         {platform?.os === "macos" && (
           <Row label="Permissions" description="Microphone to hear you; Accessibility to paste.">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
               <button type="button" className="text-xs text-primary hover:underline" onClick={() => void api.openPermissionSettings("microphone")}>
                 Microphone
               </button>

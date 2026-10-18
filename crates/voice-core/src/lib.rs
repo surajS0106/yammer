@@ -7,6 +7,7 @@ pub mod error;
 pub mod history;
 pub mod models;
 pub mod settings;
+pub mod text;
 pub mod transcribe;
 
 pub use error::{Error, Result};

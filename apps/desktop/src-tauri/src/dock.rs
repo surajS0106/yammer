@@ -1,13 +1,17 @@
-//! macOS: the Dock icon shows only while the main window is open, and follows the
+//! macOS: the Dock icon shows only while the main window is open (not closed or
+//! minimized), and follows the
 //! system light/dark setting. The bundled `icon.icns` is static (light), so Finder
 //! and Launchpad keep showing that one.
 
+use std::ptr::NonNull;
 use std::time::Duration;
 
+use block2::RcBlock;
+use objc2::runtime::AnyObject;
 use objc2::{AllocAnyThread, MainThreadMarker};
-use objc2_app_kit::{NSApplication, NSImage};
-use objc2_foundation::NSData;
-use tauri::{ActivationPolicy, AppHandle, Manager, Theme};
+use objc2_app_kit::{NSApplication, NSImage, NSWindowDidDeminiaturizeNotification, NSWindowDidMiniaturizeNotification};
+use objc2_foundation::{NSData, NSNotification, NSNotificationCenter, NSOperationQueue};
+use tauri::{ActivationPolicy, AppHandle, Manager, Theme, WebviewWindow};
 
 const LIGHT: &[u8] = include_bytes!("../icons/macos-light.png");
 const DARK: &[u8] = include_bytes!("../icons/macos-dark.png");
@@ -44,5 +48,22 @@ pub fn show(app: &AppHandle, visible: bool) {
                 });
             }
         });
+    }
+}
+
+/// Minimizing the main window counts as closing it for the Dock, so Sushi stays
+/// on full-screen apps while it's minimized; un-minimizing brings the icon back.
+/// Tauri has no minimize event, so this listens for AppKit's notifications.
+pub fn follow_minimize(window: &WebviewWindow) {
+    let Ok(ptr) = window.ns_window() else { return };
+    let ns_window = unsafe { &*ptr.cast::<AnyObject>() };
+    let center = NSNotificationCenter::defaultCenter();
+    let queue = NSOperationQueue::mainQueue();
+    for (name, visible) in unsafe { [(NSWindowDidMiniaturizeNotification, false), (NSWindowDidDeminiaturizeNotification, true)] } {
+        let app = window.app_handle().clone();
+        let block = RcBlock::new(move |_: NonNull<NSNotification>| show(&app, visible));
+        let observer = unsafe { center.addObserverForName_object_queue_usingBlock(Some(name), Some(ns_window), Some(&queue), &block) };
+        // The main window lasts as long as the app, so the observer does too.
+        std::mem::forget(observer);
     }
 }

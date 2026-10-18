@@ -144,8 +144,9 @@ impl Whisper {
     }
 }
 
-/// Transcribe 16 kHz mono samples. Blocking; run it off the async runtime.
-pub fn run(ctx: &WhisperContext, samples: &[f32], language: Option<&str>, vocabulary: &str) -> AppResult<String> {
+/// Transcribe 16 kHz mono samples, returning the text and the language spoken (detected when
+/// `language` is None). Blocking; run it off the async runtime.
+pub fn run(ctx: &WhisperContext, samples: &[f32], language: Option<&str>, vocabulary: &str) -> AppResult<(String, Option<String>)> {
     let err = |e: whisper_rs::WhisperError| AppError::Invalid(format!("Transcription failed: {e}"));
     let mut state = ctx.create_state().map_err(err)?;
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
@@ -173,7 +174,11 @@ pub fn run(ctx: &WhisperContext, samples: &[f32], language: Option<&str>, vocabu
         .filter(|s| !s.is_empty() && !is_annotation(s))
         .collect::<Vec<_>>()
         .join(" ");
-    Ok(text)
+    let spoken = match language {
+        Some(code) => Some(code.to_string()),
+        None => whisper_rs::get_lang_str(state.full_lang_id_from_state()).map(str::to_string),
+    };
+    Ok((text, spoken))
 }
 
 fn is_annotation(s: &str) -> bool {
@@ -202,7 +207,7 @@ mod tests {
         let samples = voice_core::audio::pad_for_whisper(voice_core::audio::decode_wav(&wav).unwrap());
         let ctx = WhisperContext::new_with_params(&model, WhisperContextParameters::default()).unwrap();
         let start = std::time::Instant::now();
-        let text = run(&ctx, &samples, Some("en"), "").unwrap();
+        let (text, _) = run(&ctx, &samples, Some("en"), "").unwrap();
         println!("{:.1}s audio in {:?}: {text}", samples.len() as f32 / 16000.0, start.elapsed());
         assert!(!text.is_empty());
     }

@@ -36,14 +36,15 @@ pub fn copy(text: &str) -> AppResult<()> {
     with_clipboard(|c| c.set_text(text.to_string()))
 }
 
-/// Paste `text` into the focused app. Blocking (a few hundred ms).
-pub fn paste(text: &str, restore_clipboard: bool) -> AppResult<Outcome> {
+/// Paste `text` into the focused app. Blocking (a few hundred ms), so call it
+/// off the main thread.
+pub fn paste(app: &tauri::AppHandle, text: &str, restore_clipboard: bool) -> AppResult<Outcome> {
     let previous = if restore_clipboard { with_clipboard(|c| c.get_text()).ok() } else { None };
     copy(text)?;
     // Give the clipboard owner a moment to announce the new contents.
     std::thread::sleep(Duration::from_millis(40));
 
-    if let Err(e) = send_paste_keystroke() {
+    if let Err(e) = send_paste_keystroke(app) {
         eprintln!("paste keystroke failed: {e}");
         return Ok(Outcome::Copied);
     }
@@ -65,11 +66,18 @@ pub fn is_wayland() -> bool {
         && (std::env::var("XDG_SESSION_TYPE").is_ok_and(|v| v.eq_ignore_ascii_case("wayland")) || std::env::var_os("WAYLAND_DISPLAY").is_some())
 }
 
-fn send_paste_keystroke() -> Result<(), String> {
+fn send_paste_keystroke(app: &tauri::AppHandle) -> Result<(), String> {
     if is_wayland() {
         return wayland_paste();
     }
-    enigo_paste()
+    // On macOS enigo looks up the keyboard layout through Text Input Sources,
+    // which asserts it's on the main queue and kills the app otherwise.
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(enigo_paste());
+    })
+    .map_err(|e| e.to_string())?;
+    rx.recv().map_err(|e| e.to_string())?
 }
 
 fn enigo_paste() -> Result<(), String> {
