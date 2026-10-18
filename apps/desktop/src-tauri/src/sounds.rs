@@ -14,12 +14,13 @@ pub enum Cue {
 }
 
 impl Cue {
-    /// (from Hz, to Hz, milliseconds)
-    fn sweep(self) -> (f32, f32, u32) {
+    /// Two wooden knocks back to back: (first Hz, second Hz, milliseconds per knock).
+    fn notes(self) -> (f32, f32, u32) {
         match self {
-            Cue::Start => (660.0, 990.0, 90),
-            Cue::Stop => (880.0, 590.0, 90),
-            Cue::Error => (330.0, 220.0, 220),
+            // A3 then F#4, and back down.
+            Cue::Start => (220.0, 369.99, 75),
+            Cue::Stop => (369.99, 220.0, 75),
+            Cue::Error => (165.0, 110.0, 110),
         }
     }
 }
@@ -38,21 +39,32 @@ fn play_blocking(cue: Cue) -> Option<()> {
     }
     let config = supported.config();
     let (channels, rate) = (config.channels as usize, config.sample_rate as f32);
-    let (from, to, ms) = cue.sweep();
-    let total = (rate * ms as f32 / 1000.0) as usize;
+    let (first, second, ms) = cue.notes();
+    let per = (rate * ms as f32 / 1000.0) as usize;
+    let total = per * 2;
     let mut n = 0usize;
-    let mut phase = 0.0f32;
+    let mut seed = 0x9E37_79B9u32;
     let stream = device
         .build_output_stream::<f32, _, _>(
             config,
             move |out: &mut [f32], _| {
                 for frame in out.chunks_mut(channels) {
                     let v = if n < total {
-                        let t = n as f32 / total as f32;
-                        phase += 2.0 * std::f32::consts::PI * (from + (to - from) * t) / rate;
-                        // Quick fade in and out so the cue doesn't click.
-                        let envelope = (t * 10.0).min(1.0) * ((1.0 - t) * 4.0).min(1.0);
-                        phase.sin() * envelope * 0.18
+                        let freq = if n < per { first } else { second };
+                        let s = (n % per) as f32 / rate;
+                        let local = (n % per) as f32 / per as f32;
+                        let decay = |tau: f32| (-s / tau).exp();
+                        let w = 2.0 * std::f32::consts::PI * freq * s;
+                        // Wood's overtones are inharmonic and die off fast; that's what makes
+                        // it a knock rather than a tone.
+                        let body = w.sin() * decay(0.020) + 0.5 * (w * 2.76).sin() * decay(0.008) + 0.25 * (w * 5.4).sin() * decay(0.004);
+                        // A millisecond-long burst of noise for the strike itself.
+                        seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                        let noise = (seed >> 8) as f32 / (1u32 << 23) as f32 - 1.0;
+                        let click = noise * decay(0.0015) * 0.3;
+                        // Tiny attack and release so neither edge of a knock clicks.
+                        let edges = (s / 0.001).min(1.0) * ((1.0 - local) * 10.0).min(1.0);
+                        (body + click) * edges * 0.12
                     } else {
                         0.0
                     };
@@ -65,6 +77,6 @@ fn play_blocking(cue: Cue) -> Option<()> {
         )
         .ok()?;
     stream.play().ok()?;
-    std::thread::sleep(Duration::from_millis(ms as u64 + 120));
+    std::thread::sleep(Duration::from_millis(2 * ms as u64 + 120));
     Some(())
 }

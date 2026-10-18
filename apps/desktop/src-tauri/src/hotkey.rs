@@ -48,9 +48,10 @@ pub fn register(app: &AppHandle, accelerator: &str) -> AppResult<()> {
     if let Some(old) = current.take() {
         let _ = app.global_shortcut().unregister(old);
     }
-    let result = app.global_shortcut().register(shortcut).map_err(|e| {
-        AppError::Invalid(format!("Couldn't use {} as the hotkey ({e}). Another app may already be using it.", display(accelerator)))
-    });
+    let result = app
+        .global_shortcut()
+        .register(shortcut)
+        .map_err(|e| AppError::Invalid(format!("Couldn't use {} as the hotkey ({e}). Another app may already be using it.", display(accelerator))));
     match &result {
         Ok(()) => {
             *current = Some(shortcut);

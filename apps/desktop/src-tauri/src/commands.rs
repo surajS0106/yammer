@@ -11,9 +11,9 @@ use voice_core::Settings;
 
 use crate::error::{AppError, AppResult};
 use crate::hotkey::{self, Hotkey};
+use crate::overlay::{self, OverlayState};
 use crate::state::AppState;
 use crate::whisper::{self, Whisper};
-use crate::overlay::{self, OverlayState};
 use crate::{paste, platform, recorder, secrets, tray};
 
 #[tauri::command]
@@ -31,6 +31,12 @@ pub fn overlay_state() -> OverlayState {
 #[tauri::command]
 pub fn overlay_hit_areas(areas: Vec<overlay::HitArea>) {
     overlay::set_hit_areas(areas);
+}
+
+/// Put the dragged pill back at the bottom centre of the screen.
+#[tauri::command]
+pub fn overlay_reset_position(app: AppHandle) {
+    overlay::reset_position(&app);
 }
 
 /// The hovered island's buttons: start or stop dictating, without taking focus
@@ -70,7 +76,7 @@ pub fn settings_set(app: AppHandle, state: State<'_, AppState>, settings: Settin
     if settings.overlay_always_visible != old.overlay_always_visible {
         overlay::set_always_visible(&app, settings.overlay_always_visible);
     }
-    if settings.overlay_edge != old.overlay_edge {
+    if settings.overlay_position != old.overlay_position {
         overlay::place(&app);
     }
     if settings.engine == Engine::Local && (old.engine != Engine::Local || old.local_model != settings.local_model) {

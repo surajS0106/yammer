@@ -47,7 +47,8 @@ fn pick_device(name: Option<&str>) -> AppResult<cpal::Device> {
         }
         // The chosen mic was unplugged: fall back to the default rather than fail.
     }
-    host.default_input_device().ok_or_else(|| AppError::Invalid("No microphone found. Plug one in or check your sound settings.".into()))
+    host.default_input_device()
+        .ok_or_else(|| AppError::Invalid("No microphone found. Plug one in or check your sound settings.".into()))
 }
 
 /// Start recording from `device` (or the default). `on_level` gets the input
@@ -72,11 +73,8 @@ pub fn start(device: Option<String>, on_level: impl Fn(f32) + Send + 'static) ->
                     return Captured { samples: Vec::new(), channels: 1, rate: voice_core::SAMPLE_RATE };
                 }
             };
-            loop {
-                match stop_rx.recv_timeout(Duration::from_millis(50)) {
-                    Err(mpsc::RecvTimeoutError::Timeout) => on_level(f32::from_bits(level.load(Ordering::Relaxed))),
-                    _ => break,
-                }
+            while let Err(mpsc::RecvTimeoutError::Timeout) = stop_rx.recv_timeout(Duration::from_millis(50)) {
+                on_level(f32::from_bits(level.load(Ordering::Relaxed)));
             }
             drop(stream);
             let samples = std::mem::take(&mut *buffer.lock().unwrap());
@@ -116,13 +114,18 @@ fn open(device: Option<&str>, buffer: Arc<Mutex<Vec<f32>>>, level: Arc<AtomicU32
     Ok((stream, channels, rate))
 }
 
-fn build<T>(device: &cpal::Device, config: &cpal::StreamConfig, buffer: Arc<Mutex<Vec<f32>>>, level: Arc<AtomicU32>) -> Result<cpal::Stream, cpal::Error>
+fn build<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    buffer: Arc<Mutex<Vec<f32>>>,
+    level: Arc<AtomicU32>,
+) -> Result<cpal::Stream, cpal::Error>
 where
     T: SizedSample,
     f32: FromSample<T>,
 {
     device.build_input_stream::<T, _, _>(
-        config.clone(),
+        *config,
         move |data: &[T], _| {
             let mut sum = 0.0f32;
             let mut buf = buffer.lock().unwrap();

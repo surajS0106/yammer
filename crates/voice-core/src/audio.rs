@@ -108,7 +108,7 @@ pub fn decode_wav(wav: &[u8]) -> Result<Vec<f32>> {
         let len = u32::from_le_bytes(wav[i + 4..i + 8].try_into().unwrap()) as usize;
         let body = &wav[i + 8..(i + 8 + len).min(wav.len())];
         if id == b"data" {
-            return Ok(body.chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0).collect());
+            return Ok(body.as_chunks::<2>().0.iter().map(|&b| i16::from_le_bytes(b) as f32 / 32768.0).collect());
         }
         i += 8 + len + (len & 1);
     }

@@ -8,6 +8,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { api, errorMessage } from "./lib/tauri";
 import { SettingsProvider } from "./lib/settings";
+import "./lib/theme";
 import { Overlay } from "./overlay";
 
 // The webview ignores target="_blank"; hand external links to the default browser.
@@ -18,12 +19,6 @@ document.addEventListener("click", (e) => {
     void openUrl(a.href);
   }
 });
-
-// Follow the OS light/dark setting.
-const dark = window.matchMedia("(prefers-color-scheme: dark)");
-const applyTheme = () => document.documentElement.classList.toggle("dark", dark.matches);
-applyTheme();
-dark.addEventListener("change", applyTheme);
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 

@@ -8,34 +8,80 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AlertCircle, Check, History, Loader2, Mic, Settings2 } from "lucide-react";
+import { motion, type MotionValue, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import * as React from "react";
 
 import { moodOf, Sushi } from "@/components/sushi";
 import { api, on, type OverlayState } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
-const BARS = 18;
+const BARS = 24;
+// Bar height in px at full voice, and the dot every bar shrinks to in silence.
+const MAX = 24;
+const DOT = 2;
+
+// The waveform: a fixed wave of bar heights, each bar breathing on its own
+// staggered loop. The bars also grow with the live mic level, on a spring so they move smoothly between the ~20 Hz
+// level readings, and flatten to a line of dots in silence.
+const SHAPE = Array.from({ length: BARS }, (_, i) => {
+  const base = Math.sin(i * 0.5) * 0.5 + 0.5;
+  const detail = Math.sin(i * 1.7) * 0.3;
+  return Math.max(0.18, Math.min(1, base * 0.7 + detail + 0.3));
+});
+
+// Speech RMS sits around 0.02–0.2; below this it's room noise, and the wave lies flat.
+const SPEAKING_RMS = 0.01;
+// How long the wave keeps moving after the voice drops, so pauses between words don't flicker it.
+const SPEAKING_HOLD_MS = 300;
 
 function Meter() {
-  const [levels, setLevels] = React.useState<number[]>(() => Array(BARS).fill(0));
+  const reduceMotion = useReducedMotion();
+  const [speaking, setSpeaking] = React.useState(false);
+  const level = useMotionValue(0);
+  const swell = useSpring(level, { stiffness: 260, damping: 26 });
   React.useEffect(() => {
+    let quiet: ReturnType<typeof setTimeout> | undefined;
     const unlisten = on.level((rms) => {
-      // Speech RMS sits around 0.02–0.2; a square root spreads it over the meter.
-      const v = Math.min(1, Math.sqrt(rms) * 2.4);
-      setLevels((prev) => [...prev.slice(1), v]);
+      if (rms >= SPEAKING_RMS) {
+        clearTimeout(quiet);
+        quiet = undefined;
+        setSpeaking(true);
+        // A square root spreads speech over the meter; normal talking (~0.05)
+        // reaches most of the height, and only loud speech pins it.
+        level.set(Math.min(1, Math.sqrt(rms) * 4));
+      } else {
+        level.set(0);
+        quiet ??= setTimeout(() => setSpeaking(false), SPEAKING_HOLD_MS);
+      }
     });
-    return () => void unlisten.then((f) => f());
-  }, []);
+    return () => {
+      clearTimeout(quiet);
+      void unlisten.then((f) => f());
+    };
+  }, [level]);
+  const pulse = speaking && !reduceMotion;
   return (
-    <div className="flex h-5 items-center gap-[3px]">
-      {levels.map((v, i) => (
-        <span
-          key={i}
-          className="w-[3px] rounded-full bg-white/85 transition-[height] duration-75"
-          style={{ height: `${Math.max(3, v * 20)}px` }}
-        />
+    <div className="flex items-center gap-0.5" style={{ height: MAX }}>
+      {SHAPE.map((h, i) => (
+        <Bar key={i} index={i} shape={h} swell={swell} pulse={pulse} />
       ))}
     </div>
+  );
+}
+
+function Bar({ index: i, shape: h, swell, pulse }: { index: number; shape: number; swell: MotionValue<number>; pulse: boolean }) {
+  const height = useTransform(swell, (s) => Math.max(DOT, h * MAX * s));
+  return (
+    <motion.span
+      className="w-[2px] rounded-full bg-white/85"
+      style={{ height }}
+      animate={pulse ? { scaleY: [1, 1.2 + h * 0.3, 1] } : { scaleY: 1 }}
+      transition={
+        pulse
+          ? { duration: 0.7 + (i % 6) * 0.08, repeat: Infinity, ease: "easeInOut", delay: (i % 12) * 0.05 }
+          : { duration: 0.2 }
+      }
+    />
   );
 }
 
@@ -211,16 +257,16 @@ export function Overlay() {
           ref={pillRef}
           key={state.phase}
           className={cn(
-            "flex max-w-[304px] items-center gap-2.5 rounded-full border border-white/10 bg-neutral-900/92 px-4 py-2 text-[13px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur",
+            "flex max-w-[304px] items-center gap-2 rounded-full border border-white/10 bg-neutral-900/92 py-1.5 text-[13px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur",
+            state.phase === "listening" ? "px-3" : "px-4",
             state.phase === "message" && state.error && "border-red-400/30",
           )}
           style={{ animation: "pill-in 140ms ease-out" }}
         >
           {state.phase === "listening" && (
             <>
-              <span className="size-2 shrink-0 rounded-full bg-red-500" style={{ animation: "dot-pulse 1.2s ease-in-out infinite" }} />
+              <span className="size-1.5 shrink-0 rounded-full bg-red-500" style={{ animation: "dot-pulse 1.2s ease-in-out infinite" }} />
               <Meter />
-              {state.hint && <span className="truncate text-xs text-white/60">{state.hint}</span>}
             </>
           )}
           {(state.phase === "transcribing" || state.phase === "polishing") && (

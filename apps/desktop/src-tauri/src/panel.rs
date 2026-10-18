@@ -99,7 +99,7 @@ unsafe fn build(tao: &AnyClass) -> Option<&'static AnyClass> {
     }
 
     let panel_ivar = ffi::class_getInstanceVariable(cls, FOCUSABLE.as_ptr());
-    let same_layout = ffi::class_getInstanceSize(cls) == ffi::class_getInstanceSize(tao)
-        && ffi::ivar_getOffset(panel_ivar) == ffi::ivar_getOffset(tao_ivar);
+    let same_layout =
+        ffi::class_getInstanceSize(cls) == ffi::class_getInstanceSize(tao) && ffi::ivar_getOffset(panel_ivar) == ffi::ivar_getOffset(tao_ivar);
     same_layout.then_some(cls)
 }

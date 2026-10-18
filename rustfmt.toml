@@ -1,0 +1,4 @@
+# Matches the codebase's existing style: wide lines, and short constructs kept on one line.
+max_width = 150
+use_small_heuristics = "Max"
+chain_width = 120

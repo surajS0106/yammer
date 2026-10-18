@@ -1,8 +1,8 @@
 //! The floating pill at the bottom of the screen that shows the dictation's
 //! state. It never takes focus, so the app you're dictating into keeps it.
 //! Clicks pass through it except over Sushi and the pill, which the webview
-//! reports as hit areas: there it can be dragged, and when dropped it snaps to
-//! the middle of the nearest screen edge (`Settings::overlay_edge`).
+//! reports as hit areas: there it can be dragged anywhere on screen, and it
+//! stays where it's dropped (`Settings::overlay_position`).
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
-use voice_core::settings::OverlayEdge;
+use voice_core::settings::OverlayPosition;
 
 use crate::state::AppState;
 
@@ -38,7 +38,7 @@ static HIT_AREAS: Mutex<Vec<HitArea>> = Mutex::new(Vec::new());
 static GRABBABLE: AtomicBool = AtomicBool::new(false);
 /// Where `place` last put the window, to tell its own moves from the user's drags.
 static PLACED: Mutex<Option<PhysicalPosition<i32>>> = Mutex::new(None);
-/// Bumped on every drag move, so only the last one in a burst snaps.
+/// Bumped on every drag move, so only the last one in a burst is saved.
 static DRAG_GENERATION: AtomicU64 = AtomicU64::new(0);
 /// How often to check whether the cursor is over Sushi or the pill.
 const CURSOR_POLL: Duration = Duration::from_millis(40);
@@ -54,6 +54,7 @@ pub struct HitArea {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "phase", rename_all = "kebab-case")]
+#[rustfmt::skip] // rustfmt expands every struct variant once any variant has a doc comment.
 pub enum OverlayState {
     Listening { hint: Option<String> },
     /// `engine` is the settings' engine label, e.g. "Sarvam · saaras:v4".
@@ -103,9 +104,8 @@ fn watch_cursor(app: AppHandle) {
             std::thread::sleep(CURSOR_POLL);
             let Some(window) = app.get_webview_window(LABEL) else { continue };
             let cursor = (!matches!(current(), OverlayState::Hidden)).then(|| cursor_in(&app, &window)).flatten();
-            let over = cursor.is_some_and(|(x, y)| {
-                HIT_AREAS.lock().unwrap().iter().any(|r| x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
-            });
+            let over = cursor
+                .is_some_and(|(x, y)| HIT_AREAS.lock().unwrap().iter().any(|r| x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height));
             if over != GRABBABLE.load(Ordering::SeqCst) {
                 GRABBABLE.store(over, Ordering::SeqCst);
                 let _ = window.set_ignore_cursor_events(!over);
@@ -131,15 +131,14 @@ fn cursor_in(app: &AppHandle, window: &WebviewWindow) -> Option<(f64, f64)> {
         return None;
     };
     let (x, y) = ((cursor.x - pos.x as f64) / scale, (cursor.y - pos.y as f64) / scale);
-    (x >= 0.0 && x < SIZE && y >= 0.0 && y < SIZE).then_some((x, y))
+    ((0.0..SIZE).contains(&x) && (0.0..SIZE).contains(&y)).then_some((x, y))
 }
 
 pub fn set_hit_areas(areas: Vec<HitArea>) {
     *HIT_AREAS.lock().unwrap() = areas;
 }
 
-/// The window moved. If the user dragged it, snap it to the nearest edge once
-/// it's dropped.
+/// The window moved. If the user dragged it, remember where, once it's dropped.
 pub fn moved(app: &AppHandle, pos: PhysicalPosition<i32>) {
     if !GRABBABLE.load(Ordering::SeqCst) || *PLACED.lock().unwrap() == Some(pos) {
         return;
@@ -157,7 +156,8 @@ pub fn moved(app: &AppHandle, pos: PhysicalPosition<i32>) {
             tokio::time::sleep(Duration::from_millis(30)).await;
         }
         if DRAG_GENERATION.load(Ordering::SeqCst) == generation {
-            snap(&app);
+            *PLACED.lock().unwrap() = Some(pos);
+            save_position(&app, Some(OverlayPosition { x: pos.x, y: pos.y }));
         }
     });
 }
@@ -167,51 +167,55 @@ fn mouse_down() -> bool {
     objc2_app_kit::NSEvent::pressedMouseButtons() & 1 != 0
 }
 
-/// Move to the middle of the screen edge nearest the cursor.
-fn snap(app: &AppHandle) {
-    if let Some(edge) = nearest_edge(app) {
-        save_edge(app, edge);
-    }
+/// Put the pill back at the bottom centre of the screen.
+pub fn reset_position(app: &AppHandle) {
+    save_position(app, None);
     place(app);
 }
 
-fn nearest_edge(app: &AppHandle) -> Option<OverlayEdge> {
-    let cursor = app.cursor_position().ok()?;
-    let area = *app.monitor_from_point(cursor.x, cursor.y).ok().flatten()?.work_area();
-    let (left, top) = (area.position.x as f64, area.position.y as f64);
-    let (right, bottom) = (left + area.size.width as f64, top + area.size.height as f64);
-    [
-        (OverlayEdge::Left, cursor.x - left),
-        (OverlayEdge::Right, right - cursor.x),
-        (OverlayEdge::Top, cursor.y - top),
-        (OverlayEdge::Bottom, bottom - cursor.y),
-    ]
-    .into_iter()
-    .min_by(|a, b| a.1.total_cmp(&b.1))
-    .map(|(edge, _)| edge)
-}
-
-fn save_edge(app: &AppHandle, edge: OverlayEdge) {
+fn save_position(app: &AppHandle, position: Option<OverlayPosition>) {
     let state = app.state::<AppState>();
     let settings = {
         let mut settings = state.settings.lock().unwrap();
-        if settings.overlay_edge == edge {
+        if settings.overlay_position == position {
             return;
         }
-        settings.overlay_edge = edge;
+        settings.overlay_position = position;
         settings.clone()
     };
     if let Err(e) = settings.save(&state.settings_path) {
-        eprintln!("saving the overlay edge failed: {e}");
+        eprintln!("saving the overlay position failed: {e}");
     }
     let _ = app.emit("settings-changed", &settings);
 }
 
-/// The middle of the chosen edge of the screen the cursor is on, inside its
-/// work area (clear of the menu bar, Dock and taskbar).
+/// Whether the window, put at `pos`, would have its middle on some screen.
+fn on_screen(app: &AppHandle, pos: PhysicalPosition<i32>) -> bool {
+    app.available_monitors().unwrap_or_default().iter().any(|m| {
+        let half = SIZE * m.scale_factor() / 2.0;
+        let (x, y) = (pos.x as f64 + half, pos.y as f64 + half);
+        let (mp, ms) = (m.position(), m.size());
+        let (left, top) = (mp.x as f64, mp.y as f64);
+        x >= left && x < left + ms.width as f64 && y >= top && y < top + ms.height as f64
+    })
+}
+
+/// Where the user dragged it, if that's still on a screen; otherwise centred
+/// at the bottom of the work area (clear of the Dock and taskbar) of the
+/// screen the cursor is on.
 pub fn place(app: &AppHandle) {
     let Some(window) = app.get_webview_window(LABEL) else { return };
-    let edge = app.state::<AppState>().settings().overlay_edge;
+    let saved = app
+        .state::<AppState>()
+        .settings()
+        .overlay_position
+        .map(|p| PhysicalPosition::new(p.x, p.y))
+        .filter(|&p| on_screen(app, p));
+    if let Some(pos) = saved {
+        *PLACED.lock().unwrap() = Some(pos);
+        let _ = window.set_position(pos);
+        return;
+    }
     let monitor = app
         .cursor_position()
         .ok()
@@ -223,12 +227,7 @@ pub fn place(app: &AppHandle) {
     let (left, top) = (area.position.x as f64, area.position.y as f64);
     let (width, height) = (area.size.width as f64, area.size.height as f64);
     let (size, margin) = (SIZE * scale, EDGE_MARGIN * scale);
-    let (x, y) = match edge {
-        OverlayEdge::Bottom => (left + (width - size) / 2.0, top + height - size - margin),
-        OverlayEdge::Top => (left + (width - size) / 2.0, top + margin),
-        OverlayEdge::Left => (left + margin, top + (height - size) / 2.0),
-        OverlayEdge::Right => (left + width - size - margin, top + (height - size) / 2.0),
-    };
+    let (x, y) = (left + (width - size) / 2.0, top + height - size - margin);
     let pos = PhysicalPosition::new(x.round() as i32, y.round() as i32);
     *PLACED.lock().unwrap() = Some(pos);
     let _ = window.set_position(pos);
@@ -249,7 +248,8 @@ pub fn show(app: &AppHandle, state: OverlayState) {
         return;
     }
     let visible = window.is_visible().unwrap_or(false);
-    // A pill that stays up follows you to the monitor you start dictating on.
+    // A pill that stays up follows you to the monitor you start dictating on,
+    // unless it was dragged somewhere.
     if !visible || matches!(state, OverlayState::Listening { .. }) {
         place(app);
     }

@@ -86,6 +86,7 @@ pub fn run() {
             commands::settings_set,
             commands::overlay_state,
             commands::overlay_hit_areas,
+            commands::overlay_reset_position,
             commands::overlay_toggle_dictation,
             commands::overlay_open,
             commands::hotkey_label,
@@ -109,7 +110,7 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building Larp")
-        .run(|app, event| match event {
+        .run(|#[cfg_attr(not(target_os = "macos"), allow(unused_variables))] app, event| match event {
             // Keep running in the tray when the last window is hidden or closed.
             tauri::RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(),
             // After Tauri's own startup icon (dev builds set one on Ready), so ours wins.

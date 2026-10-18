@@ -6,7 +6,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type Engine = "local" | "cloud";
-export type OverlayEdge = "bottom" | "top" | "left" | "right";
+export type Theme = "system" | "light" | "dark";
 export type SttApi = "transcriptions" | "ollama-chat" | "sarvam";
 export type LlmFormat = "openai-chat" | "anthropic-messages";
 
@@ -33,14 +33,15 @@ export interface Settings {
   restoreClipboard: boolean;
   trailingSpace: boolean;
   overlayAlwaysVisible: boolean;
-  /** The screen edge the pill sits at the middle of; dragging snaps it to the nearest. */
-  overlayEdge: OverlayEdge;
+  /** Where the pill was dragged to (physical px, window top-left); null is bottom centre. */
+  overlayPosition: { x: number; y: number } | null;
   engine: Engine;
   localModel: string;
   language: string;
   vocabulary: string;
   cloud: CloudStt;
   cleanup: Cleanup;
+  theme: Theme;
   onboarded: boolean;
 }
 
@@ -102,6 +103,7 @@ export const api = {
   settingsSet: (settings: Settings) => invoke<Settings>("settings_set", { settings }),
   overlayState: () => invoke<OverlayState>("overlay_state"),
   overlayHitAreas: (areas: HitArea[]) => invoke<void>("overlay_hit_areas", { areas }),
+  overlayResetPosition: () => invoke<void>("overlay_reset_position"),
   overlayToggleDictation: () => invoke<void>("overlay_toggle_dictation"),
   overlayOpen: (page: string) => invoke<void>("overlay_open", { page }),
   hotkeyLabel: () => invoke<string>("hotkey_label"),

@@ -17,9 +17,18 @@ cargo test --workspace
 cargo test -p voice-core <name_substring>
 # Real whisper inference (model + 16 kHz mono WAV):
 WHISPER_MODEL=... WHISPER_WAV=... cargo test -p larp transcribes_real_audio -- --ignored --nocapture
+cargo fmt --all               # rustfmt.toml sets the house style; CI runs --check
+cargo clippy -p larp --all-targets
+# What CI runs for voice-core (no whisper.cpp, so deps don't need opt-level 3):
+cargo clippy -p voice-core --all-targets --config 'profile.dev.package."*".opt-level=0' -- -D warnings
+cargo test -p voice-core --config 'profile.dev.package."*".opt-level=0'
 ```
 
-There are no JS tests and no linter; `typecheck` is the TypeScript gate. Building whisper.cpp needs CMake and libclang. Dev builds compile dependencies at `opt-level = 3`, because whisper is unusably slow without it.
+There are no JS tests and no JS linter; `typecheck` is the TypeScript gate. Building whisper.cpp needs CMake and libclang. On Windows, set `CMAKE` and `LIBCLANG_PATH` if they aren't on PATH. Dev builds compile dependencies at `opt-level = 3`, because whisper is unusably slow without it.
+
+CI (`.github/workflows/ci.yml`) has a 3-minute budget. It runs typecheck, the frontend build, `cargo fmt --check`, and voice-core clippy and tests on Linux. It never builds the `larp` crate, so run `cargo test --workspace` locally. Releases are manual. Start `release.yml` from the Actions tab or with `gh workflow run release.yml`. It builds every platform and tags the release `v<version>` from `apps/desktop/src-tauri/tauri.conf.json`. Pushing a tag doesn't trigger it.
+
+Rust formatting is enforced. `rustfmt.toml` matches the code's dense style (`max_width = 150`, `use_small_heuristics = "Max"`), so run `cargo fmt --all` after Rust edits. Clippy must be warning-free, and CI runs it with `-D warnings` on voice-core. macOS-only code (`dock.rs`, `panel.rs` and the `cfg(target_os = "macos")` arms) only compiles and lints on a Mac. Project skills: `/typecheck` (fast), `/check` (the pre-push gate that mirrors CI) and `/ship` (check, commit, push).
 
 ## Architecture
 
@@ -28,7 +37,7 @@ Larp, a product of Sush: a dictation app modelled on Sush (`../sush`), whose whi
 - **`crates/voice-core`** is pure Rust with no Tauri dependency, and it should stay that way. It holds:
   - `audio.rs`: downmix, resample to 16 kHz, silence detection, WAV encode and decode.
   - `models.rs`: the whisper model catalog, each entry pinned by size and SHA-256.
-  - `settings.rs`: `settings.json`. Every field has a serde default, so old files load.
+  - `settings.rs`: `settings.json`. Every field has a serde default, so old files load. Struct fields serialize as camelCase and enums as kebab-case, and `lib/tauri.ts` must use the same casing.
   - `history.rs`
   - `transcribe.rs`: cloud speech-to-text over `/audio/transcriptions` or Ollama chat.
   - `cleanup.rs`: the LLM cleanup prompt and request for OpenAI chat or Anthropic messages.
@@ -43,7 +52,9 @@ Larp, a product of Sush: a dictation app modelled on Sush (`../sush`), whose whi
   - `whisper.rs`: model download with SHA check, a cached context, and inference.
   - `tray.rs`
   - `secrets.rs`: the OS keyring for the `stt` and `cleanup` keys. Debug builds use `dev-secrets.json` instead.
-  - `commands.rs`
+  - `commands.rs`. `error.rs`'s `AppError` serializes as a plain message string, so the UI shows it directly (`errorMessage` in `lib/tauri.ts`).
+  - `state.rs`: `AppState` holds the settings and history behind mutexes, the models directory and a shared `reqwest` client.
+  - `sounds.rs`: synthesized start, stop and error cues, played through cpal on a throwaway thread.
   - **Instances and windows:**
     - Single-instance: `larp --toggle` from a second launch toggles dictation, which is the Wayland path.
     - Closing the main window hides it, and the app keeps running in the tray.
@@ -54,8 +65,12 @@ Larp, a product of Sush: a dictation app modelled on Sush (`../sush`), whose whi
   - `lib/settings.tsx` holds the settings context. Every change saves through `settings_set`, which rejects a hotkey it can't register.
   - `lib/models.ts` is a module-level download store.
   - `lib/presets.ts` holds the provider presets.
+  - `lib/theme.ts` toggles `.dark` on `<html>` and keeps the native window theme in sync. Only the settings window applies the `theme` setting. The overlay always follows the OS.
 
 ## Gotchas
+
+- Tauri API calls from the frontend beyond `core:default` (for example window dragging or `setTheme`) need a matching permission in `apps/desktop/src-tauri/capabilities/default.json`. That file covers both windows. Without the permission, the call fails at runtime.
+- macOS Dock icon: `dock.rs` swaps it between `icons/macos-light.png` and `icons/macos-dark.png` to follow the system theme. The bundled `icon.icns` is static. `build.rs` watches `icons/` so that a changed icon is re-embedded.
 
 - macOS: Larp has a Dock icon only while the main window is open (`dock::show` switches the activation policy between Regular and Accessory). With it closed, Larp is an accessory app, which is what lets the overlay appear over other apps' full-screen Spaces. Clicking the Dock icon (`RunEvent::Reopen`) shows the hidden window. `Info.plist` holds the microphone usage string. `Entitlements.plist` holds audio-input. Pasting needs Accessibility permission, checked with `AXIsProcessTrusted` in `platform.rs`. Transparency needs `macos-private-api`.
 - On Windows, a normal app can't send keystrokes into elevated (admin) windows. There the paste silently does nothing, but the text is still in History.

@@ -4,6 +4,7 @@
 import * as React from "react";
 
 import { api, errorMessage, on, type SecretName, type Settings } from "./tauri";
+import { setTheme } from "./theme";
 
 interface Ctx {
   settings: Settings;
@@ -32,6 +33,9 @@ export function SettingsProvider({ initial, children }: { initial: Settings; chi
   const toast = React.useCallback((message: string, tone: "error" | "info" = "error") => {
     setToast({ message, tone, id: Date.now() });
   }, []);
+
+  // Before paint, so a saved light/dark choice doesn't flash the OS one first.
+  React.useLayoutEffect(() => setTheme(settings.theme), [settings.theme]);
 
   React.useEffect(() => {
     api.secretStatus().then(setSecrets, () => {});

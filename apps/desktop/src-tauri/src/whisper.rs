@@ -133,10 +133,7 @@ impl Whisper {
         let model = model(id)?;
         let path = model_path(dir, model);
         if !path.is_file() {
-            return Err(AppError::Invalid(format!(
-                "The {} speech model isn't downloaded yet. Download it in Settings → Engine.",
-                model.label
-            )));
+            return Err(AppError::Invalid(format!("The {} speech model isn't downloaded yet. Download it in Settings → Engine.", model.label)));
         }
         whisper_rs::install_logging_hooks(); // keep whisper.cpp's chatter off stdout
         let ctx = WhisperContext::new_with_params(&path, WhisperContextParameters::default())

@@ -22,9 +22,9 @@ pub struct Settings {
     pub trailing_space: bool,
     /// Keep a small pill on screen between dictations, not only while recording.
     pub overlay_always_visible: bool,
-    /// The screen edge the pill sits at the middle of. Dragging it snaps it to
-    /// the nearest edge.
-    pub overlay_edge: OverlayEdge,
+    /// Where the pill was dragged to: the overlay window's top-left in physical
+    /// screen pixels. `None` puts it centred above the bottom of the screen.
+    pub overlay_position: Option<OverlayPosition>,
     pub engine: Engine,
     pub local_model: String,
     /// ISO 639-1 code, or "auto" (multilingual models only).
@@ -33,18 +33,26 @@ pub struct Settings {
     pub vocabulary: String,
     pub cloud: CloudStt,
     pub cleanup: Cleanup,
+    /// The settings window's colour scheme.
+    pub theme: Theme,
     /// Set once the first-run walkthrough is finished or skipped.
     pub onboarded: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OverlayPosition {
+    pub x: i32,
+    pub y: i32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
-pub enum OverlayEdge {
+pub enum Theme {
+    /// Follow the OS light/dark setting.
     #[default]
-    Bottom,
-    Top,
-    Left,
-    Right,
+    System,
+    Light,
+    Dark,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -162,13 +170,14 @@ impl Default for Settings {
             restore_clipboard: true,
             trailing_space: true,
             overlay_always_visible: true,
-            overlay_edge: OverlayEdge::Bottom,
+            overlay_position: None,
             engine: Engine::Local,
             local_model: DEFAULT_MODEL.into(),
             language: "en".into(),
             vocabulary: String::new(),
             cloud: CloudStt::default(),
             cleanup: Cleanup::default(),
+            theme: Theme::System,
             onboarded: false,
         }
     }
@@ -249,6 +258,7 @@ mod tests {
         let v = serde_json::to_value(Settings::default()).unwrap();
         assert_eq!(v["localModel"], "base.en");
         assert_eq!(v["engine"], "local");
+        assert_eq!(v["theme"], "system");
         assert_eq!(v["cloud"]["api"], "transcriptions");
         assert_eq!(v["cleanup"]["format"], "anthropic-messages");
     }

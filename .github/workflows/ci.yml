@@ -1,5 +1,8 @@
 name: CI
 
+# Kept under 3 minutes to stay inside the free tier: one Linux job, no
+# whisper.cpp/Tauri build. The desktop crate is tested locally with
+# `cargo test --workspace`.
 on:
   push:
     branches: [main]
@@ -10,8 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  typecheck:
+  check:
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -19,22 +23,12 @@ jobs:
       - run: bun run typecheck
       - run: bun --filter desktop build
 
-  rust:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libdbus-1-dev libasound2-dev libxdo-dev pkg-config cmake libclang-dev
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # Formats the whole workspace without compiling it, so larp is covered too.
+      - run: cargo fmt --all --check
       - uses: Swatinem/rust-cache@v2
-      # generate_context! needs the built frontend to exist.
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile && bun --filter desktop build
-      - run: cargo test --workspace
+      # voice-core has no whisper.cpp, so skip the workspace's opt-level 3 for deps.
+      - run: cargo clippy -p voice-core --all-targets --config 'profile.dev.package."*".opt-level=0' -- -D warnings
+      - run: cargo test -p voice-core --config 'profile.dev.package."*".opt-level=0'

@@ -1,10 +1,9 @@
 name: Release
 
-# Push a tag like v0.1.0 (matching the version in tauri.conf.json) to build
-# installers for every platform and publish them as a GitHub release.
+# Manual only: building installers for every platform takes well over the
+# 3-minute CI budget (and macOS minutes bill at 10x). Run it from the Actions
+# tab when you actually want a GitHub release.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:

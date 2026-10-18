@@ -109,8 +109,8 @@ fn parse_sarvam(body: &Value) -> Result<String> {
 fn sarvam_language(language: Option<&str>) -> String {
     let code = match language.unwrap_or("") {
         "or" => "od",
-        c @ ("hi" | "bn" | "kn" | "ml" | "mr" | "od" | "pa" | "ta" | "te" | "en" | "gu" | "as" | "ur" | "ne" | "kok" | "ks"
-        | "sd" | "sa" | "sat" | "mni" | "brx" | "mai" | "doi") => c,
+        c @ ("hi" | "bn" | "kn" | "ml" | "mr" | "od" | "pa" | "ta" | "te" | "en" | "gu" | "as" | "ur" | "ne" | "kok" | "ks" | "sd" | "sa" | "sat"
+        | "mni" | "brx" | "mai" | "doi") => c,
         _ => return "unknown".into(),
     };
     format!("{code}-IN")
@@ -119,12 +119,7 @@ fn sarvam_language(language: Option<&str>) -> String {
 /// The vocabulary as Sarvam's `keyterms`: a JSON array of at most 50 terms
 /// of at most 64 characters, split on commas and newlines.
 fn sarvam_keyterms(vocabulary: &str) -> Option<String> {
-    let terms: Vec<&str> = vocabulary
-        .split([',', '\n'])
-        .map(str::trim)
-        .filter(|t| !t.is_empty() && t.chars().count() <= 64)
-        .take(50)
-        .collect();
+    let terms: Vec<&str> = vocabulary.split([',', '\n']).map(str::trim).filter(|t| !t.is_empty() && t.chars().count() <= 64).take(50).collect();
     (!terms.is_empty()).then(|| Value::from(terms).to_string())
 }
 
