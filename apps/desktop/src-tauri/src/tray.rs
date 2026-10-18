@@ -42,6 +42,8 @@ pub fn set_tooltip(app: &AppHandle, hotkey: &str) {
 
 pub fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        #[cfg(target_os = "macos")]
+        crate::dock::show(app, true);
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();

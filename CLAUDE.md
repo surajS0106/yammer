@@ -39,7 +39,7 @@ Larp, a product of Sush: a dictation app modelled on Sush (`../sush`), whose whi
   - `hotkey.rs`: the `tauri-plugin-global-shortcut` handler only forwards events. Registering a shortcut blocks on the main thread, so never do real work in the handler. Esc is registered only while recording.
   - `recorder.rs`: cpal capture on its own thread, because the stream isn't `Send`.
   - `paste.rs`: arboard clipboard plus an enigo Ctrl/⌘+V, then restores the clipboard. On Wayland it falls back to `wtype` or `ydotool`, and otherwise the text is copied only.
-  - `overlay.rs`: a transparent, non-focusable, click-through pill window. It must never take focus, or the paste lands in the wrong app.
+  - `overlay.rs`: a transparent, non-focusable, click-through pill window. It must never take focus, or the paste lands in the wrong app. On macOS, `panel.rs` turns it into a non-activating `NSPanel`, which lets it appear over other apps' full-screen Spaces.
   - `whisper.rs`: model download with SHA check, a cached context, and inference.
   - `tray.rs`
   - `secrets.rs`: the OS keyring for the `stt` and `cleanup` keys. Debug builds use `dev-secrets.json` instead.
@@ -57,5 +57,5 @@ Larp, a product of Sush: a dictation app modelled on Sush (`../sush`), whose whi
 
 ## Gotchas
 
-- macOS: Larp is a regular Dock app (no `LSUIElement`); clicking the Dock icon (`RunEvent::Reopen`) shows the hidden window. `Info.plist` holds the microphone usage string. `Entitlements.plist` holds audio-input. Pasting needs Accessibility permission, checked with `AXIsProcessTrusted` in `platform.rs`. Transparency needs `macos-private-api`.
+- macOS: Larp has a Dock icon only while the main window is open (`dock::show` switches the activation policy between Regular and Accessory). With it closed, Larp is an accessory app, which is what lets the overlay appear over other apps' full-screen Spaces. Clicking the Dock icon (`RunEvent::Reopen`) shows the hidden window. `Info.plist` holds the microphone usage string. `Entitlements.plist` holds audio-input. Pasting needs Accessibility permission, checked with `AXIsProcessTrusted` in `platform.rs`. Transparency needs `macos-private-api`.
 - On Windows, a normal app can't send keystrokes into elevated (admin) windows. There the paste silently does nothing, but the text is still in History.

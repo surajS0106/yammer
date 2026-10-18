@@ -2,9 +2,12 @@
 // it reads on any background. It never takes focus. Clicks pass through it
 // except on Sushi and the pill, whose boxes are reported to Rust as hit areas:
 // drag either to move the overlay anywhere, double-click to send it home.
+// Hovering the idle pill opens it into the island: a row of buttons, each
+// named by a tooltip above it. The overlay never takes focus, so macOS sends it
+// no mouse moves; hover comes from the cursor position Rust polls instead.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AlertCircle, Check, Loader2 } from "lucide-react";
+import { AlertCircle, Check, History, Loader2, Mic, Settings2 } from "lucide-react";
 import * as React from "react";
 
 import { moodOf, Sushi } from "@/components/sushi";
@@ -31,6 +34,65 @@ function Meter() {
           className="w-[3px] rounded-full bg-white/85 transition-[height] duration-75"
           style={{ height: `${Math.max(3, v * 20)}px` }}
         />
+      ))}
+    </div>
+  );
+}
+
+const ISLAND = [
+  { id: "dictate", label: "Dictate", icon: Mic, run: () => api.overlayToggleDictation() },
+  { id: "history", label: "History", icon: History, run: () => api.overlayOpen("history") },
+  { id: "settings", label: "Settings", icon: Settings2, run: () => api.overlayOpen("general") },
+] as const;
+
+type Point = { x: number; y: number };
+
+/** Whether `p` is within `pad` px of the rectangle. */
+function near(r: DOMRect, p: Point, pad: number) {
+  return p.x >= r.left - pad && p.x < r.right + pad && p.y >= r.top - pad && p.y < r.bottom + pad;
+}
+
+/** The hovered idle pill's buttons. Clicking one doesn't take focus. */
+function IslandButtons({ cursor }: { cursor: Point | null }) {
+  const buttons = React.useRef<(HTMLButtonElement | null)[]>([]);
+  const tip = cursor && ISLAND.find((_, i) => buttons.current[i] && near(buttons.current[i].getBoundingClientRect(), cursor, 0))?.id;
+  const [hotkey, setHotkey] = React.useState("");
+  React.useEffect(() => {
+    const load = () => api.hotkeyLabel().then(setHotkey, () => {});
+    load();
+    const unlisten = on.settingsChanged(load);
+    return () => void unlisten.then((f) => f());
+  }, []);
+
+  return (
+    <div className="flex items-center gap-1" style={{ animation: "pill-in 140ms 80ms ease-out both" }}>
+      {ISLAND.map(({ id, label, icon: Icon, run }, i) => (
+        <button
+          key={id}
+          ref={(el) => {
+            buttons.current[i] = el;
+          }}
+          type="button"
+          aria-label={label}
+          className={cn(
+            "relative grid size-8 cursor-pointer place-items-center rounded-full text-white/85 transition-colors",
+            tip === id && "bg-white/15 text-white",
+          )}
+          // Not a drag: the container drags on mousedown.
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => void run().catch(() => {})}
+        >
+          <Icon className="size-4" strokeWidth={2.25} />
+          {tip === id && (
+            <span
+              className="pointer-events-none absolute bottom-full left-1/2 mb-2.5 flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/10 bg-neutral-900/92 px-2.5 py-1 text-xs font-medium text-white shadow-[0_4px_12px_rgba(0,0,0,0.35)]"
+              style={{ animation: "tip-in 120ms ease-out both" }}
+            >
+              {label}
+              {id === "dictate" && hotkey && <span className="font-normal text-white/55">{hotkey}</span>}
+            </span>
+          )}
+        </button>
       ))}
     </div>
   );
@@ -71,6 +133,24 @@ export function Overlay() {
       observer.disconnect();
     };
   }, [state.phase]);
+
+  // The idle pill opens into the island while the cursor is on it or on Sushi.
+  // The thin pill gets some slack to be easier to catch.
+  const [cursor, setCursor] = React.useState<Point | null>(null);
+  const [hovered, setHovered] = React.useState(false);
+  React.useEffect(() => setHovered(false), [state.phase]);
+  React.useEffect(() => {
+    const unlisten = on.overlayCursor((p) => {
+      setCursor(p);
+      setHovered((was) => {
+        if (!p) return false;
+        const pad = was ? 4 : 10;
+        return [pillRef.current, sushiRef.current].some((el) => el && near(el.getBoundingClientRect(), p, pad));
+      });
+    });
+    return () => void unlisten.then((f) => f());
+  }, []);
+  const open = state.phase === "idle" && hovered;
 
   // Held while being dragged: until the window stops moving for a moment.
   const [held, setHeld] = React.useState(false);
@@ -118,9 +198,14 @@ export function Overlay() {
       {state.phase === "idle" ? (
         <div
           ref={pillRef}
-          className="h-2 w-12 rounded-full border border-white/20 bg-neutral-900/70 shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+          className={cn(
+            "relative z-20 flex items-center justify-center rounded-full border shadow-[0_4px_12px_rgba(0,0,0,0.25)] transition-[width,height,background-color,border-color] duration-150 ease-out",
+            open ? "h-10 w-[120px] border-white/10 bg-neutral-900/92 backdrop-blur" : "h-2 w-12 border-white/20 bg-neutral-900/70",
+          )}
           style={{ animation: "pill-in 140ms ease-out" }}
-        />
+        >
+          {open && <IslandButtons cursor={cursor} />}
+        </div>
       ) : (
         <div
           ref={pillRef}

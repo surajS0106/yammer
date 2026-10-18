@@ -65,13 +65,13 @@ export function GeneralPage() {
             label="Always show the pill"
           />
         </Row>
-        <Row
-          label="Pill position"
-          description={settings.overlayPosition ? "Where you dragged it. Double-click Sushi to put it back too." : "Bottom centre of the screen. Drag Sushi or the pill to move it."}
-        >
-          <Button size="sm" variant="ghost" disabled={!settings.overlayPosition} onClick={() => void update({ overlayPosition: null })}>
-            Reset
-          </Button>
+        <Row label="Pill position" description="The middle of a screen edge. Drag Sushi or the pill toward another edge to move it there.">
+          <Select className="w-32" value={settings.overlayEdge} onChange={(e) => void update({ overlayEdge: e.target.value as OverlayEdge })}>
+            <option value="bottom">Bottom</option>
+            <option value="top">Top</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+          </Select>
         </Row>
         <Row label="Sounds" description="A short chime when recording starts and stops.">
           <Switch checked={settings.sounds} onChange={(sounds) => void update({ sounds })} label="Sounds" />

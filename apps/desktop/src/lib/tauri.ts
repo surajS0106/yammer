@@ -6,6 +6,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type Engine = "local" | "cloud";
+export type OverlayEdge = "bottom" | "top" | "left" | "right";
 export type SttApi = "transcriptions" | "ollama-chat" | "sarvam";
 export type LlmFormat = "openai-chat" | "anthropic-messages";
 
@@ -32,8 +33,8 @@ export interface Settings {
   restoreClipboard: boolean;
   trailingSpace: boolean;
   overlayAlwaysVisible: boolean;
-  /** Where the pill was dragged to (window top-left, physical px); null is bottom centre. */
-  overlayPosition: { x: number; y: number } | null;
+  /** The screen edge the pill sits at the middle of; dragging snaps it to the nearest. */
+  overlayEdge: OverlayEdge;
   engine: Engine;
   localModel: string;
   language: string;
@@ -101,7 +102,9 @@ export const api = {
   settingsSet: (settings: Settings) => invoke<Settings>("settings_set", { settings }),
   overlayState: () => invoke<OverlayState>("overlay_state"),
   overlayHitAreas: (areas: HitArea[]) => invoke<void>("overlay_hit_areas", { areas }),
-  overlayResetPosition: () => invoke<void>("overlay_reset_position"),
+  overlayToggleDictation: () => invoke<void>("overlay_toggle_dictation"),
+  overlayOpen: (page: string) => invoke<void>("overlay_open", { page }),
+  hotkeyLabel: () => invoke<string>("hotkey_label"),
   hotkeySuspend: (suspended: boolean) => invoke<void>("hotkey_suspend", { suspended }),
   hotkeyError: () => invoke<string | null>("hotkey_error"),
   micDevices: () => invoke<string[]>("mic_devices"),
@@ -130,6 +133,11 @@ export const on = {
   historyAdded: (f: (entry: HistoryEntry) => void): Promise<UnlistenFn> =>
     listen<HistoryEntry>("history-added", (e) => f(e.payload)),
   settingsChanged: (f: (s: Settings) => void): Promise<UnlistenFn> => listen<Settings>("settings-changed", (e) => f(e.payload)),
+  /** Where the cursor is over the overlay window (CSS px), or null when it's off it. */
+  overlayCursor: (f: (p: { x: number; y: number } | null) => void): Promise<UnlistenFn> =>
+    listen<{ x: number; y: number } | null>("overlay-cursor", (e) => f(e.payload)),
+  /** The island asked the settings window to show a page. */
+  navigate: (f: (page: string) => void): Promise<UnlistenFn> => listen<string>("navigate", (e) => f(e.payload)),
 };
 
 /** Commands reject with the Rust error's message as a plain string. */

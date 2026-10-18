@@ -4,6 +4,10 @@ Last updated: 2026-10-19
 
 ## What changed
 
+### 2026-10-19 (Dock only while the window is open)
+- When the Dock icon comes back, `dock::show` applies the themed icon again 300 ms and 1.2 s later, and `set_icon` now calls `dockTile().display()`. The Dock creates the new tile, with the binary's own icon ("exec" in dev builds), a moment after the policy changes, so an icon set right away was lost. Re-applying it with a redraw on the running app confirmed the fix.
+- The Dock icon now shows only while the main window is open. `dock::show` sets the `Regular` activation policy in `tray::show_main` and `Accessory` when the window closes and at startup, then puts the themed icon back (`src-tauri/src/dock.rs`). macOS keeps a Dock app's windows off other apps' full-screen Spaces, even a non-activating panel marked as a full-screen auxiliary, so Sushi could not follow you onto full-screen apps while Larp was always in the Dock. This was confirmed on the running app, where switching it to `Accessory` brought Sushi onto full-screen VS Code. See `overlay.md`.
+
 ### 2026-10-19 (Dock)
 - Larp is now a regular Dock app on macOS: the `Accessory` activation policy and `LSUIElement` (`Info.plist`) are gone. Clicking the Dock icon shows the hidden window (`RunEvent::Reopen` in `src-tauri/src/lib.rs`).
 - While Larp runs, the Dock icon follows the system theme. `src-tauri/src/dock.rs` sets `NSApplication.applicationIconImage` from the embedded `macos-light.png` / `macos-dark.png`, on `RunEvent::Ready` and on every `WindowEvent::ThemeChanged`. It has to be `Ready`, not `setup`: Tauri dev builds set their own Dock icon on `Ready`, which would overwrite one set earlier.

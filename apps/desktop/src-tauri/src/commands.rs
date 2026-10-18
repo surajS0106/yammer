@@ -33,10 +33,24 @@ pub fn overlay_hit_areas(areas: Vec<overlay::HitArea>) {
     overlay::set_hit_areas(areas);
 }
 
-/// Put the dragged pill back at the bottom centre of the screen.
+/// The hovered island's buttons: start or stop dictating, without taking focus
+/// from the app the text goes into.
 #[tauri::command]
-pub fn overlay_reset_position(app: AppHandle) {
-    overlay::reset_position(&app);
+pub fn overlay_toggle_dictation(app: AppHandle) {
+    app.state::<crate::dictation::Dictation>().send(crate::dictation::Input::Toggle);
+}
+
+/// Open the settings window at `page` ("home", "history", …).
+#[tauri::command]
+pub fn overlay_open(app: AppHandle, page: String) {
+    tray::show_main(&app);
+    let _ = app.emit_to("main", "navigate", page);
+}
+
+/// The dictation hotkey as the island's tooltip shows it, e.g. "⌘⇧Space".
+#[tauri::command]
+pub fn hotkey_label(state: State<'_, AppState>) -> String {
+    hotkey::display(&state.settings().hotkey)
 }
 
 /// Save new settings. A hotkey that can't be registered is rejected and the
@@ -56,7 +70,7 @@ pub fn settings_set(app: AppHandle, state: State<'_, AppState>, settings: Settin
     if settings.overlay_always_visible != old.overlay_always_visible {
         overlay::set_always_visible(&app, settings.overlay_always_visible);
     }
-    if settings.overlay_position != old.overlay_position {
+    if settings.overlay_edge != old.overlay_edge {
         overlay::place(&app);
     }
     if settings.engine == Engine::Local && (old.engine != Engine::Local || old.local_model != settings.local_model) {

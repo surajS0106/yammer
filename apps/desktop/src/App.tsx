@@ -6,7 +6,7 @@ import { EnginePage } from "@/pages/engine";
 import { GeneralPage } from "@/pages/general";
 import { HistoryPage } from "@/pages/history";
 import { HomePage } from "@/pages/home";
-import { api, type Platform } from "@/lib/tauri";
+import { api, on, type Platform } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 export type PageId = "home" | "general" | "engine" | "cleanup" | "history";
@@ -24,6 +24,13 @@ export const PlatformContext = React.createContext<Platform | null>(null);
 export default function App() {
   const [page, setPage] = React.useState<PageId>("home");
   const [platform, setPlatform] = React.useState<Platform | null>(null);
+
+  React.useEffect(() => {
+    const unlisten = on.navigate((id) => {
+      if (pages.some((p) => p.id === id)) setPage(id as PageId);
+    });
+    return () => void unlisten.then((f) => f());
+  }, []);
 
   React.useEffect(() => {
     const load = () => api.platformInfo().then(setPlatform, () => {});

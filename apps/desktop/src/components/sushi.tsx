@@ -88,6 +88,9 @@ const COLORS: Record<string, string> = {
 const W = BODY[0].length;
 const H = BODY.length + 1;
 
+/** Sushi's box in CSS px at the default pixel size. */
+export const SUSHI_SIZE = { width: W * 2, height: H * 2 };
+
 /** Fall asleep after this long idle with nothing happening. */
 const SLEEP_AFTER = 45_000;
 
@@ -161,6 +164,20 @@ type Look = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 const sign = (d: number, dead: number): -1 | 0 | 1 => (d < -dead ? -1 : d > dead ? 1 : 0);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Whether the page is on screen. A hidden or covered webview (macOS pauses
+ * it when the window is hidden, covered, or on another Space) gets no
+ * animation frames while its timers keep firing, so animations started then
+ * stall, and the ones running jump ahead when it comes back. */
+function usePageVisible() {
+  const [visible, setVisible] = React.useState(() => document.visibilityState === "visible");
+  React.useEffect(() => {
+    const onChange = () => setVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  }, []);
+  return visible;
+}
+
 const TRICKS = ["hop", "flip", "wiggle", "dance", "turn", "yawn", "look"] as const;
 type Trick = (typeof TRICKS)[number];
 
@@ -196,6 +213,9 @@ interface SushiProps {
 
 export function Sushi({ mood, px = 2, interactive = false, held = false, className }: SushiProps) {
   const reduce = !!useReducedMotion();
+  const visible = usePageVisible();
+  // No timed acts while reduced, or while off screen (see usePageVisible).
+  const still = reduce || !visible;
   const controls = useAnimationControls();
   const rootRef = React.useRef<HTMLDivElement>(null);
   const k = px / 2; // distances below are tuned for 2 px per pixel
@@ -236,7 +256,7 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
   // The voice level, while listening. It rises quickly and settles slowly, so
   // it bounces rather than jitters; loud bits send notes floating off.
   React.useEffect(() => {
-    if (reduce || mood !== "listening") return setLevel(0);
+    if (still || mood !== "listening") return setLevel(0);
     let lastNote = 0;
     const unlisten = on.level((rms) => {
       const v = Math.min(1, Math.sqrt(rms) * 2.4);
@@ -248,11 +268,11 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
       }
     });
     return () => void unlisten.then((f) => f());
-  }, [mood, reduce, spawn]);
+  }, [mood, still, spawn]);
 
   // Blink every few seconds, at slightly random intervals, sometimes twice.
   React.useEffect(() => {
-    if (reduce || sleeping) return;
+    if (still || sleeping) return;
     let timer: ReturnType<typeof setTimeout>;
     const blinkOnce = (then: () => void) => {
       setBlink(true);
@@ -269,16 +289,16 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
     };
     next();
     return () => clearTimeout(timer);
-  }, [reduce, sleeping]);
+  }, [still, sleeping]);
 
   // Doze off when idle and left alone.
   React.useEffect(() => {
-    if (reduce) return;
+    if (still) return;
     const id = setInterval(() => {
       if (moodRef.current === "idle" && !sleepingRef.current && Date.now() - lastActive.current > SLEEP_AFTER) setSleeping(true);
     }, 3000);
     return () => clearInterval(id);
-  }, [reduce]);
+  }, [still]);
 
   // On the Home page: eyes follow the pointer, and any activity wakes it.
   React.useEffect(() => {
@@ -315,7 +335,7 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
     const from = prevAct.current;
     prevAct.current = act;
     if (act !== "idle") wake();
-    if (reduce) return;
+    if (still) return;
     let alive = true;
     const settle = { x: 0, y: 0, rotate: 0, scaleX: 1, scaleY: 1 };
     const intro =
@@ -338,8 +358,12 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
             transition: { duration: 0.55, times: [0, 0.45, 0.75, 1], ease: "easeOut" },
           })
         : Promise.resolve();
+    // The same act again means it's back on screen: carry on from rest
+    // (`hidden` below), restarting only the acts that loop.
+    const resumed = from === act;
     void intro.then(async () => {
       if (!alive) return;
+      if (resumed && act !== "held" && act !== "transcribing" && act !== "polishing") return;
       switch (act) {
         case "held":
           // Dangling from your cursor, swinging.
@@ -366,7 +390,7 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
           });
           break;
         case "transcribing":
-          await controls.start({ ...settle, y: [0, -5 * k, 0], transition: { duration: 0.3, ease: "easeOut" } });
+          if (!resumed) await controls.start({ ...settle, y: [0, -5 * k, 0], transition: { duration: 0.3, ease: "easeOut" } });
           if (!alive) return;
           void controls.start({
             y: [0, 0.6 * k, 0],
@@ -397,7 +421,17 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
       alive = false;
       if (act === "held") setDancing(false);
     };
-  }, [act, reduce, controls, wake, spawn, k]);
+  }, [act, still, controls, wake, spawn, k]);
+
+  // Off screen: stop mid-act and come to rest, so nothing stalls half-faded
+  // or jumps ahead when the page is shown again.
+  React.useEffect(() => {
+    if (visible) return;
+    controls.stop();
+    controls.set({ x: 0, y: 0, rotate: 0, scaleX: 1, scaleY: 1, opacity: 1 });
+    setFx([]);
+    setBurst(0);
+  }, [visible, controls]);
 
   // Picked up: a startled "!".
   React.useEffect(() => {
@@ -411,7 +445,7 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
 
   // Idle tricks, every few seconds, never the same one twice running.
   React.useEffect(() => {
-    if (reduce || mood !== "idle" || sleeping || held) return;
+    if (still || mood !== "idle" || sleeping || held) return;
     let alive = true;
     let last: Trick | null = null;
     let timer: ReturnType<typeof setTimeout>;
@@ -485,18 +519,18 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
       setTrickLook(null);
       setDancing(false);
     };
-  }, [mood, sleeping, held, reduce, controls, k]);
+  }, [mood, sleeping, held, still, controls, k]);
 
   // While polishing, the eyes drift up to one side, then the other.
   React.useEffect(() => {
-    if (reduce || mood !== "polishing") return;
+    if (still || mood !== "polishing") return;
     const id = setInterval(() => setPonder((p) => !p), 1100);
     return () => clearInterval(id);
-  }, [mood, reduce]);
+  }, [mood, still]);
 
   // Every few seconds at the laptop, glance up from the screen for a moment.
   React.useEffect(() => {
-    if (reduce || mood !== "transcribing") return setGlance(false);
+    if (still || mood !== "transcribing") return setGlance(false);
     let timer: ReturnType<typeof setTimeout>;
     const next = () => {
       timer = setTimeout(
@@ -512,15 +546,15 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
     };
     next();
     return () => clearTimeout(timer);
-  }, [mood, reduce]);
+  }, [mood, still]);
 
   // One frame counter drives the dancing feet and the typing hands.
   const moving = dancing || mood === "transcribing";
   React.useEffect(() => {
-    if (reduce || !moving) return setFrame(0);
+    if (still || !moving) return setFrame(0);
     const id = setInterval(() => setFrame((f) => f + 1), held ? 120 : dancing ? 200 : 110);
     return () => clearInterval(id);
-  }, [moving, dancing, held, reduce]);
+  }, [moving, dancing, held, still]);
 
   const onClick = () => {
     if (reduce) return;

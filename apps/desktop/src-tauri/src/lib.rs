@@ -9,6 +9,8 @@ mod dock;
 mod error;
 mod hotkey;
 mod overlay;
+#[cfg(target_os = "macos")]
+mod panel;
 mod paste;
 mod platform;
 mod recorder;
@@ -55,6 +57,10 @@ pub fn run() {
             }
             commands::preload(app.handle());
 
+            // No Dock icon until the main window opens (dock::show).
+            #[cfg(target_os = "macos")]
+            dock::show(app.handle(), false);
+
             // Launched at login → stay in the tray. Otherwise, or before setup is done, show the window.
             let hidden = std::env::args().any(|a| a == "--hidden");
             if !hidden || !settings.onboarded {
@@ -67,6 +73,8 @@ pub fn run() {
             WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
                 api.prevent_close();
                 let _ = window.hide();
+                #[cfg(target_os = "macos")]
+                dock::show(window.app_handle(), false);
             }
             #[cfg(target_os = "macos")]
             WindowEvent::ThemeChanged(theme) => dock::set_icon(*theme),
@@ -78,7 +86,9 @@ pub fn run() {
             commands::settings_set,
             commands::overlay_state,
             commands::overlay_hit_areas,
-            commands::overlay_reset_position,
+            commands::overlay_toggle_dictation,
+            commands::overlay_open,
+            commands::hotkey_label,
             commands::hotkey_suspend,
             commands::hotkey_error,
             commands::mic_devices,
