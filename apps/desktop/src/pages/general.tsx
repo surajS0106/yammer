@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { PageHeader, PlatformContext } from "@/App";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
-import { Row, Section, Select, Switch } from "@/components/ui";
+import { Button, Row, Section, Select, Switch } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import { api, errorMessage } from "@/lib/tauri";
 import { isMac } from "@/lib/utils";
@@ -64,6 +64,14 @@ export function GeneralPage() {
             onChange={(overlayAlwaysVisible) => void update({ overlayAlwaysVisible })}
             label="Always show the pill"
           />
+        </Row>
+        <Row
+          label="Pill position"
+          description={settings.overlayPosition ? "Where you dragged it. Double-click Sushi to put it back too." : "Bottom centre of the screen. Drag Sushi or the pill to move it."}
+        >
+          <Button size="sm" variant="ghost" disabled={!settings.overlayPosition} onClick={() => void update({ overlayPosition: null })}>
+            Reset
+          </Button>
         </Row>
         <Row label="Sounds" description="A short chime when recording starts and stops.">
           <Switch checked={settings.sounds} onChange={(sounds) => void update({ sounds })} label="Sounds" />

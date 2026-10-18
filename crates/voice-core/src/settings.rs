@@ -22,6 +22,9 @@ pub struct Settings {
     pub trailing_space: bool,
     /// Keep a small pill on screen between dictations, not only while recording.
     pub overlay_always_visible: bool,
+    /// Where the pill was dragged to: the overlay window's top-left in physical
+    /// screen pixels. `None` puts it centred above the bottom of the screen.
+    pub overlay_position: Option<OverlayPosition>,
     pub engine: Engine,
     pub local_model: String,
     /// ISO 639-1 code, or "auto" (multilingual models only).
@@ -32,6 +35,12 @@ pub struct Settings {
     pub cleanup: Cleanup,
     /// Set once the first-run walkthrough is finished or skipped.
     pub onboarded: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OverlayPosition {
+    pub x: i32,
+    pub y: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -149,6 +158,7 @@ impl Default for Settings {
             restore_clipboard: true,
             trailing_space: true,
             overlay_always_visible: true,
+            overlay_position: None,
             engine: Engine::Local,
             local_model: DEFAULT_MODEL.into(),
             language: "en".into(),

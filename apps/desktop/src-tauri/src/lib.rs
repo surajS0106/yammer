@@ -64,19 +64,21 @@ pub fn run() {
             }
             Ok(())
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match event {
             // Closing the window keeps the app running in the tray.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
+            WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
+                api.prevent_close();
+                let _ = window.hide();
             }
+            WindowEvent::Moved(pos) if window.label() == overlay::LABEL => overlay::moved(window.app_handle(), *pos),
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::settings_get,
             commands::settings_set,
             commands::overlay_state,
+            commands::overlay_hit_areas,
+            commands::overlay_reset_position,
             commands::hotkey_suspend,
             commands::hotkey_error,
             commands::mic_devices,

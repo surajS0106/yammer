@@ -27,6 +27,18 @@ pub fn overlay_state() -> OverlayState {
     overlay::current()
 }
 
+/// Sushi and the pill, which take the mouse so the overlay can be dragged.
+#[tauri::command]
+pub fn overlay_hit_areas(areas: Vec<overlay::HitArea>) {
+    overlay::set_hit_areas(areas);
+}
+
+/// Put the dragged pill back at the bottom centre of the screen.
+#[tauri::command]
+pub fn overlay_reset_position(app: AppHandle) {
+    overlay::reset_position(&app);
+}
+
 /// Save new settings. A hotkey that can't be registered is rejected and the
 /// old one stays.
 #[tauri::command]
@@ -43,6 +55,9 @@ pub fn settings_set(app: AppHandle, state: State<'_, AppState>, settings: Settin
     *state.settings.lock().unwrap() = settings.clone();
     if settings.overlay_always_visible != old.overlay_always_visible {
         overlay::set_always_visible(&app, settings.overlay_always_visible);
+    }
+    if settings.overlay_position != old.overlay_position {
+        overlay::place(&app);
     }
     if settings.engine == Engine::Local && (old.engine != Engine::Local || old.local_model != settings.local_model) {
         preload(&app);

@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "The settings window and the dictation overlay",
   "windows": ["main", "overlay"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging", "opener:default"]
 }

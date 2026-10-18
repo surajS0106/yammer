@@ -2,6 +2,7 @@ import { CheckCircle2, Circle, Copy, Download } from "lucide-react";
 import * as React from "react";
 
 import { PageHeader, PlatformContext, type PageId } from "@/App";
+import { moodOf, Sushi } from "@/components/sushi";
 import { Badge, Button, Card, Hotkey, Kbd, Notice, Progress, Row, Textarea } from "@/components/ui";
 import { downloadModel, useModels } from "@/lib/models";
 import { providerLabel, sttPresets } from "@/lib/presets";
@@ -73,7 +74,8 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
     <div className="space-y-6">
       <PageHeader title="Dictate anywhere" description="Speak into any app: your words are transcribed and pasted where the cursor is." />
 
-      <Card className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+      <Card className="flex flex-col items-center gap-3 px-6 pt-12 pb-8 text-center">
+        <Sushi mood={moodOf(status)} px={3} interactive className="mb-2 text-muted-foreground" />
         <Hotkey accelerator={settings.hotkey} className="[&_kbd]:h-8 [&_kbd]:min-w-8 [&_kbd]:text-sm" />
         <p className="text-sm">
           <span className="font-medium">Hold</span> to talk and release to paste, or <span className="font-medium">tap</span> once to start and

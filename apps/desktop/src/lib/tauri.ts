@@ -32,6 +32,8 @@ export interface Settings {
   restoreClipboard: boolean;
   trailingSpace: boolean;
   overlayAlwaysVisible: boolean;
+  /** Where the pill was dragged to (window top-left, physical px); null is bottom centre. */
+  overlayPosition: { x: number; y: number } | null;
   engine: Engine;
   localModel: string;
   language: string;
@@ -39,6 +41,14 @@ export interface Settings {
   cloud: CloudStt;
   cleanup: Cleanup;
   onboarded: boolean;
+}
+
+/** A rectangle in CSS px from the overlay window's top-left. */
+export interface HitArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface ModelInfo {
@@ -90,6 +100,8 @@ export const api = {
   settingsGet: () => invoke<Settings>("settings_get"),
   settingsSet: (settings: Settings) => invoke<Settings>("settings_set", { settings }),
   overlayState: () => invoke<OverlayState>("overlay_state"),
+  overlayHitAreas: (areas: HitArea[]) => invoke<void>("overlay_hit_areas", { areas }),
+  overlayResetPosition: () => invoke<void>("overlay_reset_position"),
   hotkeySuspend: (suspended: boolean) => invoke<void>("hotkey_suspend", { suspended }),
   hotkeyError: () => invoke<string | null>("hotkey_error"),
   micDevices: () => invoke<string[]>("mic_devices"),
