@@ -1,0 +1,39 @@
+[package]
+name = "sush-voice"
+description = "Sush Voice: dictate anywhere"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "sush_voice_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+voice-core.workspace = true
+base64.workspace = true
+futures.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util"] }
+# macos-private-api: transparent windows (the overlay) on macOS.
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-opener = "2"
+whisper-rs = "0.16"
+cpal = "0.18"
+arboard = { version = "3", features = ["wayland-data-control"] }
+enigo = "0.6"
+keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
+sha2 = "0.10"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Apple Silicon and recent Intel Macs run whisper on the GPU.
+whisper-rs = { version = "0.16", features = ["metal"] }

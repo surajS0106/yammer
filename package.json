@@ -1,0 +1,10 @@
+{
+  "name": "sush-voice",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "bun --filter desktop tauri dev",
+    "build": "bun --filter desktop tauri build",
+    "typecheck": "bun --filter '*' typecheck"
+  }
+}

@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = ["crates/voice-core", "apps/desktop/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+
+[workspace.dependencies]
+voice-core = { path = "crates/voice-core" }
+base64 = "0.22"
+futures = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "stream", "native-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+# whisper.cpp is unbearably slow unoptimised, even in dev.
+opt-level = 3
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
