@@ -4,6 +4,10 @@ Last updated: 2026-10-19
 
 ## What changed
 
+### 2026-10-19 (no Xcode for the adaptive icon, duplicate Dock tiles)
+- `Assets.car` is now committed instead of gitignored. `.github/workflows/mac-icon.yml` compiles it with Xcode's `actool` on a GitHub macOS runner and commits it whenever `icons/AppIcon.icon` or `build-mac-icon.sh` changes (or when run by hand). `build:mac` now always passes `tauri.macos-icon.conf.json`, so every local DMG ships the light/dark icon without Xcode installed. Sush got the same workflow and `build:mac` change.
+- Larp removes duplicate Dock tiles of itself at startup. `dock::dedupe_recents` reads `com.apple.dock`'s `recent-apps`, keeps the first Larp entry, writes the list back with `defaults import` and restarts the Dock, only when a duplicate was found (`src-tauri/src/dock.rs`, called from `setup` in `src-tauri/src/lib.rs`).
+
 ### 2026-10-19 (adaptive macOS icon, transparent sidebar mark)
 - The sidebar logo is now the transparent ribbon L (`public/larp-mark.png`, one `<img>` in `src/App.tsx:89`) instead of the light and dark rounded tiles. `make_icons.py` writes it from the cleaned mark and no longer writes `public/larp-icon-{light,dark}.png`, which are deleted. The favicons are unchanged.
 - macOS 26 adaptive icon, ported from Sush. `make_icons.py` writes full-bleed `light.png` and `dark.png` into `src-tauri/icons/AppIcon.icon/Assets`, cutting each source with the dark source's tile alpha and filling the corners from a blurred, enlarged copy of the tile. `icons/build-mac-icon.sh` compiles the bundle to `Assets.car` with `actool`. `tauri.macos-icon.conf.json` bundles that with `Info.icon.plist` (`CFBundleIconName` plus a copy of the microphone string).
@@ -32,6 +36,10 @@ Last updated: 2026-10-19
 - Removed `public/sush-mark*.png` and `public/favicon.png`.
 
 ## Why
+
+The Dock had two identical "recent app" tiles for Larp: same path, same bookmark, consecutive IDs. The running app attached to one and showed the themed icon, while the other kept the static light `.icns`. Switching the activation policy does not cause it: test apps that toggled Regular/Accessory, with and without activation and icon swaps, never produced a second tile, and neither did opening and closing the real Larp. The likely trigger is replacing `/Applications/Larp.app` with a rebuilt ad-hoc-signed copy, which leaves an entry the Dock can't match to the new bundle. It couldn't be confirmed, so the fix removes duplicates whatever made them. Writing another app's preferences and restarting the Dock is heavy-handed, which is why it only happens when a duplicate exists. It was tested by restoring the duplicate and launching the fixed build: two tiles became one.
+
+`actool` only ships with full Xcode, and no maintained tool compiles the macOS 26 `.icon` format into `Assets.car` without it. Chromium solves the same problem by committing prebuilt `.car` files. GitHub's macOS runners already have Xcode, so compiling there and committing the output means no one installs Xcode locally. The cost is about a minute of macOS CI per icon change. A local icon change shows up in local DMGs only after it's pushed and the workflow has committed the new `Assets.car`.
 
 macOS icons follow Apple's grid: an 824px rounded square centred on a 1024px canvas, with a shadow. Icons that skip the grid look oversized and square-cornered in the Dock and Finder. The mask is a rounded square whose corners are superellipse curves (they start 30% in, with exponent 3). This keeps the corner curvature continuous like Apple's shape, and its diagonal inset matches a 22.5%-radius circle. A plain n=5 superellipse was tried first, but it looked bulgy at this size.
 

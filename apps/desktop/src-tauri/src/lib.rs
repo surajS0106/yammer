@@ -61,6 +61,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 dock::show(app.handle(), false);
+                dock::dedupe_recents(app.handle());
                 if let Some(window) = app.get_webview_window("main") {
                     dock::follow_minimize(&window);
                 }

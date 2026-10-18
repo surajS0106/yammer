@@ -43,3 +43,5 @@ objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
 # Callbacks for the main window's minimize notifications (dock.rs).
 block2 = "0.6"
+# Reads the Dock's preferences to drop duplicate Larp tiles (dock.rs).
+plist = "1"

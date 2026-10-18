@@ -51,6 +51,56 @@ pub fn show(app: &AppHandle, visible: bool) {
     }
 }
 
+/// The Dock sometimes keeps two "recent app" tiles for Larp, both pointing at the
+/// same bundle (seen after reinstalling a rebuilt copy). Only one of them is the
+/// running app; the other shows the static icon and never goes away on its own.
+/// At startup, keep the first Larp tile and drop the rest. The Dock rereads its
+/// preferences only on restart, so it's restarted, but only when a duplicate
+/// was actually found.
+pub fn dedupe_recents(app: &AppHandle) {
+    let id = app.config().identifier.clone();
+    std::thread::spawn(move || {
+        if let Err(e) = remove_duplicate_tiles(&id) {
+            eprintln!("dock: couldn't check for duplicate tiles: {e}");
+        }
+    });
+}
+
+fn remove_duplicate_tiles(id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let out = Command::new("/usr/bin/defaults").args(["export", "com.apple.dock", "-"]).output()?;
+    let mut prefs = plist::Value::from_reader_xml(out.stdout.as_slice())?;
+    let Some(recents) = prefs.as_dictionary_mut().and_then(|d| d.get_mut("recent-apps")).and_then(|v| v.as_array_mut()) else {
+        return Ok(());
+    };
+    let is_larp = |tile: &plist::Value| {
+        tile.as_dictionary()
+            .and_then(|t| t.get("tile-data"))
+            .and_then(|d| d.as_dictionary())
+            .and_then(|d| d.get("bundle-identifier"))
+            .and_then(|b| b.as_string())
+            == Some(id)
+    };
+    let before = recents.len();
+    let mut seen = false;
+    recents.retain(|tile| !is_larp(tile) || !std::mem::replace(&mut seen, true));
+    if recents.len() == before {
+        return Ok(());
+    }
+
+    let mut xml = Vec::new();
+    prefs.to_writer_xml(&mut xml)?;
+    let mut import = Command::new("/usr/bin/defaults").args(["import", "com.apple.dock", "-"]).stdin(Stdio::piped()).spawn()?;
+    import.stdin.take().ok_or("no stdin")?.write_all(&xml)?;
+    if !import.wait()?.success() {
+        return Err("defaults import failed".into());
+    }
+    Command::new("/usr/bin/killall").arg("Dock").status()?;
+    Ok(())
+}
+
 /// Minimizing the main window counts as closing it for the Dock, so Sushi stays
 /// on full-screen apps while it's minimized; un-minimizing brings the icon back.
 /// Tauri has no minimize event, so this listens for AppKit's notifications.
