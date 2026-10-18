@@ -2345,6 +2345,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "larp"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "base64 0.22.1",
+ "cpal",
+ "enigo",
+ "futures",
+ "keyring",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "thiserror 2.0.21",
+ "tokio",
+ "voice-core",
+ "whisper-rs",
+]
+
+[[package]]
 name = "libappindicator"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4121,32 +4147,6 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-
-[[package]]
-name = "sush-voice"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "base64 0.22.1",
- "cpal",
- "enigo",
- "futures",
- "keyring",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "thiserror 2.0.21",
- "tokio",
- "voice-core",
- "whisper-rs",
-]
 
 [[package]]
 name = "swift-rs"

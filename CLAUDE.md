@@ -16,14 +16,14 @@ bun run build                # release installers for this platform
 cargo test --workspace
 cargo test -p voice-core <name_substring>
 # Real whisper inference (model + 16 kHz mono WAV):
-WHISPER_MODEL=... WHISPER_WAV=... cargo test -p sush-voice transcribes_real_audio -- --ignored --nocapture
+WHISPER_MODEL=... WHISPER_WAV=... cargo test -p larp transcribes_real_audio -- --ignored --nocapture
 ```
 
 There are no JS tests and no linter; `typecheck` is the TypeScript gate. Building whisper.cpp needs CMake and libclang. Dev builds compile dependencies at `opt-level = 3`, because whisper is unusably slow without it.
 
 ## Architecture
 
-A dictation app modelled on Sush (`../sush`), whose whisper, transcription, secrets and error code it adapts.
+Larp, a product of Sush: a dictation app modelled on Sush (`../sush`), whose whisper, transcription, secrets and error code it adapts.
 
 - **`crates/voice-core`** is pure Rust with no Tauri dependency, and it should stay that way. It holds:
   - `audio.rs`: downmix, resample to 16 kHz, silence detection, WAV encode and decode.
@@ -32,7 +32,7 @@ A dictation app modelled on Sush (`../sush`), whose whisper, transcription, secr
   - `history.rs`
   - `transcribe.rs`: cloud speech-to-text over `/audio/transcriptions` or Ollama chat.
   - `cleanup.rs`: the LLM cleanup prompt and request for OpenAI chat or Anthropic messages.
-- **`apps/desktop/src-tauri`** (crate `sush-voice`) is the OS shell.
+- **`apps/desktop/src-tauri`** (crate `larp`) is the OS shell.
   - `dictation.rs` is the heart of the app. A single task consumes `Input`s (hotkey Down/Up, Toggle, Cancel, Cap, Finished) in order:
     - **Hold vs. tap:** a release within 300 ms latches into toggle mode.
     - **Pipeline:** stop recording → resample → whisper or cloud → optional cleanup (falls back to the raw text) → paste → history.
@@ -45,7 +45,7 @@ A dictation app modelled on Sush (`../sush`), whose whisper, transcription, secr
   - `secrets.rs`: the OS keyring for the `stt` and `cleanup` keys. Debug builds use `dev-secrets.json` instead.
   - `commands.rs`
   - **Instances and windows:**
-    - Single-instance: `sush-voice --toggle` from a second launch toggles dictation, which is the Wayland path.
+    - Single-instance: `larp --toggle` from a second launch toggles dictation, which is the Wayland path.
     - Closing the main window hides it, and the app keeps running in the tray.
     - `--hidden` (used by autostart) skips showing the window once the user is onboarded.
 - **`apps/desktop/src`**: React 19, Vite and Tailwind 4, with hand-rolled primitives in `components/ui.tsx` (no shadcn or Radix) using Sush's theme tokens.

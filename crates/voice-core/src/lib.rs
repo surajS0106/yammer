@@ -1,4 +1,4 @@
-//! Sush Voice's core: everything that doesn't need Tauri or an OS device.
+//! Larp's core: everything that doesn't need Tauri or an OS device.
 //! Audio buffers in, text out; settings and history on disk.
 
 pub mod audio;

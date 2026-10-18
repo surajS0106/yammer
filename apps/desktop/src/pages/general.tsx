@@ -36,7 +36,7 @@ export function GeneralPage() {
           label="Hotkey"
           description={
             platform?.wayland
-              ? "Wayland only delivers this to X11 apps. Bind a system shortcut to `sush-voice --toggle` instead."
+              ? "Wayland only delivers this to X11 apps. Bind a system shortcut to `larp --toggle` instead."
               : "Hold to talk, or tap to start and tap again to finish."
           }
         >
@@ -57,6 +57,13 @@ export function GeneralPage() {
             ))}
             {settings.micDevice && !devices.includes(settings.micDevice) && <option value={settings.micDevice}>{settings.micDevice} (not connected)</option>}
           </Select>
+        </Row>
+        <Row label="Always show the pill" description="Keep a small pill on screen between dictations, not only while recording.">
+          <Switch
+            checked={settings.overlayAlwaysVisible}
+            onChange={(overlayAlwaysVisible) => void update({ overlayAlwaysVisible })}
+            label="Always show the pill"
+          />
         </Row>
         <Row label="Sounds" description="A short chime when recording starts and stops.">
           <Switch checked={settings.sounds} onChange={(sounds) => void update({ sounds })} label="Sounds" />

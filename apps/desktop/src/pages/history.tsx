@@ -8,9 +8,12 @@ import { api, errorMessage, on, type HistoryEntry } from "@/lib/tauri";
 
 const time = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-function engineLabel(engine: string): string {
-  const [kind, name] = engine.split(":");
-  return kind === "local" ? `Local · ${name}` : `Cloud · ${name}`;
+function engineLabel(entry: HistoryEntry): string {
+  if (entry.engineLabel) return entry.engineLabel;
+  // Older entries only have "kind:model"; the model itself may contain ":" (saaras:v4).
+  const i = entry.engine.indexOf(":");
+  const name = entry.engine.slice(i + 1);
+  return entry.engine.slice(0, i) === "local" ? `On-device · ${name}` : `Cloud · ${name}`;
 }
 
 function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }) {
@@ -22,7 +25,8 @@ function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }
         <span>{time.format(entry.at)}</span>
         <span>·</span>
         <span>{(entry.durationMs / 1000).toFixed(1)}s</span>
-        <Badge>{engineLabel(entry.engine)}</Badge>
+        <Badge>{engineLabel(entry)}</Badge>
+        {entry.cleanup && <Badge tone="brand">Cleaned · {entry.cleanup}</Badge>}
         {entry.raw && (
           <button type="button" className="text-primary hover:underline" onClick={() => setShowRaw((v) => !v)}>
             {showRaw ? "Hide original" : "Show original"}

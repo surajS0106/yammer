@@ -2,9 +2,9 @@ import { CheckCircle2, Circle, Copy, Download } from "lucide-react";
 import * as React from "react";
 
 import { PageHeader, PlatformContext, type PageId } from "@/App";
-import { Button, Card, Hotkey, Kbd, Notice, Progress, Textarea } from "@/components/ui";
+import { Badge, Button, Card, Hotkey, Kbd, Notice, Progress, Row, Textarea } from "@/components/ui";
 import { downloadModel, useModels } from "@/lib/models";
-import { sttPresets } from "@/lib/presets";
+import { providerLabel, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import { api, on, type HistoryEntry, type OverlayState } from "@/lib/tauri";
 import { formatBytes } from "@/lib/utils";
@@ -26,9 +26,9 @@ function statusText(s: OverlayState): string | null {
     case "listening":
       return "Listening…";
     case "transcribing":
-      return "Transcribing…";
+      return `Transcribing with ${s.engine}…`;
     case "polishing":
-      return "Polishing…";
+      return `Polishing with ${s.model}…`;
     case "message":
       return s.text;
     default:
@@ -87,6 +87,34 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
         </div>
       </Card>
 
+      <Card className="divide-y">
+        <Row
+          label={
+            <span className="flex items-center gap-2">
+              Speech engine
+              <Badge tone={settings.engine === "local" ? "muted" : "brand"}>{settings.engine === "local" ? "On this computer" : "Cloud"}</Badge>
+            </span>
+          }
+          description={
+            settings.engine === "local"
+              ? `${model?.label ?? settings.localModel}. Your voice never leaves this computer.`
+              : `${providerLabel(settings.cloud.preset, settings.cloud.model)}. Audio is sent to this service.`
+          }
+        >
+          <Button size="sm" variant="ghost" onClick={() => go("engine")}>
+            Change
+          </Button>
+        </Row>
+        <Row
+          label="Cleanup"
+          description={settings.cleanup.enabled ? `${providerLabel(settings.cleanup.preset, settings.cleanup.model)} polishes each transcript.` : "Off. Text is pasted as transcribed."}
+        >
+          <Button size="sm" variant="ghost" onClick={() => go("cleanup")}>
+            Change
+          </Button>
+        </Row>
+      </Card>
+
       {hotkeyError && (
         <Notice tone="error">
           {hotkeyError}{" "}
@@ -128,9 +156,9 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
               </Step>
             )}
             {platform?.os === "macos" && (
-              <Step done={accessibilityOk} title="Allow Sush Voice to paste (Accessibility)">
+              <Step done={accessibilityOk} title="Allow Larp to paste (Accessibility)">
                 <p className="text-xs text-muted-foreground">
-                  macOS needs your permission before an app can press ⌘V for you. Turn on Sush Voice under Privacy & Security → Accessibility.
+                  macOS needs your permission before an app can press ⌘V for you. Turn on Larp under Privacy & Security → Accessibility.
                 </p>
                 <Button size="sm" variant="outline" onClick={() => void api.openPermissionSettings("accessibility")}>
                   Open Accessibility settings
@@ -146,7 +174,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
           <p className="font-medium">You’re on Wayland.</p>
           <p className="mt-1">
             Wayland doesn’t let apps listen for global hotkeys or press keys. Bind a system shortcut (GNOME: Settings → Keyboard → Custom
-            Shortcuts) to <code className="rounded bg-muted px-1">sush-voice --toggle</code>.{" "}
+            Shortcuts) to <code className="rounded bg-muted px-1">larp --toggle</code>.{" "}
             {platform.wtype || platform.ydotool
               ? `Pasting will use ${platform.wtype ? "wtype" : "ydotool"}.`
               : "Install wtype or ydotool for auto-paste; otherwise the text is copied and you press Ctrl+V."}

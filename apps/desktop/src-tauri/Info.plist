@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Sush Voice listens while you hold the dictation hotkey, to turn your speech into text.</string>
+  <string>Larp listens while you hold the dictation hotkey, to turn your speech into text.</string>
   <key>LSUIElement</key>
   <true/>
 </dict>

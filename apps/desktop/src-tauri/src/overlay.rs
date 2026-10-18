@@ -2,7 +2,8 @@
 //! state. It never takes focus, so the app you're dictating into keeps it,
 //! and clicks pass through it.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
@@ -16,20 +17,27 @@ const BOTTOM_MARGIN: f64 = 96.0;
 
 /// Bumped on every change, so a delayed hide doesn't hide a newer state.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Keep a small idle pill on screen between dictations, instead of hiding.
+static ALWAYS_VISIBLE: AtomicBool = AtomicBool::new(false);
+/// The last state shown, for an overlay webview that loads after it was sent.
+static CURRENT: Mutex<OverlayState> = Mutex::new(OverlayState::Hidden);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "phase", rename_all = "kebab-case")]
 pub enum OverlayState {
     Listening { hint: Option<String> },
-    Transcribing,
-    Polishing,
+    /// `engine` is the settings' engine label, e.g. "Sarvam · saaras:v4".
+    Transcribing { engine: String },
+    Polishing { model: String },
     Message { text: String, error: bool },
+    /// Not dictating, but the pill stays on screen ("Always show the pill").
+    Idle,
     Hidden,
 }
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into()))
-        .title("Sush Voice")
+        .title("Larp")
         .inner_size(WIDTH, HEIGHT)
         .resizable(false)
         .decorations(false)
@@ -64,17 +72,40 @@ fn place(app: &AppHandle) {
 
 pub fn show(app: &AppHandle, state: OverlayState) {
     GENERATION.fetch_add(1, Ordering::SeqCst);
+    let state = match state {
+        OverlayState::Hidden | OverlayState::Idle if ALWAYS_VISIBLE.load(Ordering::SeqCst) => OverlayState::Idle,
+        OverlayState::Idle => OverlayState::Hidden,
+        s => s,
+    };
+    *CURRENT.lock().unwrap() = state.clone();
     let _ = app.emit("dictation", &state);
     let Some(window) = app.get_webview_window(LABEL) else { return };
     if matches!(state, OverlayState::Hidden) {
         let _ = window.hide();
         return;
     }
-    if !window.is_visible().unwrap_or(false) {
+    let visible = window.is_visible().unwrap_or(false);
+    // A pill that stays up follows you to the monitor you start dictating on.
+    if !visible || matches!(state, OverlayState::Listening { .. }) {
         place(app);
+    }
+    if !visible {
         let _ = window.show();
         // Some window managers drop always-on-top across hide/show.
         let _ = window.set_always_on_top(true);
+    }
+}
+
+pub fn current() -> OverlayState {
+    CURRENT.lock().unwrap().clone()
+}
+
+/// Turn the always-visible idle pill on or off. Mid-dictation this only
+/// changes what happens when the dictation ends.
+pub fn set_always_visible(app: &AppHandle, on: bool) {
+    ALWAYS_VISIBLE.store(on, Ordering::SeqCst);
+    if matches!(current(), OverlayState::Hidden | OverlayState::Idle) {
+        hide(app);
     }
 }
 

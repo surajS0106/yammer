@@ -13,11 +13,18 @@ use crate::error::{AppError, AppResult};
 use crate::hotkey::{self, Hotkey};
 use crate::state::AppState;
 use crate::whisper::{self, Whisper};
+use crate::overlay::{self, OverlayState};
 use crate::{paste, platform, recorder, secrets, tray};
 
 #[tauri::command]
 pub fn settings_get(state: State<'_, AppState>) -> Settings {
     state.settings()
+}
+
+/// What the overlay pill shows now; it may load after the last event was sent.
+#[tauri::command]
+pub fn overlay_state() -> OverlayState {
+    overlay::current()
 }
 
 /// Save new settings. A hotkey that can't be registered is rejected and the
@@ -34,6 +41,9 @@ pub fn settings_set(app: AppHandle, state: State<'_, AppState>, settings: Settin
     }
     settings.save(&state.settings_path)?;
     *state.settings.lock().unwrap() = settings.clone();
+    if settings.overlay_always_visible != old.overlay_always_visible {
+        overlay::set_always_visible(&app, settings.overlay_always_visible);
+    }
     if settings.engine == Engine::Local && (old.engine != Engine::Local || old.local_model != settings.local_model) {
         preload(&app);
     }

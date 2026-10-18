@@ -52,7 +52,7 @@ jobs:
           tauriScript: bun tauri
           args: --target ${{ matrix.target }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
-          releaseName: Sush Voice ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: Larp ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseBody: See the assets below to download the installer for your platform.
           releaseDraft: false
           prerelease: false

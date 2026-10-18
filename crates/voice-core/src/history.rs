@@ -20,6 +20,12 @@ pub struct Entry {
     pub duration_ms: u64,
     /// "local:base.en", "cloud:whisper-large-v3-turbo", …
     pub engine: String,
+    /// For display: "On-device · Base (English)", "Sarvam · saaras:v4". Older entries lack it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_label: Option<String>,
+    /// The cleanup model ("Sarvam · sarvam-105b"), when cleanup changed the text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup: Option<String>,
 }
 
 pub struct History {
@@ -72,7 +78,7 @@ mod tests {
     use super::*;
 
     fn entry(text: &str) -> Entry {
-        Entry { id: 0, at: 1, text: text.into(), raw: None, duration_ms: 1000, engine: "local:base.en".into() }
+        Entry { id: 0, at: 1, text: text.into(), raw: None, duration_ms: 1000, engine: "local:base.en".into(), engine_label: None, cleanup: None }
     }
 
     #[test]

@@ -13,7 +13,7 @@ use crate::error::{AppError, AppResult};
 pub const NAMES: &[&str] = &["stt", "cleanup"];
 
 #[cfg(not(debug_assertions))]
-const SERVICE: &str = "com.sush.voice";
+const SERVICE: &str = "com.sush.larp";
 
 /// Called once at startup with the app config dir; only debug builds use it.
 pub fn init(config_dir: &std::path::Path) {

@@ -9,11 +9,11 @@ use crate::dictation::{Dictation, Input};
 pub fn create(app: &AppHandle, hotkey: &str) -> tauri::Result<()> {
     let toggle = MenuItem::with_id(app, "toggle", "Start / stop dictation", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Sush Voice", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Larp", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&toggle, &settings, &PredefinedMenuItem::separator(app)?, &quit])?;
 
     let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip(format!("Sush Voice: hold {} to dictate", crate::hotkey::display(hotkey)))
+        .tooltip(format!("Larp: hold {} to dictate", crate::hotkey::display(hotkey)))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -36,7 +36,7 @@ pub fn create(app: &AppHandle, hotkey: &str) -> tauri::Result<()> {
 
 pub fn set_tooltip(app: &AppHandle, hotkey: &str) {
     if let Some(tray) = app.tray_by_id("main") {
-        let _ = tray.set_tooltip(Some(format!("Sush Voice: hold {} to dictate", crate::hotkey::display(hotkey))));
+        let _ = tray.set_tooltip(Some(format!("Larp: hold {} to dictate", crate::hotkey::display(hotkey))));
     }
 }
 

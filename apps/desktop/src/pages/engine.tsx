@@ -113,6 +113,7 @@ function CloudProvider() {
             <Select className="w-60" value={cloud.api} onChange={(e) => void update({ cloud: { ...cloud, api: e.target.value as SttApi } })}>
               <option value="transcriptions">/audio/transcriptions</option>
               <option value="ollama-chat">Ollama chat (audio model)</option>
+              <option value="sarvam">Sarvam /speech-to-text</option>
             </Select>
           </Row>
         </>

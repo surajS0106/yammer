@@ -1,4 +1,4 @@
-//! Sush Voice: hold a hotkey anywhere, speak, and the transcript is pasted
+//! Larp: hold a hotkey anywhere, speak, and the transcript is pasted
 //! where your cursor is. This crate is the OS shell (hotkey, microphone,
 //! tray, overlay, paste); `voice-core` holds the platform-free logic.
 
@@ -24,7 +24,7 @@ use crate::dictation::{Dictation, Input};
 pub fn run() {
     tauri::Builder::default()
         // Must come first: a second launch hands its arguments to this instance and exits.
-        // `sush-voice --toggle` is how Wayland users bind a system shortcut to dictation.
+        // `larp --toggle` is how Wayland users bind a system shortcut to dictation.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if args.iter().any(|a| a == "--toggle") {
                 app.state::<Dictation>().send(Input::Toggle);
@@ -50,6 +50,7 @@ pub fn run() {
 
             let settings = app.state::<state::AppState>().settings();
             overlay::create(app.handle())?;
+            overlay::set_always_visible(app.handle(), settings.overlay_always_visible);
             tray::create(app.handle(), &settings.hotkey)?;
             if let Err(e) = hotkey::register(app.handle(), &settings.hotkey) {
                 eprintln!("{e}");
@@ -75,6 +76,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::settings_get,
             commands::settings_set,
+            commands::overlay_state,
             commands::hotkey_suspend,
             commands::hotkey_error,
             commands::mic_devices,
@@ -94,7 +96,7 @@ pub fn run() {
             whisper::model_delete,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building Sush Voice")
+        .expect("error while building Larp")
         .run(|_app, event| {
             // Keep running in the tray when the last window is hidden or closed.
             if let tauri::RunEvent::ExitRequested { api, code: None, .. } = event {

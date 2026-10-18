@@ -1,5 +1,5 @@
 {
-  "name": "sush-voice",
+  "name": "larp",
   "private": true,
   "workspaces": ["apps/*"],
   "scripts": {

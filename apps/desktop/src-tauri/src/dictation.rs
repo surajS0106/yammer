@@ -166,7 +166,7 @@ impl Controller {
         if settings.sounds {
             sounds::play(Cue::Stop);
         }
-        overlay::show(&self.app, OverlayState::Transcribing);
+        overlay::show(&self.app, OverlayState::Transcribing { engine: settings.engine_label() });
 
         let app = self.app.clone();
         let tx = self.tx.clone();
@@ -247,12 +247,15 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
     let mut text = raw.clone();
     let mut warning = None;
     if settings.cleanup.enabled {
-        overlay::show(app, OverlayState::Polishing);
+        overlay::show(app, OverlayState::Polishing { model: settings.cleanup.label() });
         let key = secrets::get("cleanup")?;
         match cleanup::clean(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, &raw).await {
             Ok(cleaned) if !cleaned.trim().is_empty() => text = cleaned,
             Ok(_) => {}
-            Err(e) => warning = Some(format!("Cleanup failed, pasted the raw transcript. {e}")),
+            Err(e) => {
+                eprintln!("cleanup failed: {e:?}");
+                warning = Some(format!("{e} (pasted the raw transcript)"));
+            }
         }
     }
 
@@ -262,7 +265,8 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
 
     let at = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
     let raw = (raw != text).then_some(raw);
-    let entry = Entry { id: 0, at, text, raw, duration_ms, engine };
+    let cleanup = raw.is_some().then(|| settings.cleanup.label());
+    let entry = Entry { id: 0, at, text, raw, duration_ms, engine, engine_label: Some(settings.engine_label()), cleanup };
     let saved = state.history.lock().unwrap().push(entry);
     match saved {
         Ok(entry) => {

@@ -1,12 +1,12 @@
 [package]
-name = "sush-voice"
-description = "Sush Voice: dictate anywhere"
+name = "larp"
+description = "Larp: dictate anywhere"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "sush_voice_lib"
+name = "larp_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]

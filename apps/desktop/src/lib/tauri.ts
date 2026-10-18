@@ -6,7 +6,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type Engine = "local" | "cloud";
-export type SttApi = "transcriptions" | "ollama-chat";
+export type SttApi = "transcriptions" | "ollama-chat" | "sarvam";
 export type LlmFormat = "openai-chat" | "anthropic-messages";
 
 export interface CloudStt {
@@ -31,6 +31,7 @@ export interface Settings {
   sounds: boolean;
   restoreClipboard: boolean;
   trailingSpace: boolean;
+  overlayAlwaysVisible: boolean;
   engine: Engine;
   localModel: string;
   language: string;
@@ -62,6 +63,8 @@ export interface HistoryEntry {
   raw?: string;
   durationMs: number;
   engine: string;
+  engineLabel?: string;
+  cleanup?: string;
 }
 
 export interface Platform {
@@ -77,14 +80,16 @@ export type SecretName = "stt" | "cleanup";
 
 export type OverlayState =
   | { phase: "listening"; hint: string | null }
-  | { phase: "transcribing" }
-  | { phase: "polishing" }
+  | { phase: "transcribing"; engine: string }
+  | { phase: "polishing"; model: string }
   | { phase: "message"; text: string; error: boolean }
+  | { phase: "idle" }
   | { phase: "hidden" };
 
 export const api = {
   settingsGet: () => invoke<Settings>("settings_get"),
   settingsSet: (settings: Settings) => invoke<Settings>("settings_set", { settings }),
+  overlayState: () => invoke<OverlayState>("overlay_state"),
   hotkeySuspend: (suspended: boolean) => invoke<void>("hotkey_suspend", { suspended }),
   hotkeyError: () => invoke<string | null>("hotkey_error"),
   micDevices: () => invoke<string[]>("mic_devices"),

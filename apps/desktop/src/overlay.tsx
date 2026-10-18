@@ -4,7 +4,7 @@
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 import * as React from "react";
 
-import { on, type OverlayState } from "@/lib/tauri";
+import { api, on, type OverlayState } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 const BARS = 18;
@@ -35,11 +35,28 @@ function Meter() {
 export function Overlay() {
   const [state, setState] = React.useState<OverlayState>({ phase: "hidden" });
   React.useEffect(() => {
-    const unlisten = on.dictation(setState);
+    let live = false;
+    const unlisten = on.dictation((s) => {
+      live = true;
+      setState(s);
+    });
+    // The idle pill is shown at startup, before this webview may be listening.
+    api.overlayState().then((s) => live || setState(s), () => {});
     return () => void unlisten.then((f) => f());
   }, []);
 
   if (state.phase === "hidden") return null;
+
+  if (state.phase === "idle") {
+    return (
+      <div className="flex h-svh items-end justify-center pb-2">
+        <div
+          className="h-2 w-12 rounded-full border border-white/20 bg-neutral-900/70 shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+          style={{ animation: "pill-in 140ms ease-out" }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-svh items-end justify-center pb-2">
@@ -61,7 +78,8 @@ export function Overlay() {
         {(state.phase === "transcribing" || state.phase === "polishing") && (
           <>
             <Loader2 className="size-4 shrink-0 animate-spin text-white/80" />
-            <span className="text-white/85">{state.phase === "transcribing" ? "Transcribing…" : "Polishing…"}</span>
+            <span className="shrink-0 text-white/85">{state.phase === "transcribing" ? "Transcribing…" : "Polishing…"}</span>
+            <span className="truncate text-xs text-white/55">{state.phase === "transcribing" ? state.engine : state.model}</span>
           </>
         )}
         {state.phase === "message" && (

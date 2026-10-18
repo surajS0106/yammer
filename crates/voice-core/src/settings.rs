@@ -20,6 +20,8 @@ pub struct Settings {
     pub restore_clipboard: bool,
     /// Add a space after the pasted text, so consecutive dictations don't run together.
     pub trailing_space: bool,
+    /// Keep a small pill on screen between dictations, not only while recording.
+    pub overlay_always_visible: bool,
     pub engine: Engine,
     pub local_model: String,
     /// ISO 639-1 code, or "auto" (multilingual models only).
@@ -48,12 +50,14 @@ pub enum SttApi {
     Transcriptions,
     /// Ollama's native `/api/chat` with an audio-capable model.
     OllamaChat,
+    /// Sarvam AI's `POST {base}/speech-to-text`, keyed by `api-subscription-key`.
+    Sarvam,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CloudStt {
-    /// Which preset the UI shows ("groq", "openai", "ollama", "custom"). Informational.
+    /// Which preset the UI shows ("groq", "openai", "sarvam", "ollama", "custom"). Informational.
     pub preset: String,
     pub base_url: String,
     pub model: String,
@@ -106,6 +110,32 @@ impl Default for Cleanup {
     }
 }
 
+/// Display name for a provider preset id.
+pub fn provider_name(preset: &str) -> &'static str {
+    match preset {
+        "groq" => "Groq",
+        "openai" => "OpenAI",
+        "sarvam" => "Sarvam",
+        "anthropic" => "Anthropic",
+        "ollama" => "Ollama",
+        _ => "Custom",
+    }
+}
+
+impl CloudStt {
+    /// "Sarvam · saaras:v4"
+    pub fn label(&self) -> String {
+        format!("{} · {}", provider_name(&self.preset), self.model.trim())
+    }
+}
+
+impl Cleanup {
+    /// "Anthropic · claude-haiku-5-5"
+    pub fn label(&self) -> String {
+        format!("{} · {}", provider_name(&self.preset), self.model.trim())
+    }
+}
+
 pub fn default_hotkey() -> &'static str {
     "CommandOrControl+Shift+Space"
 }
@@ -118,6 +148,7 @@ impl Default for Settings {
             sounds: true,
             restore_clipboard: true,
             trailing_space: true,
+            overlay_always_visible: true,
             engine: Engine::Local,
             local_model: DEFAULT_MODEL.into(),
             language: "en".into(),
@@ -130,6 +161,17 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// What will transcribe: "On-device · Base (English)" or "Sarvam · saaras:v4".
+    pub fn engine_label(&self) -> String {
+        match self.engine {
+            Engine::Local => {
+                let name = crate::models::find(&self.local_model).map_or(self.local_model.as_str(), |m| m.label);
+                format!("On-device · {name}")
+            }
+            Engine::Cloud => self.cloud.label(),
+        }
+    }
+
     /// Load from `path`; a missing or unreadable file gives the defaults.
     pub fn load(path: &Path) -> Settings {
         std::fs::read(path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default()
@@ -161,6 +203,16 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn labels_the_engine() {
+        let mut s = Settings { local_model: "base.en".into(), ..Settings::default() };
+        assert_eq!(s.engine_label(), "On-device · Base (English)");
+        s.engine = Engine::Cloud;
+        s.cloud = CloudStt { preset: "sarvam".into(), model: "saaras:v4".into(), ..CloudStt::default() };
+        assert_eq!(s.engine_label(), "Sarvam · saaras:v4");
+        assert_eq!(Cleanup::default().label(), "Anthropic · claude-haiku-5-5");
+    }
 
     #[test]
     fn old_or_partial_files_fill_in_defaults() {

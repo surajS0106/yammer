@@ -33,6 +33,16 @@ export const sttPresets: SttPreset[] = [
     models: ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"],
   },
   {
+    id: "sarvam",
+    label: "Sarvam AI (Indian languages)",
+    baseUrl: "https://api.sarvam.ai",
+    model: "saaras:v4",
+    api: "sarvam",
+    needsKey: true,
+    keyUrl: "https://dashboard.sarvam.ai/",
+    models: ["saaras:v4", "saaras:v3"],
+  },
+  {
     id: "ollama",
     label: "Ollama (local server)",
     baseUrl: "http://localhost:11434/v1",
@@ -92,6 +102,16 @@ export const cleanupPresets: CleanupPreset[] = [
     models: [],
   },
   {
+    id: "sarvam",
+    label: "Sarvam AI",
+    baseUrl: "https://api.sarvam.ai/v1",
+    model: "sarvam-105b",
+    format: "openai-chat",
+    needsKey: true,
+    keyUrl: "https://dashboard.sarvam.ai/",
+    models: ["sarvam-105b", "sarvam-105b-conversations"],
+  },
+  {
     id: "ollama",
     label: "Ollama (local server)",
     baseUrl: "http://localhost:11434/v1",
@@ -111,7 +131,21 @@ export const cleanupPresets: CleanupPreset[] = [
   },
 ];
 
-export const languages: [code: string, name: string][] = [
+// Short provider names for status lines. Mirrors `provider_name` in voice-core's settings.rs.
+const providerNames: Record<string, string> = {
+  groq: "Groq",
+  openai: "OpenAI",
+  sarvam: "Sarvam",
+  anthropic: "Anthropic",
+  ollama: "Ollama",
+};
+
+/** "Sarvam · saaras:v4" */
+export function providerLabel(preset: string, model: string): string {
+  return `${providerNames[preset] ?? "Custom"} · ${model.trim()}`;
+}
+
+export const languages:[code: string, name: string][] = [
   ["auto", "Detect automatically"],
   ["en", "English"],
   ["es", "Spanish"],
