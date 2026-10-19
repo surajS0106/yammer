@@ -54,3 +54,7 @@ bun run build               # installers for this platform
 ```
 
 Releases: push a `v*` tag matching the version in `apps/desktop/src-tauri/tauri.conf.json`. `.github/workflows/release.yml` then builds every platform.
+
+## License
+
+[MIT](LICENSE)

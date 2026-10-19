@@ -5,7 +5,7 @@ members = ["crates/voice-core", "apps/desktop/src-tauri"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "UNLICENSED"
+license = "MIT"
 
 [workspace.dependencies]
 voice-core = { path = "crates/voice-core" }
