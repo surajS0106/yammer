@@ -59,6 +59,12 @@ pub fn overlay_hide(app: AppHandle) {
     overlay::hide_pill(&app);
 }
 
+/// The transcript card closed: its timer ran out, or its close or Copy button was clicked.
+#[tauri::command]
+pub fn overlay_dismiss(app: AppHandle) {
+    overlay::dismiss(&app);
+}
+
 /// The overlay's right-click menu: "Quit Yammer".
 #[tauri::command]
 pub fn quit(app: AppHandle) {

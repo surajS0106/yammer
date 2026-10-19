@@ -61,6 +61,9 @@ pub enum OverlayState {
     Transcribing { engine: String },
     Polishing { model: String },
     Message { text: String, error: bool },
+    /// No text box had focus, so the transcript is shown in a card to copy.
+    /// The card closes itself (`dismiss`) on its timer, its close button or Copy.
+    Transcript { text: String },
     /// Not dictating, but the pill stays on screen ("Always show the pill").
     Idle,
     Hidden,
@@ -290,6 +293,13 @@ pub fn set_always_visible(app: &AppHandle, on: bool) {
 
 pub fn hide(app: &AppHandle) {
     show(app, OverlayState::Hidden);
+}
+
+/// Close the transcript card, unless something newer has replaced it.
+pub fn dismiss(app: &AppHandle) {
+    if matches!(current(), OverlayState::Transcript { .. }) {
+        hide(app);
+    }
 }
 
 /// Show `state`, then hide after `ms` unless something newer was shown.

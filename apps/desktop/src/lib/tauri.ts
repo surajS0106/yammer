@@ -119,6 +119,8 @@ export type OverlayState =
   | { phase: "transcribing"; engine: string }
   | { phase: "polishing"; model: string }
   | { phase: "message"; text: string; error: boolean }
+  /** No text box had focus, so the transcript is shown to copy instead of pasted. */
+  | { phase: "transcript"; text: string }
   | { phase: "idle" }
   | { phase: "hidden" };
 
@@ -131,6 +133,8 @@ export const api = {
   overlayToggleDictation: () => invoke<void>("overlay_toggle_dictation"),
   overlayOpen: (page: string) => invoke<void>("overlay_open", { page }),
   overlayHide: () => invoke<void>("overlay_hide"),
+  /** Close the transcript card (no-op if something newer is showing). */
+  overlayDismiss: () => invoke<void>("overlay_dismiss"),
   quit: () => invoke<void>("quit"),
   hotkeyLabel: () => invoke<string>("hotkey_label"),
   hotkeySuspend: (suspended: boolean) => invoke<void>("hotkey_suspend", { suspended }),

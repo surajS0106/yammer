@@ -3,7 +3,8 @@
 // except on Sushi and the pill, whose boxes are reported to Rust as hit areas:
 // drag either to move the overlay anywhere, double-click to send it home.
 // Hovering the idle pill opens it into the island: a row of buttons, each
-// named by a tooltip above it. The overlay never takes focus, so macOS sends it
+// named by a tooltip above it. When a dictation had no text box to go into,
+// the pill becomes a card holding the transcript, with Sushi inside it. The overlay never takes focus, so macOS sends it
 // no mouse moves; hover comes from the cursor position Rust polls instead.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -11,6 +12,7 @@ import {
   AlertCircle,
   ArrowDownToLine,
   Check,
+  Copy,
   EyeOff,
   History,
   Loader2,
@@ -19,6 +21,7 @@ import {
   Power,
   Settings2,
   Square,
+  X,
 } from "lucide-react";
 import { motion, type MotionValue, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import * as React from "react";
@@ -248,13 +251,118 @@ const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point 
   },
 );
 
+/** How long the transcript card stays up. Hovering it holds the countdown. */
+const TRANSCRIPT_MS = 12_000;
+const RING_RADIUS = 14;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+/**
+ * The transcript, when no text box had focus to paste it into. Sushi fools
+ * around in the corner, a ring around the close button counts down to closing
+ * the card, and Copy puts the text on the clipboard. Like the island, it sees
+ * no mouse moves, so hover comes from the cursor Rust polls.
+ */
+function TranscriptCard({
+  text,
+  cursor,
+  held,
+  cardRef,
+}: {
+  text: string;
+  cursor: Point | null;
+  held: boolean;
+  cardRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const closeRef = React.useRef<HTMLButtonElement>(null);
+  const copyRef = React.useRef<HTMLButtonElement>(null);
+  const over = (el: HTMLElement | null) => !!cursor && !!el && near(el.getBoundingClientRect(), cursor, 0);
+  const hovered = over(cardRef.current);
+
+  const [copied, setCopied] = React.useState(false);
+  const dismiss = React.useCallback(() => void api.overlayDismiss().catch(() => {}), []);
+  // Long enough to see "Copied" before the card goes.
+  React.useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(dismiss, 900);
+    return () => clearTimeout(t);
+  }, [copied, dismiss]);
+
+  const paused = hovered || held || copied;
+
+  return (
+    <div
+      ref={cardRef}
+      className="relative z-20 flex w-[304px] flex-col gap-3 rounded-[20px] border border-white/10 bg-neutral-900/95 p-4 text-white shadow-[0_12px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+      style={{ animation: "pill-in 160ms ease-out" }}
+    >
+      <div className="flex items-center gap-3">
+        <Sushi mood="idle" restless held={held} className="shrink-0 text-white/70" />
+        <p className="flex-1 text-[11px] leading-4 text-white/55">Got it! Click a text box next time and I'll type it in for you.</p>
+        <button
+          ref={closeRef}
+          type="button"
+          aria-label="Close"
+          className={cn(
+            "relative grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-white/70 transition-colors",
+            over(closeRef.current) && "bg-white/10 text-white",
+          )}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={dismiss}
+        >
+          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 32 32" aria-hidden>
+            <circle cx={16} cy={16} r={RING_RADIUS} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth={2} />
+            <circle
+              cx={16}
+              cy={16}
+              r={RING_RADIUS}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeDasharray={RING_LENGTH}
+              style={
+                {
+                  "--ring-length": RING_LENGTH,
+                  animation: `ring-drain ${TRANSCRIPT_MS}ms linear forwards`,
+                  animationPlayState: paused ? "paused" : "running",
+                } as React.CSSProperties
+              }
+              onAnimationEnd={dismiss}
+            />
+          </svg>
+          <X className="size-3.5" strokeWidth={2.5} />
+        </button>
+      </div>
+      <p className="max-h-[120px] overflow-y-auto text-[13px] leading-5 break-words whitespace-pre-wrap text-white/90">{text}</p>
+      <div className="flex justify-end">
+        <button
+          ref={copyRef}
+          type="button"
+          className={cn(
+            "flex h-8 cursor-pointer items-center gap-1.5 rounded-full px-4 text-xs font-medium transition-colors",
+            over(copyRef.current) || copied ? "bg-white/20 text-white" : "bg-white/12 text-white/90",
+          )}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => void api.copyText(text).then(() => setCopied(true), () => {})}
+        >
+          {copied ? <Check className="size-3.5 text-emerald-400" strokeWidth={2.5} /> : <Copy className="size-3.5" strokeWidth={2.25} />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Overlay() {
   const [state, setState] = React.useState<OverlayState>({ phase: "hidden" });
+  // Bumped on every change, so a new transcript card starts its countdown afresh.
+  const [shown, setShown] = React.useState(0);
   React.useEffect(() => {
     let live = false;
     const unlisten = on.dictation((s) => {
       live = true;
       setState(s);
+      setShown((n) => n + 1);
     });
     // The idle pill is shown at startup, before this webview may be listening.
     api.overlayState().then((s) => live || setState(s), () => {});
@@ -286,7 +394,7 @@ export function Overlay() {
       clearTimeout(t);
       observer.disconnect();
     };
-  }, [state.phase, menu]);
+  }, [state.phase, menu, shown]);
 
   // The idle pill opens into the island while the cursor is on it or on Sushi.
   // The thin pill gets some slack to be easier to catch.
@@ -354,7 +462,8 @@ export function Overlay() {
 
   return (
     // Sushi stands on the pill's top edge, as it stands on Sush's composer, and
-    // stays mounted across phases so it can act out each change.
+    // stays mounted across phases so it can act out each change. The
+    // transcript card has its own Sushi inside it instead.
     <div
       className="flex h-svh flex-col items-center justify-end pb-2 [&>*]:cursor-grab"
       onMouseDown={onMouseDown}
@@ -364,56 +473,63 @@ export function Overlay() {
       }}
     >
       {menu && <ContextMenu ref={menuRef} at={menu} cursor={cursor} phase={state.phase} onClose={() => setMenu(null)} />}
-      <div ref={sushiRef} className="relative z-10 -mb-px">
-        <Sushi mood={moodOf(state)} held={held} className="text-white/70" />
-      </div>
-      {state.phase === "idle" ? (
-        <div
-          ref={pillRef}
-          className={cn(
-            "relative z-20 flex items-center justify-center rounded-full border shadow-[0_4px_12px_rgba(0,0,0,0.25)] transition-[width,height,background-color,border-color] duration-150 ease-out",
-            open ? "h-10 w-[120px] border-white/10 bg-neutral-900/92 backdrop-blur" : "h-2 w-12 border-white/20 bg-neutral-900/70",
-          )}
-          style={{ animation: "pill-in 140ms ease-out" }}
-        >
-          {open && <IslandButtons cursor={cursor} />}
-        </div>
+      {state.phase === "transcript" ? (
+        // The card counts as the pill: a hit area that drags the overlay.
+        <TranscriptCard key={shown} text={state.text} cursor={cursor} held={held} cardRef={pillRef} />
       ) : (
-        <div
-          ref={pillRef}
-          key={state.phase}
-          className={cn(
-            "flex max-w-[304px] items-center gap-2 rounded-full border border-white/10 bg-neutral-900/92 py-1.5 text-[13px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur",
-            state.phase === "listening" ? "px-3" : "px-4",
-            state.phase === "message" && state.error && "border-red-400/30",
-          )}
-          style={{ animation: "pill-in 140ms ease-out" }}
-        >
-          {state.phase === "listening" && (
-            <>
-              <span className="size-1.5 shrink-0 rounded-full bg-red-500" style={{ animation: "dot-pulse 1.2s ease-in-out infinite" }} />
-              <Meter />
-            </>
-          )}
-          {(state.phase === "transcribing" || state.phase === "polishing") && (
-            <>
-              <Loader2 className="size-4 shrink-0 animate-spin text-white/80" />
-              <span className="shrink-0 text-white/85">{state.phase === "transcribing" ? "Transcribing…" : "Polishing…"}</span>
-              <span className="truncate text-xs text-white/55">{state.phase === "transcribing" ? state.engine : state.model}</span>
-            </>
-          )}
-          {state.phase === "message" && (
-            <>
-              {state.error ? (
-                <AlertCircle className="size-4 shrink-0 text-red-400" />
-              ) : (
-                <Check className="size-4 shrink-0 text-emerald-400" />
+        <>
+          <div ref={sushiRef} className="relative z-10 -mb-px">
+            <Sushi mood={moodOf(state)} held={held} className="text-white/70" />
+          </div>
+          {state.phase === "idle" ? (
+            <div
+              ref={pillRef}
+              className={cn(
+                "relative z-20 flex items-center justify-center rounded-full border shadow-[0_4px_12px_rgba(0,0,0,0.25)] transition-[width,height,background-color,border-color] duration-150 ease-out",
+                open ? "h-10 w-[120px] border-white/10 bg-neutral-900/92 backdrop-blur" : "h-2 w-12 border-white/20 bg-neutral-900/70",
               )}
-              <span className="line-clamp-2 text-xs leading-snug text-white/90">{state.text}</span>
-            </>
+              style={{ animation: "pill-in 140ms ease-out" }}
+            >
+              {open && <IslandButtons cursor={cursor} />}
+            </div>
+          ) : (
+            <div
+              ref={pillRef}
+              key={state.phase}
+              className={cn(
+                "flex max-w-[304px] items-center gap-2 rounded-full border border-white/10 bg-neutral-900/92 py-1.5 text-[13px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur",
+                state.phase === "listening" ? "px-3" : "px-4",
+                state.phase === "message" && state.error && "border-red-400/30",
+              )}
+              style={{ animation: "pill-in 140ms ease-out" }}
+            >
+              {state.phase === "listening" && (
+                <>
+                  <span className="size-1.5 shrink-0 rounded-full bg-red-500" style={{ animation: "dot-pulse 1.2s ease-in-out infinite" }} />
+                  <Meter />
+                </>
+              )}
+              {(state.phase === "transcribing" || state.phase === "polishing") && (
+                <>
+                  <Loader2 className="size-4 shrink-0 animate-spin text-white/80" />
+                  <span className="shrink-0 text-white/85">{state.phase === "transcribing" ? "Transcribing…" : "Polishing…"}</span>
+                  <span className="truncate text-xs text-white/55">{state.phase === "transcribing" ? state.engine : state.model}</span>
+                </>
+              )}
+              {state.phase === "message" && (
+                <>
+                  {state.error ? (
+                    <AlertCircle className="size-4 shrink-0 text-red-400" />
+                  ) : (
+                    <Check className="size-4 shrink-0 text-emerald-400" />
+                  )}
+                  <span className="line-clamp-2 text-xs leading-snug text-white/90">{state.text}</span>
+                </>
+              )}
+            </div>
           )}
-        </div>
-        )}
-      </div>
-    );
-  }
+        </>
+      )}
+    </div>
+  );
+}

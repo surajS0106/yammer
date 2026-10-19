@@ -17,7 +17,8 @@
 // With `interactive` (the Home page) its eyes follow the pointer, and clicking
 // it hops and pops a heart; three quick clicks do a backflip. On the overlay
 // it can be picked up (`held`): it kicks its feet and swings, eyes wide, and
-// lands with a squash. Still under reduced motion.
+// lands with a squash. `restless` (the transcript card) has it doing tricks
+// back to back and never dozing. Still under reduced motion.
 
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from "motion/react";
 import * as React from "react";
@@ -207,11 +208,13 @@ interface SushiProps {
   interactive?: boolean;
   /** Being carried around (the overlay, mid-drag). */
   held?: boolean;
+  /** Tricks come every second or two instead of every few, and it never dozes off. */
+  restless?: boolean;
   /** Also sets the colour of the sleep z's (`text-*`). */
   className?: string;
 }
 
-export function Sushi({ mood, px = 2, interactive = false, held = false, className }: SushiProps) {
+export function Sushi({ mood, px = 2, interactive = false, held = false, restless = false, className }: SushiProps) {
   const reduce = !!useReducedMotion();
   const visible = usePageVisible();
   // No timed acts while reduced, or while off screen (see usePageVisible).
@@ -293,12 +296,12 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
 
   // Doze off when idle and left alone.
   React.useEffect(() => {
-    if (still) return;
+    if (still || restless) return;
     const id = setInterval(() => {
       if (moodRef.current === "idle" && !sleepingRef.current && Date.now() - lastActive.current > SLEEP_AFTER) setSleeping(true);
     }, 3000);
     return () => clearInterval(id);
-  }, [still]);
+  }, [still, restless]);
 
   // On the Home page: eyes follow the pointer, and any activity wakes it.
   React.useEffect(() => {
@@ -509,7 +512,7 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
           await perform(last);
           if (alive) next();
         },
-        3500 + Math.random() * 5000,
+        restless ? 700 + Math.random() * 1300 : 3500 + Math.random() * 5000,
       );
     };
     next();
@@ -519,7 +522,7 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, classNa
       setTrickLook(null);
       setDancing(false);
     };
-  }, [mood, sleeping, held, still, controls, k]);
+  }, [mood, sleeping, held, still, restless, controls, k]);
 
   // While polishing, the eyes drift up to one side, then the other.
   React.useEffect(() => {

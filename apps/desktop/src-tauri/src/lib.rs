@@ -7,6 +7,7 @@ mod dictation;
 #[cfg(target_os = "macos")]
 mod dock;
 mod error;
+mod focus;
 mod hotkey;
 mod overlay;
 #[cfg(target_os = "macos")]
@@ -104,6 +105,7 @@ pub fn run() {
             commands::overlay_toggle_dictation,
             commands::overlay_open,
             commands::overlay_hide,
+            commands::overlay_dismiss,
             commands::quit,
             commands::hotkey_label,
             commands::hotkey_suspend,

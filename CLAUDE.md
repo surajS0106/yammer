@@ -49,6 +49,7 @@ Yammer (formerly Larp), a product of Sush: a dictation app modelled on Sush (`..
   - `hotkey.rs`: the `tauri-plugin-global-shortcut` handler only forwards events. Registering a shortcut blocks on the main thread, so never do real work in the handler. Esc is registered only while recording.
   - `recorder.rs`: cpal capture on its own thread, because the stream isn't `Send`.
   - `paste.rs`: arboard clipboard plus an enigo Ctrl/⌘+V, then restores the clipboard. On Wayland it falls back to `wtype` or `ydotool`, and otherwise the text is copied only.
+  - `focus.rs`: macOS Accessibility check for whether a text box has focus. Only a definite "no" skips the paste; the overlay then shows the transcript in a card with Copy (`Transcript` state). Unknown, Windows and Linux paste as before.
   - `overlay.rs`: a transparent, non-focusable, click-through pill window. It must never take focus, or the paste lands in the wrong app. On macOS, `panel.rs` turns it into a non-activating `NSPanel`, which lets it appear over other apps' full-screen Spaces.
   - `whisper.rs`: model download with SHA check, a cached context, and inference.
   - `tray.rs`

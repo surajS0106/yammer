@@ -20,7 +20,7 @@ use crate::recorder::{self, Recording};
 use crate::sounds::{self, Cue};
 use crate::state::AppState;
 use crate::whisper::{self, Whisper};
-use crate::{hotkey, secrets};
+use crate::{focus, hotkey, secrets};
 
 const TAP: Duration = Duration::from_millis(300);
 const MIN_SPEECH_SAMPLES: usize = voice_core::SAMPLE_RATE as usize * 3 / 10;
@@ -151,6 +151,7 @@ impl Controller {
         let hint = latched.then(|| self.stop_hint());
         overlay::show(&self.app, OverlayState::Listening { hint });
         hotkey::set_escape(&self.app, true);
+        focus::prime();
 
         let tx = self.tx.clone();
         tauri::async_runtime::spawn(async move {
@@ -178,6 +179,7 @@ impl Controller {
                     let keys = if cfg!(target_os = "macos") { "⌘V" } else { "Ctrl+V" };
                     overlay::flash(&app, OverlayState::Message { text: format!("Copied. Press {keys} to paste."), error: false }, 3500);
                 }
+                Ok(Done::NoTextField { text }) => overlay::show(&app, OverlayState::Transcript { text }),
                 Ok(Done::NothingHeard) => overlay::flash(&app, OverlayState::Message { text: "Didn't catch that".into(), error: false }, 1500),
                 Err(e) => {
                     if app.state::<AppState>().settings().sounds {
@@ -201,8 +203,14 @@ fn cleanup_label(settings: &voice_core::Settings) -> String {
 }
 
 enum Done {
-    Pasted { warning: Option<String> },
+    Pasted {
+        warning: Option<String>,
+    },
     Copied,
+    /// No text box had focus, so nothing was pasted.
+    NoTextField {
+        text: String,
+    },
     NothingHeard,
 }
 
@@ -279,10 +287,17 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
         text = fixes::apply(&text, &settings.replacements, &settings.snippets);
     }
 
-    let pasted = if settings.trailing_space { format!("{text} ") } else { text.clone() };
-    let restore = settings.restore_clipboard;
-    let handle = app.clone();
-    let outcome = tauri::async_runtime::spawn_blocking(move || paste::paste(&handle, &pasted, restore)).await.map_err(join_err)??;
+    // With no text box focused, the paste would go nowhere; the overlay shows the text instead.
+    let target = tauri::async_runtime::spawn_blocking(focus::text_field_focused).await.map_err(join_err)?;
+    let outcome = if target == Some(false) {
+        None
+    } else {
+        let pasted = if settings.trailing_space { format!("{text} ") } else { text.clone() };
+        let restore = settings.restore_clipboard;
+        let handle = app.clone();
+        Some(tauri::async_runtime::spawn_blocking(move || paste::paste(&handle, &pasted, restore)).await.map_err(join_err)??)
+    };
+    let shown = text.clone();
 
     let at = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
     let raw = (raw != text).then_some(raw);
@@ -297,7 +312,8 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
     }
 
     Ok(match outcome {
-        Outcome::Pasted => Done::Pasted { warning },
-        Outcome::Copied => Done::Copied,
+        Some(Outcome::Pasted) => Done::Pasted { warning },
+        Some(Outcome::Copied) => Done::Copied,
+        None => Done::NoTextField { text: shown },
     })
 }
