@@ -83,7 +83,10 @@ fn send_paste_keystroke(app: &tauri::AppHandle) -> Result<(), String> {
 fn enigo_paste() -> Result<(), String> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
-    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+    // enigo's default asks macOS to show the Accessibility prompt on every call
+    // when the app isn't trusted. The UI already reports the permission state.
+    let settings = Settings { open_prompt_to_get_permissions: false, ..Settings::default() };
+    let mut enigo = Enigo::new(&settings).map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
     let (modifier, v) = (Key::Meta, Key::Unicode('v'));
     #[cfg(target_os = "windows")]

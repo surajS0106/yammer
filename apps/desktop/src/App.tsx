@@ -1,9 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { BarChart3, BookA, CircleHelp, Copy, History, Home, Minus, NotebookPen, PanelLeft, Scissors, Settings, Square, Wand2, X } from "lucide-react";
-import { MotionConfig, motion } from "motion/react";
+import { MotionConfig } from "motion/react";
 import * as React from "react";
 
-import { spring } from "@/components/motion";
+import { HoverHighlight } from "@/components/ui/motion-highlight";
 import { Segmented } from "@/components/ui";
 import { CleanupPage } from "@/pages/cleanup";
 import { DictionaryPage } from "@/pages/dictionary";
@@ -137,14 +137,17 @@ export default function App() {
                 <img src="/yammer-mark.png" alt="" className="pointer-events-none size-6" />
                 <span className="pointer-events-none text-xl font-semibold tracking-tight">Yammer</span>
               </div>
-              {pages.map((item) => (
-                <NavButton key={item.id} item={item} active={page === item.id} onClick={() => setPage(item.id)} />
-              ))}
-              <div className="mt-auto space-y-0.5 border-t pt-3">
-                {footer.map((item) => (
-                  <NavButton key={item.id} item={item} active={item.active(page)} onClick={() => setPage(item.id)} />
+              {/* One hover background glides between items as the pointer moves, as in Sush's sidebar. */}
+              <HoverHighlight className="flex flex-1 flex-col gap-0.5" highlightClassName="rounded-md bg-sidebar-accent/60">
+                {pages.map((item) => (
+                  <NavButton key={item.id} item={item} active={page === item.id} onClick={() => setPage(item.id)} />
                 ))}
-              </div>
+                <div className="mt-auto space-y-0.5 border-t pt-3">
+                  {footer.map((item) => (
+                    <NavButton key={item.id} item={item} active={item.active(page)} onClick={() => setPage(item.id)} />
+                  ))}
+                </div>
+              </HoverHighlight>
             </nav>
           </div>
           <main className="flex min-w-0 flex-1 flex-col">
@@ -155,7 +158,7 @@ export default function App() {
             />
             <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
               <div className="px-4 pt-2 pb-6 sm:px-6 sm:pt-4 sm:pb-8 lg:px-10">
-                <div className={cn("@container mx-auto w-full", widePages.has(page) ? "max-w-6xl" : "max-w-3xl")}>
+                <div className={cn("@container mx-auto w-full", widePages.has(page) ? "max-w-6xl" : page === "home" ? "max-w-4xl" : "max-w-3xl")}>
                   {isSettings(page) && (
                     <div className="mb-6">
                       <Segmented value={page as (typeof settingsTabs)[number]["value"]} options={settingsTabs} onChange={setPage} />
@@ -250,13 +253,14 @@ function NavButton({ item: { label, icon: Icon }, active, onClick }: { item: Nav
       type="button"
       onClick={onClick}
       aria-current={active ? "page" : undefined}
+      data-hover-item
       className={cn(
         "relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        active ? "font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+        active ? "font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
-      {/* One highlight shared by every item, so it slides to the page you pick. */}
-      {active && <motion.span layoutId="nav-active" transition={spring} className="absolute inset-0 rounded-md bg-sidebar-accent" />}
+      {/* The selected page sits in place, as in Sush; only the hover background (HoverHighlight) moves. */}
+      {active && <span className="absolute inset-0 rounded-md bg-sidebar-accent" />}
       <Icon className="relative size-4 shrink-0" />
       <span className="relative truncate">{label}</span>
     </button>

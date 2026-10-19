@@ -1,17 +1,17 @@
-import { CheckCircle2, Circle, Copy, Download } from "lucide-react";
+import { BarChart3, Check, ChevronRight, Cloud, Copy, Cpu, Download, Mic, NotebookPen, Scissors, Sparkles } from "lucide-react";
 import * as React from "react";
 
-import { PageHeader, PlatformContext, type PageId } from "@/App";
+import { PlatformContext, type PageId } from "@/App";
 import { AnimatedList, Collapse, ListRow } from "@/components/motion";
-import { NavCards } from "@/components/nav-cards";
 import { moodOf, Sushi } from "@/components/sushi";
-import { Badge, Button, Card, Hotkey, Kbd, Notice, Progress, Row, Textarea } from "@/components/ui";
+import { WeekStats } from "@/components/week-stats";
+import { Button, Card, Hotkey, Kbd, Notice, Progress, Textarea } from "@/components/ui";
 import { downloadModel, useModels } from "@/lib/models";
 import { providerLabel, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import { api, on, type HistoryEntry, type OverlayState } from "@/lib/tauri";
-import { computeStats, dayKey, formatCompact, useHistory } from "@/lib/stats";
-import { formatBytes } from "@/lib/utils";
+import { computeStats, dayKey, lastDays, useHistory } from "@/lib/stats";
+import { cn, formatBytes } from "@/lib/utils";
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "long" });
@@ -32,12 +32,26 @@ function groupByDay(entries: HistoryEntry[]): [number, HistoryEntry[]][] {
   return [...groups];
 }
 
+function greeting(hour: number): string {
+  if (hour < 5) return "Up late";
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 function Step({ done, title, children }: { done: boolean; title: string; children?: React.ReactNode }) {
   return (
     <div className="flex gap-3 px-4 py-3.5">
-      {done ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" /> : <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
+      <span
+        className={cn(
+          "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+          done ? "border-primary bg-primary text-primary-foreground" : "border-input",
+        )}
+      >
+        {done && <Check className="size-3" strokeWidth={3} />}
+      </span>
       <div className="min-w-0 flex-1 space-y-2">
-        <div className={done ? "text-sm text-muted-foreground" : "text-sm font-medium"}>{title}</div>
+        <div className={done ? "text-sm text-muted-foreground line-through decoration-muted-foreground/40" : "text-sm font-medium"}>{title}</div>
         {!done && children}
       </div>
     </div>
@@ -59,6 +73,41 @@ function statusText(s: OverlayState): string | null {
   }
 }
 
+/** A setting beside the hero's status pill; opens its settings tab. */
+function SetupChip({ icon: Icon, title, onClick, children }: { icon: React.ElementType; title: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-background/50 px-2.5 py-1 text-xs text-muted-foreground ring-1 ring-border transition-colors outline-none hover:bg-background hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      <Icon className="size-3.5 shrink-0" />
+      <span className="truncate">{children}</span>
+    </button>
+  );
+}
+
+/** A row in the side lists: icon tile, title and detail, chevron. */
+function LinkRow({ icon: Icon, title, detail, onClick }: { icon: React.ElementType; title: string; detail: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors outline-none hover:bg-accent/50 focus-visible:bg-accent/50"
+    >
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/12 group-hover:text-primary">
+        <Icon className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{title}</span>
+        <span className="block truncate text-xs text-muted-foreground">{detail}</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5" />
+    </button>
+  );
+}
+
 export function HomePage({ go }: { go: (page: PageId) => void }) {
   const { settings, update, secrets } = useSettings();
   const platform = React.useContext(PlatformContext);
@@ -66,7 +115,8 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
   const [status, setStatus] = React.useState<OverlayState>({ phase: "hidden" });
   const history = useHistory();
   const stats = React.useMemo(() => computeStats(history), [history]);
-  const recent = history.slice(0, 5);
+  const weekWords = React.useMemo(() => lastDays(7).reduce((sum, d) => sum + (stats.byDay.get(d) ?? 0), 0), [stats]);
+  const recent = history.slice(0, 6);
   const [hotkeyError, setHotkeyError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -88,72 +138,96 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
 
   const progress = model ? downloading[model.id] : undefined;
   const live = statusText(status);
+  const busy = status.phase === "listening" || status.phase === "transcribing" || status.phase === "polishing";
+  const steps = [engineReady, ...(platform?.os === "macos" ? [accessibilityOk] : [])];
+  const stepsDone = steps.filter(Boolean).length;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Dictate anywhere" description="Speak into any app: your words are transcribed and pasted where the cursor is." />
-
-      {history.length > 0 && (
-        <button
-          type="button"
-          onClick={() => go("insights")}
-          title="See Insights"
-          className="grid w-full grid-cols-3 divide-x rounded-xl border bg-card text-left transition-colors hover:bg-accent/40"
-        >
-          {[
-            [formatCompact(stats.words), "total words"],
-            [String(stats.wpm), "words per minute"],
-            [String(stats.weekStreak), `week streak${stats.dayStreak > 1 ? ` · ${stats.dayStreak} days` : ""}`],
-          ].map(([value, label]) => (
-            <div key={label} className="min-w-0 px-3 py-3 @md:px-4">
-              <div className="text-xl font-semibold tracking-tight tabular-nums">{value}</div>
-              <div className="text-xs text-muted-foreground">{label}</div>
-            </div>
-          ))}
-        </button>
-      )}
-
-      <Card className="flex flex-col items-center gap-3 px-4 pt-8 pb-6 text-center @md:px-6 @md:pt-12 @md:pb-8">
-        <Sushi mood={moodOf(status)} px={3} interactive className="mb-2 text-muted-foreground" />
-        <Hotkey accelerator={settings.hotkey} className="[&_kbd]:h-8 [&_kbd]:min-w-8 [&_kbd]:text-sm" />
-        <p className="max-w-md text-sm text-balance">
-          <span className="font-medium">Hold</span> to talk and release to paste, or <span className="font-medium">tap</span> once to start and
-          again to finish.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          <Kbd>Esc</Kbd> cancels. You can also start from the tray icon.
-        </p>
-        <div className="min-h-5 text-xs text-primary" aria-live="polite">
-          {live}
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pt-2">
+        <div className="min-w-0">
+          <h1 className="text-3xl font-semibold tracking-tight text-balance">{greeting(new Date().getHours())}</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            {weekWords > 0 ? (
+              <>
+                You’ve said <span className="font-medium text-foreground tabular-nums">{weekWords.toLocaleString()}</span> words this week.
+              </>
+            ) : (
+              "Talk into any app. Yammer types it where your cursor is."
+            )}
+          </p>
         </div>
-      </Card>
+      </header>
 
-      <Card className="divide-y">
-        <Row
-          label={
-            <span className="flex items-center gap-2">
-              Speech engine
-              <Badge tone={settings.engine === "local" ? "muted" : "brand"}>{settings.engine === "local" ? "On this computer" : "Cloud"}</Badge>
-            </span>
-          }
-          description={
-            settings.engine === "local"
-              ? `${model?.label ?? settings.localModel}. Your voice never leaves this computer.`
-              : `${providerLabel(settings.cloud.preset, settings.cloud.model)}. Audio is sent to this service.`
-          }
-        >
-          <Button size="sm" variant="ghost" onClick={() => go("engine")}>
-            Change
-          </Button>
-        </Row>
-        <Row
-          label="Cleanup"
-          description={settings.cleanup.enabled ? `${providerLabel(settings.cleanup.preset, settings.cleanup.model)} polishes each transcript.` : "Off. Text is pasted as transcribed."}
-        >
-          <Button size="sm" variant="ghost" onClick={() => go("cleanup")}>
-            Change
-          </Button>
-        </Row>
+      {/* The one loud surface on the page: how to dictate, with Sushi reacting live. */}
+      <Card className="overflow-hidden border-primary/20 bg-primary/[0.06] dark:bg-primary/[0.08]">
+        {/* Sushi stands right beside the text at any width; the pixel grid, not Sushi, fills the rest. */}
+        <div className="relative grid items-center @2xl:grid-cols-[auto_12rem_1fr]">
+          {/* The grid is its own masked layer: WebKit drops animated children of a masked element, which hid Sushi. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 hidden w-2/3 @2xl:block"
+            style={{
+              backgroundImage: "radial-gradient(color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1.5px)",
+              backgroundSize: "10px 10px",
+              maskImage: "linear-gradient(to right, transparent, black 45%)",
+              WebkitMaskImage: "linear-gradient(to right, transparent, black 45%)",
+            }}
+          />
+          <div className="relative max-w-xl space-y-4 px-5 pt-6 pb-5 @md:px-7 @md:pt-7">
+            <div className="flex flex-wrap items-center gap-1.5">
+            <div
+              aria-live="polite"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+                busy ? "bg-primary text-primary-foreground" : "bg-background/70 text-muted-foreground ring-1 ring-border",
+              )}
+            >
+              <span
+                className={cn("size-1.5 rounded-full", busy ? "bg-primary-foreground" : ready ? "bg-emerald-500" : "bg-amber-500")}
+                style={busy ? { animation: "dot-pulse 1.2s ease-in-out infinite" } : undefined}
+              />
+              {live ?? (ready ? "Ready when you are" : "Finish setup to start")}
+            </div>
+              {/* How dictation runs, one click from changing it. */}
+              <SetupChip icon={settings.engine === "local" ? Cpu : Cloud} onClick={() => go("engine")} title="Change speech engine">
+                {settings.engine === "local" ? `${model?.label ?? settings.localModel} · on device` : providerLabel(settings.cloud.preset, settings.cloud.model)}
+              </SetupChip>
+              <SetupChip icon={Sparkles} onClick={() => go("cleanup")} title="Change AI cleanup">
+                {settings.cleanup.enabled ? `Cleanup · ${providerLabel(settings.cleanup.preset, settings.cleanup.model)}` : "Cleanup off"}
+              </SetupChip>
+            </div>
+            <h2 className="flex flex-wrap items-center gap-x-2.5 gap-y-2 text-2xl font-semibold tracking-tight @md:text-[1.75rem]">
+              <span>Hold</span>
+              <Hotkey accelerator={settings.hotkey} className="[&_kbd]:h-9 [&_kbd]:min-w-9 [&_kbd]:rounded-lg [&_kbd]:bg-background [&_kbd]:px-2.5 [&_kbd]:text-base [&_kbd]:shadow-xs" />
+              <span>and talk.</span>
+            </h2>
+            <p className="max-w-md text-sm leading-relaxed text-pretty text-muted-foreground">
+              Release to paste where your cursor is. <span className="text-foreground">Tap</span> once to go hands-free, again to finish.{" "}
+              <Kbd className="h-5 min-w-5 text-[11px]">Esc</Kbd> cancels.
+            </p>
+          </div>
+          {/* Sushi on its plate, over the pixel grid that echoes the sprite. */}
+          <div className="relative hidden h-full min-h-44 items-end justify-center pb-8 @2xl:flex">
+            <div className="relative flex flex-col items-center">
+              <Sushi mood={moodOf(status)} px={4} interactive className="relative z-10 text-muted-foreground" />
+              <span className="-mt-2 h-3 w-28 rounded-[50%] bg-foreground/10 dark:bg-foreground/15" />
+            </div>
+          </div>
+        </div>
+        {/* Focused on arrival, so the hotkey works here straight away; the coral edge says it's live. */}
+        <div className="border-t border-primary/15 bg-card/70 p-3">
+          <div className="flex items-start gap-2.5 rounded-lg bg-background/60 px-3 py-2 ring-1 ring-primary/30 transition-shadow focus-within:ring-2 focus-within:ring-primary/60 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--brand)_12%,transparent)]">
+            <Mic className="mt-2 size-4 shrink-0 text-primary" />
+            <Textarea
+              autoFocus
+              rows={2}
+              aria-label="Try dictating here"
+              placeholder="Try it here: hold the hotkey and say something…"
+              className="min-h-12 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
+            />
+          </div>
+        </div>
       </Card>
 
       <Collapse show={!!hotkeyError}>
@@ -168,45 +242,55 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
       {/* Folds away once the last step is done. */}
       <Collapse show={!ready}>
         <section className="space-y-2">
-          <h2 className="px-1 text-sm font-semibold">Get set up</h2>
-          <Card className="divide-y">
-            {settings.engine === "local" ? (
-              <Step done={engineReady} title={`Download the speech model${model ? ` (${model.label}, ${formatBytes(model.sizeBytes)})` : ""}`}>
-                <p className="text-xs text-muted-foreground">Runs on your computer, so your voice never leaves it. One-time download.</p>
-                {progress !== undefined ? (
-                  <div className="flex items-center gap-3">
-                    <Progress value={progress} />
-                    <span className="w-10 text-right text-xs text-muted-foreground tabular-nums">{Math.round(progress * 100)}%</span>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" onClick={() => model && void downloadModel(model.id)} disabled={!model}>
-                      <Download /> Download
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => go("engine")}>
-                      Use a cloud service instead
-                    </Button>
-                  </div>
-                )}
-                {modelError && <p className="text-xs text-destructive">{modelError}</p>}
-              </Step>
-            ) : (
-              <Step done={engineReady} title={`Add your ${preset?.label ?? "speech service"} API key`}>
-                <Button size="sm" onClick={() => go("engine")}>
-                  Open speech engine settings
-                </Button>
-              </Step>
-            )}
-            {platform?.os === "macos" && (
-              <Step done={accessibilityOk} title="Allow Yammer to paste (Accessibility)">
-                <p className="text-xs text-muted-foreground">
-                  macOS needs your permission before an app can press ⌘V for you. Turn on Yammer under Privacy & Security → Accessibility.
-                </p>
-                <Button size="sm" variant="outline" onClick={() => void api.openPermissionSettings("accessibility")}>
-                  Open Accessibility settings
-                </Button>
-              </Step>
-            )}
+          <div className="flex items-center justify-between gap-4 px-1">
+            <h2 className="text-sm font-semibold">Finish setting up</h2>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {stepsDone} of {steps.length} done
+            </span>
+          </div>
+          <Card className="overflow-hidden">
+            <div className="h-1 bg-muted">
+              <div className="h-full bg-primary transition-[width] duration-500" style={{ width: `${(stepsDone / steps.length) * 100}%` }} />
+            </div>
+            <div className="divide-y">
+              {settings.engine === "local" ? (
+                <Step done={engineReady} title={`Download the speech model${model ? ` (${model.label}, ${formatBytes(model.sizeBytes)})` : ""}`}>
+                  <p className="text-xs text-muted-foreground">Runs on your computer, so your voice never leaves it. One-time download.</p>
+                  {progress !== undefined ? (
+                    <div className="flex items-center gap-3">
+                      <Progress value={progress} />
+                      <span className="w-10 text-right text-xs text-muted-foreground tabular-nums">{Math.round(progress * 100)}%</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" onClick={() => model && void downloadModel(model.id)} disabled={!model}>
+                        <Download /> Download
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => go("engine")}>
+                        Use a cloud service instead
+                      </Button>
+                    </div>
+                  )}
+                  {modelError && <p className="text-xs text-destructive">{modelError}</p>}
+                </Step>
+              ) : (
+                <Step done={engineReady} title={`Add your ${preset?.label ?? "speech service"} API key`}>
+                  <Button size="sm" onClick={() => go("engine")}>
+                    Open speech engine settings
+                  </Button>
+                </Step>
+              )}
+              {platform?.os === "macos" && (
+                <Step done={accessibilityOk} title="Allow Yammer to paste (Accessibility)">
+                  <p className="text-xs text-muted-foreground">
+                    macOS needs your permission before an app can press ⌘V for you. Turn on Yammer under Privacy & Security → Accessibility.
+                  </p>
+                  <Button size="sm" variant="outline" onClick={() => void api.openPermissionSettings("accessibility")}>
+                    Open Accessibility settings
+                  </Button>
+                </Step>
+              )}
+            </div>
           </Card>
         </section>
       </Collapse>
@@ -224,56 +308,67 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
         </Notice>
       )}
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-sm font-semibold">Try it</h2>
-        <Textarea
-          rows={4}
-          placeholder="Click here, then hold the hotkey and say something…"
-          className="bg-card"
-        />
-      </section>
-
-      {recent.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-center justify-between px-1">
+      <div className="grid items-start gap-6 @3xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <section className="min-w-0 space-y-2">
+          <div className="flex h-7 items-center justify-between px-1">
             <h2 className="text-sm font-semibold">Recent</h2>
-            <Button size="sm" variant="ghost" onClick={() => go("history")}>
-              See all
-            </Button>
+            {recent.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => go("history")}>
+                See all
+              </Button>
+            )}
           </div>
-          {groupByDay(recent).map(([day, entries]) => (
-            <div key={day} className="space-y-1.5">
-              <h3 className="px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{dayLabel(day)}</h3>
-              <Card className="divide-y">
-                <AnimatedList>
-                  {entries.map((e) => (
-                    <ListRow key={e.id}>
-                      <div className="group flex items-start gap-3 px-4 py-3 @md:gap-4">
-                        <span className="w-14 shrink-0 pt-0.5 text-xs @md:w-16 text-muted-foreground tabular-nums">{timeFmt.format(e.at)}</span>
-                        <p className="min-w-0 flex-1 text-sm leading-relaxed">{e.text}</p>
-                        <Button size="icon" variant="ghost" className="pointer-fine:opacity-0 group-hover:opacity-100 focus-visible:opacity-100" title="Copy" onClick={() => void api.copyText(e.text)}>
-                          <Copy />
-                        </Button>
-                      </div>
-                    </ListRow>
-                  ))}
-                </AnimatedList>
-              </Card>
-            </div>
-          ))}
+          {recent.length > 0 ? (
+            <Card className="overflow-hidden">
+              {groupByDay(recent).map(([day, entries]) => (
+                <div key={day} className="border-b last:border-b-0">
+                  <h3 className="bg-muted/50 px-4 py-1.5 text-xs font-medium text-muted-foreground">{dayLabel(day)}</h3>
+                  <div className="divide-y">
+                    <AnimatedList>
+                      {entries.map((e) => (
+                        <ListRow key={e.id}>
+                          <div className="group flex items-start gap-3 px-4 py-3 @md:gap-4">
+                            <span className="w-14 shrink-0 pt-0.5 text-xs text-muted-foreground tabular-nums @md:w-16">{timeFmt.format(e.at)}</span>
+                            <p className="line-clamp-3 min-w-0 flex-1 text-sm leading-relaxed">{e.text}</p>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="-my-1 pointer-fine:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                              title="Copy"
+                              onClick={() => void api.copyText(e.text)}
+                            >
+                              <Copy />
+                            </Button>
+                          </div>
+                        </ListRow>
+                      ))}
+                    </AnimatedList>
+                  </div>
+                </div>
+              ))}
+            </Card>
+          ) : (
+            <Card className="border-dashed bg-transparent px-6 py-10 text-center">
+              <p className="text-sm font-medium">Nothing here yet</p>
+              <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
+                Everything you dictate lands here, so you can copy it again later.
+              </p>
+            </Card>
+          )}
         </section>
-      )}
+
+        <aside className="@3xl:sticky @3xl:top-4 @3xl:pt-9">
+          <WeekStats stats={stats} onOpen={() => go("insights")} />
+        </aside>
+      </div>
 
       <section className="space-y-2">
         <h2 className="px-1 text-sm font-semibold">Explore</h2>
-        <NavCards
-          go={go}
-          cards={[
-            { to: "insights", title: "See your insights", description: "Your speaking speed, streaks, and the words you use most." },
-            { to: "snippets", title: "Save a snippet", description: "Say a short trigger and paste a link, an intro, or a whole prompt." },
-            { to: "scratchpad", title: "Open the Scratchpad", description: "Brain-dump by voice, then reshape it with a transform." },
-          ]}
-        />
+        <Card className="grid divide-y overflow-hidden @2xl:grid-cols-3 @2xl:divide-x @2xl:divide-y-0">
+          <LinkRow icon={BarChart3} title="Insights" detail="Speed, streaks, top words" onClick={() => go("insights")} />
+          <LinkRow icon={Scissors} title="Snippets" detail="Say a trigger, paste a block" onClick={() => go("snippets")} />
+          <LinkRow icon={NotebookPen} title="Scratchpad" detail="Brain-dump, then reshape" onClick={() => go("scratchpad")} />
+        </Card>
       </section>
     </div>
   );
