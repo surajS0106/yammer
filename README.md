@@ -53,7 +53,7 @@ cargo test --workspace
 bun run build               # installers for this platform
 ```
 
-Releases: push a `v*` tag matching the version in `apps/desktop/src-tauri/tauri.conf.json`. `.github/workflows/release.yml` then builds every platform.
+Releases are manual: start `.github/workflows/release.yml` from the Actions tab or with `gh workflow run release.yml`. It builds every platform and tags the release `v<version>` from `apps/desktop/src-tauri/tauri.conf.json`. Pushing a tag does not trigger it.
 
 ## License
 

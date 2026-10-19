@@ -10,20 +10,20 @@ Builds an unsigned release DMG on this Mac. This is not a release: nothing is ta
 
 ## Project location
 
-The Yammer repo lives at `~/Downloads/sush-pack/larp` (`$HOME/Downloads/sush-pack/larp`), next to its sibling projects in `~/Downloads/sush-pack/`. Every command and path below is relative to that folder; `cd` there first, whatever the current directory is.
+The Yammer repo lives at `~/Downloads/sush-pack/yammer` (`$HOME/Downloads/sush-pack/yammer`), next to its sibling projects in `~/Downloads/sush-pack/`. Every command and path below is relative to that folder; `cd` there first, whatever the current directory is.
 
 ## 1. Preconditions
 
 - Running on macOS (`uname`). If not, stop and say so.
-- The project folder exists (`test -d "$HOME/Downloads/sush-pack/larp"`). If not, stop and say so.
-- Mention uncommitted changes (`git -C "$HOME/Downloads/sush-pack/larp" status --short`) if there are any. They are included in the build.
+- The project folder exists (`test -d "$HOME/Downloads/sush-pack/yammer"`). If not, stop and say so.
+- Mention uncommitted changes (`git -C "$HOME/Downloads/sush-pack/yammer" status --short`) if there are any. They are included in the build.
 
 ## 2. Build
 
-Run from `~/Downloads/sush-pack/larp`, in the background (the first release build compiles whisper.cpp with Metal and takes several minutes). Capture the real exit code; don't pipe the build into `tail`, which hides it.
+Run from `~/Downloads/sush-pack/yammer`, in the background (the first release build compiles whisper.cpp with Metal and takes several minutes). Capture the real exit code; don't pipe the build into `tail`, which hides it.
 
 ```sh
-cd "$HOME/Downloads/sush-pack/larp"
+cd "$HOME/Downloads/sush-pack/yammer"
 bun install
 bun run build:mac > "$TMPDIR/yammer-build.log" 2>&1
 echo "EXIT $?"
@@ -52,7 +52,7 @@ Quote the first real error from the log (`grep -n "error" "$TMPDIR/yammer-build.
 
 ## 4. Report
 
-Give the full DMG path (`~/Downloads/sush-pack/larp/target/release/bundle/dmg/Yammer_<version>_<arch>.dmg`) and size, and note:
+Give the full DMG path (`~/Downloads/sush-pack/yammer/target/release/bundle/dmg/Yammer_<version>_<arch>.dmg`) and size, and note:
 
 - It runs only on this Mac's architecture (aarch64 = Apple Silicon only).
 - It is unsigned. On another Mac, open it with right-click → Open, or run `xattr -cr /Applications/Yammer.app` after copying it in.
