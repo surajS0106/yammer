@@ -26,7 +26,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      # Formats the whole workspace without compiling it, so larp is covered too.
+      # Formats the whole workspace without compiling it, so yammer is covered too.
       - run: cargo fmt --all --check
       - uses: Swatinem/rust-cache@v2
       # voice-core has no whisper.cpp, so skip the workspace's opt-level 3 for deps.

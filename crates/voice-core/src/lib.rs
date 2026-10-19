@@ -1,4 +1,4 @@
-//! Larp's core: everything that doesn't need Tauri or an OS device.
+//! Yammer's core: everything that doesn't need Tauri or an OS device.
 //! Audio buffers in, text out; settings and history on disk.
 
 pub mod audio;

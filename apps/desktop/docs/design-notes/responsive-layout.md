@@ -24,7 +24,7 @@ Last updated: 2026-10-19
 
 ## Why
 
-Larp is a desktop app, but people tile it next to other apps, use it on 13" laptops, on Windows at 125–150% scaling and on ultrawide monitors. Under `w-3/4`, the minimum window left a 384px column. A 2560px display gave lines over 1500px long. A fixed maximum width plus padding gives a predictable reading measure at every size. Settings and lists stay narrower than the Insights dashboard, which needs width for its 4-column stat grid and side-by-side panels (`@5xl`).
+Yammer is a desktop app, but people tile it next to other apps, use it on 13" laptops, on Windows at 125–150% scaling and on ultrawide monitors. Under `w-3/4`, the minimum window left a 384px column. A 2560px display gave lines over 1500px long. A fixed maximum width plus padding gives a predictable reading measure at every size. Settings and lists stay narrower than the Insights dashboard, which needs width for its 4-column stat grid and side-by-side panels (`@5xl`).
 
 The icon rail costs the sidebar labels below 768px, which is acceptable: the window opens at 880px by default, so most people keep the full sidebar. Users who shrink the window get the space back for content.
 

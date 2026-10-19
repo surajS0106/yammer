@@ -1,4 +1,4 @@
-//! Larp: hold a hotkey anywhere, speak, and the transcript is pasted
+//! Yammer: hold a hotkey anywhere, speak, and the transcript is pasted
 //! where your cursor is. This crate is the OS shell (hotkey, microphone,
 //! tray, overlay, paste); `voice-core` holds the platform-free logic.
 
@@ -28,7 +28,7 @@ use crate::dictation::{Dictation, Input};
 pub fn run() {
     tauri::Builder::default()
         // Must come first: a second launch hands its arguments to this instance and exits.
-        // `larp --toggle` is how Wayland users bind a system shortcut to dictation.
+        // `yammer --toggle` is how Wayland users bind a system shortcut to dictation.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if args.iter().any(|a| a == "--toggle") {
                 app.state::<Dictation>().send(Input::Toggle);
@@ -44,6 +44,8 @@ pub fn run() {
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             let data_dir = app.path().app_data_dir()?;
+            adopt_larp_dir(&config_dir);
+            adopt_larp_dir(&data_dir);
             secrets::init(&config_dir);
             app.manage(state::AppState::new(config_dir, data_dir)?);
             app.manage(dictation::spawn(app.handle().clone()));
@@ -116,7 +118,7 @@ pub fn run() {
             whisper::model_delete,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building Larp")
+        .expect("error while building Yammer")
         .run(|app, event| match event {
             // Keep running in the tray when the last window is hidden or closed.
             tauri::RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(),
@@ -134,4 +136,18 @@ pub fn run() {
             tauri::RunEvent::Reopen { .. } => tray::show_main(app),
             _ => {}
         });
+}
+
+/// Yammer was called Larp (bundle id `com.sush.larp`), and the app's folders are named after the bundle id.
+/// On the first launch after the rename, move Larp's folder into place so settings, history and the
+/// downloaded whisper models carry over. On macOS and Windows config and data share one folder, so the
+/// second call finds nothing left to move.
+fn adopt_larp_dir(dir: &std::path::Path) {
+    let old = dir.with_file_name("com.sush.larp");
+    if dir.exists() || !old.is_dir() {
+        return;
+    }
+    if let Err(e) = std::fs::rename(&old, dir) {
+        eprintln!("couldn't move {} to {}: {e}", old.display(), dir.display());
+    }
 }

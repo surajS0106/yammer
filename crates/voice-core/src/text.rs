@@ -93,9 +93,9 @@ mod tests {
 
     #[test]
     fn replaces_whole_words_case_insensitively() {
-        let r = [rep("wisper flow", "Wispr Flow"), rep("larp", "Larp")];
-        assert_eq!(apply("I use Wisper Flow and larp.", &r, &[]), "I use Wispr Flow and Larp.");
-        assert_eq!(apply("larping is fun", &r, &[]), "larping is fun");
+        let r = [rep("wisper flow", "Wispr Flow"), rep("yammer", "Yammer")];
+        assert_eq!(apply("I use Wisper Flow and yammer.", &r, &[]), "I use Wispr Flow and Yammer.");
+        assert_eq!(apply("yammering is fun", &r, &[]), "yammering is fun");
     }
 
     #[test]

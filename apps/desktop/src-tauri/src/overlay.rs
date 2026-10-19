@@ -68,7 +68,7 @@ pub enum OverlayState {
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into()))
-        .title("Larp")
+        .title("Yammer")
         .inner_size(SIZE, SIZE)
         .resizable(false)
         .decorations(false)

@@ -39,7 +39,7 @@ if (getCurrentWebviewWindow().label === "overlay") {
     (e) =>
       root.render(
         <div className="flex h-svh flex-col items-center justify-center gap-2 p-8 text-center">
-          <h1 className="text-lg font-medium">Larp couldn’t load its settings</h1>
+          <h1 className="text-lg font-medium">Yammer couldn’t load its settings</h1>
           <p className="max-w-md text-sm text-muted-foreground">{errorMessage(e)}</p>
         </div>,
       ),

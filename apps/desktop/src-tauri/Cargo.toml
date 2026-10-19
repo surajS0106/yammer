@@ -1,12 +1,12 @@
 [package]
-name = "larp"
-description = "Larp: dictate anywhere"
+name = "yammer"
+description = "Yammer: dictate anywhere"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "larp_lib"
+name = "yammer_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
@@ -43,5 +43,5 @@ objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
 # Callbacks for the main window's minimize notifications (dock.rs).
 block2 = "0.6"
-# Reads the Dock's preferences to drop duplicate Larp tiles (dock.rs).
+# Reads the Dock's preferences to drop duplicate Yammer tiles (dock.rs).
 plist = "1"

@@ -13,7 +13,10 @@ use crate::error::{AppError, AppResult};
 pub const NAMES: &[&str] = &["stt", "cleanup"];
 
 #[cfg(not(debug_assertions))]
-const SERVICE: &str = "com.sush.larp";
+const SERVICE: &str = "com.sush.yammer";
+/// The keyring service from before the rename to Yammer; read once, then moved to `SERVICE`.
+#[cfg(not(debug_assertions))]
+const LEGACY_SERVICE: &str = "com.sush.larp";
 
 /// Called once at startup with the app config dir; only debug builds use it.
 pub fn init(config_dir: &std::path::Path) {
@@ -25,11 +28,22 @@ pub fn init(config_dir: &std::path::Path) {
 
 #[cfg(not(debug_assertions))]
 mod backend {
-    use super::SERVICE;
+    use super::{LEGACY_SERVICE, SERVICE};
     use crate::error::AppResult;
 
     pub fn read(name: &str) -> AppResult<Option<String>> {
-        match keyring::Entry::new(SERVICE, name)?.get_password() {
+        if let Some(value) = get(SERVICE, name)? {
+            return Ok(Some(value));
+        }
+        // A key saved by Larp: move it under Yammer's service so later reads find it directly.
+        let Some(value) = get(LEGACY_SERVICE, name)? else { return Ok(None) };
+        write(name, &value)?;
+        let _ = keyring::Entry::new(LEGACY_SERVICE, name)?.delete_credential();
+        Ok(Some(value))
+    }
+
+    fn get(service: &str, name: &str) -> AppResult<Option<String>> {
+        match keyring::Entry::new(service, name)?.get_password() {
             Ok(value) => Ok(Some(value)),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(e) => Err(e.into()),

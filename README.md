@@ -1,4 +1,4 @@
-# Larp
+# Yammer
 
 A product of Sush.
 
@@ -19,20 +19,20 @@ Download the installer for your platform from the GitHub releases page:
 | --- | --- |
 | Windows | `.msi` or `-setup.exe` |
 | macOS (Apple Silicon / Intel) | `.dmg` (`aarch64` / `x64`) |
-| Ubuntu / Debian | `.deb` (`sudo apt install ./larp_*.deb`) |
+| Ubuntu / Debian | `.deb` (`sudo apt install ./yammer_*.deb`) |
 | Other Linux | `.AppImage` |
 
 On first launch, download a speech model (Base, 148 MB, is recommended) or add a cloud API key.
 
 ### macOS
 
-Grant **Microphone** access when asked. Then turn on Larp under System Settings → Privacy & Security → **Accessibility**, which it needs in order to press ⌘V for you. The app lives in the menu bar.
+Grant **Microphone** access when asked. Then turn on Yammer under System Settings → Privacy & Security → **Accessibility**, which it needs in order to press ⌘V for you. The app lives in the menu bar.
 
 ### Linux
 
 X11 sessions work fully. **Wayland** (the Ubuntu default) doesn't let apps grab global hotkeys or send keystrokes, so:
 
-1. Bind a system shortcut (GNOME: Settings → Keyboard → Custom Shortcuts) to `larp --toggle`. Press it once to start and again to stop.
+1. Bind a system shortcut (GNOME: Settings → Keyboard → Custom Shortcuts) to `yammer --toggle`. Press it once to start and again to stop.
 2. For auto-paste, install `wtype` (wlroots or KDE) or `ydotool` (any compositor, including GNOME, with `ydotoold` running). Without either, the text is copied to the clipboard and you press Ctrl+V yourself.
 
 ## Develop

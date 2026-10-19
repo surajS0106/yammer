@@ -1,5 +1,5 @@
 //! macOS: the overlay follows you to every Space, including other apps' full-screen ones.
-//! Larp has a Dock icon, so it's a regular app, and macOS keeps a regular app's
+//! Yammer has a Dock icon, so it's a regular app, and macOS keeps a regular app's
 //! windows out of other apps' full-screen Spaces. A non-activating panel can go there.
 //! Tauri has no panels, so this turns tao's window into one in place: it swaps the
 //! window's class for an `NSPanel` subclass that copies tao's overrides and ivar.
@@ -13,7 +13,7 @@ use objc2::{msg_send, sel, ClassType, MainThreadMarker};
 use objc2_app_kit::{NSPanel, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
 use tauri::WebviewWindow;
 
-const PANEL_CLASS: &CStr = c"LarpOverlayPanel";
+const PANEL_CLASS: &CStr = c"YammerOverlayPanel";
 const FOCUSABLE: &CStr = c"focusable";
 
 /// Call from the main thread, once, right after the window is built.
@@ -36,7 +36,7 @@ pub fn make_panel(window: &WebviewWindow) {
             let panel = &*ptr.cast::<NSPanel>();
             panel.setStyleMask(panel.styleMask() | NSWindowStyleMask::NonactivatingPanel);
             panel.setFloatingPanel(true);
-            // Panels hide when their app isn't frontmost, which Larp almost never is.
+            // Panels hide when their app isn't frontmost, which Yammer almost never is.
             panel.setHidesOnDeactivate(false);
         }
         ns_window.setCollectionBehavior(

@@ -1,6 +1,6 @@
 [package]
 name = "voice-core"
-description = "Larp core: audio processing, transcription, cleanup, settings and history"
+description = "Yammer core: audio processing, transcription, cleanup, settings and history"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

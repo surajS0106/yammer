@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Larp",
-  "mainBinaryName": "larp",
+  "productName": "Yammer",
+  "mainBinaryName": "yammer",
   "version": "0.1.0",
-  "identifier": "com.sush.larp",
+  "identifier": "com.sush.yammer",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1430",
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Larp",
+        "title": "Yammer",
         "width": 880,
         "height": 640,
         "minWidth": 480,
@@ -39,7 +39,7 @@
       "icons/icon.ico"
     ],
     "shortDescription": "Dictate anywhere",
-    "longDescription": "Hold a hotkey, speak, and Larp pastes the transcript wherever your cursor is. Runs whisper locally or uses a cloud speech service.",
+    "longDescription": "Hold a hotkey, speak, and Yammer pastes the transcript wherever your cursor is. Runs whisper locally or uses a cloud speech service.",
     "category": "Productivity",
     "macOS": {
       "entitlements": "./Entitlements.plist",

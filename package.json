@@ -1,11 +1,11 @@
 {
-  "name": "larp",
+  "name": "yammer",
   "private": true,
   "workspaces": ["apps/*"],
   "scripts": {
     "dev": "bun --filter desktop tauri dev",
     "build": "bun --filter desktop tauri build",
-    "build:mac": "export PATH=\"$HOME/.cargo/bin:$PATH\" MACOSX_DEPLOYMENT_TARGET=11.0 && bun --filter desktop tauri build --config src-tauri/tauri.macos-icon.conf.json --bundles dmg",
+    "build:mac": "export PATH=\"$HOME/.cargo/bin:$PATH\" MACOSX_DEPLOYMENT_TARGET=11.0 && bun --filter desktop tauri build --bundles dmg",
     "typecheck": "bun --filter '*' typecheck"
   }
 }

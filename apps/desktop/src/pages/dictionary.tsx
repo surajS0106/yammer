@@ -29,7 +29,7 @@ function Words() {
   };
 
   return (
-    <Section title="Words" description="Names, jargon and acronyms to listen for. Larp spells them exactly as written here.">
+    <Section title="Words" description="Names, jargon and acronyms to listen for. Yammer spells them exactly as written here.">
       <form
         className="flex gap-2 p-3"
         onSubmit={(e) => {
@@ -121,7 +121,7 @@ export function DictionaryPage() {
     <div className="space-y-6">
       <PageHeader title="Dictionary" />
       <Intro
-        title="Teach Larp your words"
+        title="Teach Yammer your words"
         example={
           <>
             <Mapping from="wisper flow" to="Wispr Flow" />

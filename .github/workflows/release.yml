@@ -19,10 +19,8 @@ jobs:
             target: x86_64-pc-windows-msvc
           - os: macos-latest
             target: aarch64-apple-darwin
-            extra_config: --config src-tauri/tauri.macos-icon.conf.json
           - os: macos-latest
             target: x86_64-apple-darwin
-            extra_config: --config src-tauri/tauri.macos-icon.conf.json
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
@@ -47,6 +45,7 @@ jobs:
 
       # macOS 26 swaps the app icon with the system appearance; needs Xcode's actool.
       # The script fails the job if Assets.car isn't produced, rather than shipping the static icon.
+      # tauri.macos.conf.json (merged automatically on macOS) bundles it.
       - name: Compile adaptive macOS icon
         if: runner.os == 'macOS'
         run: apps/desktop/src-tauri/icons/build-mac-icon.sh
@@ -57,9 +56,9 @@ jobs:
         with:
           projectPath: apps/desktop
           tauriScript: bun tauri
-          args: --target ${{ matrix.target }} ${{ matrix.extra_config }}
+          args: --target ${{ matrix.target }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
-          releaseName: Larp ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: Yammer ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseBody: See the assets below to download the installer for your platform.
           releaseDraft: false
           prerelease: false

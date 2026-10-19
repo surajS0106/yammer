@@ -33,7 +33,7 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Help" description={`Larp ${platform ? `v${platform.version}` : ""} · a product of Sush`} />
+      <PageHeader title="Help" description={`Yammer ${platform ? `v${platform.version}` : ""} · a product of Sush`} />
 
       <NavCards
         go={go}
@@ -76,7 +76,7 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
         <Item q="Nothing gets pasted">
           {platform?.os === "macos" ? (
             <>
-              Larp needs Accessibility permission to press {paste} for you: System Settings → Privacy & Security → Accessibility.{" "}
+              Yammer needs Accessibility permission to press {paste} for you: System Settings → Privacy & Security → Accessibility.{" "}
             </>
           ) : platform?.wayland ? (
             <>On Wayland, install wtype or ydotool for auto-paste. Without them the text is copied and you press {paste}. </>

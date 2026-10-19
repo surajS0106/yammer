@@ -2345,37 +2345,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "larp"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "base64 0.22.1",
- "block2",
- "cpal",
- "enigo",
- "futures",
- "keyring",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "plist",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "thiserror 2.0.21",
- "tokio",
- "voice-core",
- "whisper-rs",
-]
-
-[[package]]
 name = "libappindicator"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6089,6 +6058,37 @@ name = "xkeysym"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
+
+[[package]]
+name = "yammer"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "base64 0.22.1",
+ "block2",
+ "cpal",
+ "enigo",
+ "futures",
+ "keyring",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "plist",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "thiserror 2.0.21",
+ "tokio",
+ "voice-core",
+ "whisper-rs",
+]
 
 [[package]]
 name = "yoke"

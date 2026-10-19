@@ -86,8 +86,8 @@ export default function App() {
         {/* Below md the sidebar collapses to an icon rail so narrow windows keep their width for content. */}
         <nav className="flex w-14 shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar p-2 md:w-52 md:p-3">
           <div className="mb-4 flex items-center justify-center gap-2 pt-1 md:justify-start md:px-2">
-            <img src="/larp-mark.png" alt="" className="size-6" />
-            <span className="sr-only text-xl font-semibold tracking-tight md:not-sr-only">Larp</span>
+            <img src="/yammer-mark.png" alt="" className="size-6" />
+            <span className="sr-only text-xl font-semibold tracking-tight md:not-sr-only">Yammer</span>
           </div>
           {pages.map((item) => (
             <NavButton key={item.id} item={item} active={page === item.id} onClick={() => setPage(item.id)} />

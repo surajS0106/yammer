@@ -12,7 +12,7 @@ interface Note {
   updatedAt: number;
 }
 
-const KEY = "larp.scratchpad";
+const KEY = "yammer.scratchpad";
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 // Notes live in this webview's storage: they never leave the computer, and a

@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Ship the current work on Larp. Runs the /check gate, reviews the diff for things that shouldn't go out, writes the commit, pushes, and watches CI. Optionally starts a release. Use when the user says "ship it", "commit and push" or "/ship".
+description: Ship the current work on Yammer. Runs the /check gate, reviews the diff for things that shouldn't go out, writes the commit, pushes, and watches CI. Optionally starts a release. Use when the user says "ship it", "commit and push" or "/ship".
 disable-model-invocation: true
 argument-hint: "[commit message hint] [release]"
 ---

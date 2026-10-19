@@ -23,7 +23,7 @@ impl AppState {
             history: Mutex::new(History::load(&data_dir.join("history.json"))),
             models_dir: data_dir.join("models"),
             http: reqwest::Client::builder()
-                .user_agent(concat!("Larp/", env!("CARGO_PKG_VERSION")))
+                .user_agent(concat!("Yammer/", env!("CARGO_PKG_VERSION")))
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .build()
                 .map_err(crate::error::AppError::invalid)?,

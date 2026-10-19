@@ -1,8 +1,19 @@
 # App Icon — Design Notes
 
+The app was renamed from Larp to Yammer on 2026-10-19. Sections below that date describe Larp's files as they were then.
+
 Last updated: 2026-10-19
 
 ## What changed
+
+### 2026-10-19 (Yammer: new logo, Apple corner, stale-icon guard)
+- Renamed Larp to Yammer everywhere a user or build sees it: product and window names, binary `yammer`, crate `yammer`, bundle id `com.sush.yammer`, keyring service, tray, plists, UI copy, workflows and skills. The repo folder and GitHub remote keep the name `larp`.
+- New sources replace the ribbon L: `icons/source/yammer-{light,dark,mark}.png`. `larp-*.png` and `public/larp-mark.png` are deleted; the in-app mark is now `public/yammer-mark.png` (`src/App.tsx`).
+- `make_icons.py` takes full-bleed sources. A new `normalize()` finds the flat background colour from the edges, finds the Y's bounds, and re-centres it on a square of that colour so the Y spans 74% of the tile. The light and dark Y were 86% and 68% of their images, so without this the icon changed size when the theme flipped. `full_bleed()` no longer needs the corner-filling blur, since the sources have no baked-in corners.
+- The squircle now matches Apple's continuous corner more closely: the curve starts 34.4% in (1.528 x the 22.5% radius) with exponent 3.26, so it crosses the diagonal exactly where a 185.4px circle on the 824 body would (`squircle_mask`).
+- `tauri.macos-icon.conf.json` is now `tauri.macos.conf.json`, which Tauri merges into every macOS build by itself. `build:mac` and `release.yml` drop their `--config` flags, and a plain `bun run build` on a Mac now bundles the adaptive icon too.
+- New `icons/check-mac-icon.sh`. `build-mac-icon.sh` writes `Assets.car.stamp`, a SHA-256 of `AppIcon.icon`; `mac-icon.yml` commits it with `Assets.car`. The macOS config's `beforeBundleCommand` runs the check, which fails the bundle with push/pull instructions when the stamp is missing or doesn't match.
+- First launch after the rename moves `com.sush.larp`'s config and data folders to `com.sush.yammer` (`adopt_larp_dir` in `src-tauri/src/lib.rs`), and a release build moves keys from the old keyring service on first read (`secrets.rs`).
 
 ### 2026-10-19 (no Xcode for the adaptive icon, duplicate Dock tiles)
 - `Assets.car` is now committed instead of gitignored. `.github/workflows/mac-icon.yml` compiles it with Xcode's `actool` on a GitHub macOS runner and commits it whenever `icons/AppIcon.icon` or `build-mac-icon.sh` changes (or when run by hand). `build:mac` now always passes `tauri.macos-icon.conf.json`, so every local DMG ships the light/dark icon without Xcode installed. Sush got the same workflow and `build:mac` change.
@@ -37,6 +48,10 @@ Last updated: 2026-10-19
 
 ## Why
 
+The DMG could ship the old icon silently. `Assets.car` can only be compiled on GitHub, so between a local icon change and the workflow's commit, every local build bundled the previous catalog, and only a note in the `/build-dmg` skill said so. A content stamp turns that into a build failure. It hashes the catalog's inputs rather than comparing timestamps, because git checkouts reset mtimes. The cost is that a local DMG can't be built until the icon change is pushed and pulled back, which is the intended trade. Moving the config to Tauri's platform file closes the other gap: no build path can forget the flag.
+
+Changing the bundle id moves the settings, history and models folders and the keychain entry, and the models are large downloads. Moving the old folder (a rename, not a copy) and lazily migrating keys keeps an existing install working. Accessibility permission and the webview's local storage (the scratchpad) are tied to the bundle id and can't be carried over.
+
 The Dock had two identical "recent app" tiles for Larp: same path, same bookmark, consecutive IDs. The running app attached to one and showed the themed icon, while the other kept the static light `.icns`. Switching the activation policy does not cause it: test apps that toggled Regular/Accessory, with and without activation and icon swaps, never produced a second tile, and neither did opening and closing the real Larp. The likely trigger is replacing `/Applications/Larp.app` with a rebuilt ad-hoc-signed copy, which leaves an entry the Dock can't match to the new bundle. It couldn't be confirmed, so the fix removes duplicates whatever made them. Writing another app's preferences and restarting the Dock is heavy-handed, which is why it only happens when a duplicate exists. It was tested by restoring the duplicate and launching the fixed build: two tiles became one.
 
 `actool` only ships with full Xcode, and no maintained tool compiles the macOS 26 `.icon` format into `Assets.car` without it. Chromium solves the same problem by committing prebuilt `.car` files. GitHub's macOS runners already have Xcode, so compiling there and committing the output means no one installs Xcode locally. The cost is about a minute of macOS CI per icon change. A local icon change shows up in local DMGs only after it's pushed and the workflow has committed the new `Assets.car`.
@@ -58,7 +73,9 @@ Larp was moved into the Dock at the user's request. That makes a runtime swap wo
 ## What makes it stand out
 
 - One script regenerates every platform's icons from three committed sources, instead of a one-off export that drifts.
-- The macOS shape uses continuous-curvature corners on Apple's 824/1024 grid, not a CSS-style circular `border-radius`.
+- The macOS shape uses continuous-curvature corners on Apple's 824/1024 grid, tuned to Apple's 185.4px radius, not a CSS-style circular `border-radius`.
+- The light and dark Y are normalised to the same size, so the icon doesn't jump when the theme changes.
+- A macOS bundle can't ship an `Assets.car` compiled from a different icon: the build stops and says how to fix it.
 - The transparent mark has background-removal specks removed with a morphological opening, so no stray pixels show at 16 to 32 px.
 - The running Dock icon follows the system light/dark setting live, using a ~15-line AppKit call instead of a second app bundle or a restart.
 - On macOS 26, released builds swap the Finder, Launchpad and pinned Dock icon with the system theme through a compiled asset catalog, not only while the app runs.

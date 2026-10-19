@@ -28,8 +28,8 @@ pub fn set_icon(theme: Theme) {
 }
 
 /// Show or hide the Dock icon. macOS keeps a Dock app's windows off other apps'
-/// full-screen Spaces, so Sushi's overlay can only follow you there while Larp is
-/// an accessory app: with the main window closed, Larp lives in the menu bar.
+/// full-screen Spaces, so Sushi's overlay can only follow you there while Yammer is
+/// an accessory app: with the main window closed, Yammer lives in the menu bar.
 pub fn show(app: &AppHandle, visible: bool) {
     let policy = if visible { ActivationPolicy::Regular } else { ActivationPolicy::Accessory };
     let _ = app.set_activation_policy(policy);
@@ -51,10 +51,10 @@ pub fn show(app: &AppHandle, visible: bool) {
     }
 }
 
-/// The Dock sometimes keeps two "recent app" tiles for Larp, both pointing at the
+/// The Dock sometimes keeps two "recent app" tiles for Yammer, both pointing at the
 /// same bundle (seen after reinstalling a rebuilt copy). Only one of them is the
 /// running app; the other shows the static icon and never goes away on its own.
-/// At startup, keep the first Larp tile and drop the rest. The Dock rereads its
+/// At startup, keep the first Yammer tile and drop the rest. The Dock rereads its
 /// preferences only on restart, so it's restarted, but only when a duplicate
 /// was actually found.
 pub fn dedupe_recents(app: &AppHandle) {
@@ -75,7 +75,7 @@ fn remove_duplicate_tiles(id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let Some(recents) = prefs.as_dictionary_mut().and_then(|d| d.get_mut("recent-apps")).and_then(|v| v.as_array_mut()) else {
         return Ok(());
     };
-    let is_larp = |tile: &plist::Value| {
+    let is_yammer = |tile: &plist::Value| {
         tile.as_dictionary()
             .and_then(|t| t.get("tile-data"))
             .and_then(|d| d.as_dictionary())
@@ -85,7 +85,7 @@ fn remove_duplicate_tiles(id: &str) -> Result<(), Box<dyn std::error::Error>> {
     };
     let before = recents.len();
     let mut seen = false;
-    recents.retain(|tile| !is_larp(tile) || !std::mem::replace(&mut seen, true));
+    recents.retain(|tile| !is_yammer(tile) || !std::mem::replace(&mut seen, true));
     if recents.len() == before {
         return Ok(());
     }

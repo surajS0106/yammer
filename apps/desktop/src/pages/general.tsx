@@ -36,7 +36,7 @@ export function GeneralPage() {
           label="Hotkey"
           description={
             platform?.wayland
-              ? "Wayland only delivers this to X11 apps. Bind a system shortcut to `larp --toggle` instead."
+              ? "Wayland only delivers this to X11 apps. Bind a system shortcut to `yammer --toggle` instead."
               : "Hold to talk, or tap to start and tap again to finish."
           }
         >

@@ -205,7 +205,7 @@ mod tests {
     }
 
     /// Real inference. Run with WHISPER_MODEL=<ggml-base.en.bin> WHISPER_WAV=<16 kHz mono wav>
-    /// `cargo test -p larp whisper -- --ignored --nocapture`.
+    /// `cargo test -p yammer whisper -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn transcribes_real_audio() {

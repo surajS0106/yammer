@@ -22,7 +22,7 @@ Last updated: 2026-10-19
 
 ## Why
 
-Larp is modelled on Wispr Flow, whose app is organised around what you do with your voice (dictionary, snippets, transforms, notes, insights) rather than around configuration. Grouping the three configuration pages under one Settings entry frees the top of the nav for those features. Keeping the old page ids means the tray and overlay "open settings" links still work.
+Yammer is modelled on Wispr Flow, whose app is organised around what you do with your voice (dictionary, snippets, transforms, notes, insights) rather than around configuration. Grouping the three configuration pages under one Settings entry frees the top of the nav for those features. Keeping the old page ids means the tray and overlay "open settings" links still work.
 
 Corrections and snippets are deterministic string operations in voice-core, not prompt instructions. They work with cleanup off, cost no latency, and are unit-tested. Corrections run after cleanup so the model cannot undo them. The trade-off is that matching is ASCII-case-insensitive only.
 
@@ -32,7 +32,7 @@ Transforms reuse the cleanup model and key instead of adding a provider. One tra
 
 Insights are computed in the webview from local history. That keeps data on the machine and needs no new storage. Scratchpad notes use webview localStorage, with reads and writes wrapped so failures fall back to an empty list.
 
-Notetaker (meeting capture), team invites and referrals were left out: they need system-audio capture or an account backend that Larp doesn't have.
+Notetaker (meeting capture), team invites and referrals were left out: they need system-audio capture or an account backend that Yammer doesn't have.
 
 The registry components are painted in stone and emerald. They are re-themed from outside (`className`/`classNames`, explicit slice colours, a teal `ramp`, `--cf-r-from`/`--cf-r-to`) so the files stay as the registry ships them and can be re-pulled. Their `dark:` classes outrank plain overrides, so every override is restated under `dark:`.
 
@@ -41,5 +41,5 @@ The registry components are painted in stone and emerald. They are re-themed fro
 - The replacer makes one pass with the longest phrase first, so replaced text is never replaced again ("flow" → "Wispr Flow" can't loop) and overlapping triggers resolve predictably (`text.rs` tests).
 - Snippet matching ignores the capitals and punctuation that STT adds ("My LinkedIn." matches `my linkedin`).
 - The transform is placed before the user's own rules in the prompt, so the user's rules still take precedence (`adds_the_transform_before_user_rules`).
-- Scratchpad rewrites can be undone in one step. Dictating into a note works because Larp pastes into its own focused window.
+- Scratchpad rewrites can be undone in one step. Dictating into a note works because Yammer pastes into its own focused window.
 - Streaks use calendar days (`dayKey`), not 24-hour steps, so DST changes don't break them. The heatmap uses one hue in five steps with per-cell hover titles.

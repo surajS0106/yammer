@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Larp listens while you hold the dictation hotkey, to turn your speech into text.</string>
+  <string>Yammer listens while you hold the dictation hotkey, to turn your speech into text.</string>
 </dict>
 </plist>

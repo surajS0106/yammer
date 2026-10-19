@@ -196,9 +196,9 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
               </Step>
             )}
             {platform?.os === "macos" && (
-              <Step done={accessibilityOk} title="Allow Larp to paste (Accessibility)">
+              <Step done={accessibilityOk} title="Allow Yammer to paste (Accessibility)">
                 <p className="text-xs text-muted-foreground">
-                  macOS needs your permission before an app can press ⌘V for you. Turn on Larp under Privacy & Security → Accessibility.
+                  macOS needs your permission before an app can press ⌘V for you. Turn on Yammer under Privacy & Security → Accessibility.
                 </p>
                 <Button size="sm" variant="outline" onClick={() => void api.openPermissionSettings("accessibility")}>
                   Open Accessibility settings
@@ -214,7 +214,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
           <p className="font-medium">You’re on Wayland.</p>
           <p className="mt-1">
             Wayland doesn’t let apps listen for global hotkeys or press keys. Bind a system shortcut (GNOME: Settings → Keyboard → Custom
-            Shortcuts) to <code className="rounded bg-muted px-1">larp --toggle</code>.{" "}
+            Shortcuts) to <code className="rounded bg-muted px-1">yammer --toggle</code>.{" "}
             {platform.wtype || platform.ydotool
               ? `Pasting will use ${platform.wtype ? "wtype" : "ydotool"}.`
               : "Install wtype or ydotool for auto-paste; otherwise the text is copied and you press Ctrl+V."}
