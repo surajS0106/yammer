@@ -1,7 +1,9 @@
 // Small, dependency-free UI primitives in the Sush look (tokens from index.css).
 
+import { motion } from "motion/react";
 import * as React from "react";
 
+import { spring } from "@/components/motion";
 import { cn, hotkeyParts } from "@/lib/utils";
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -14,7 +16,7 @@ export function Button({ variant = "default", size = "md", className, ...props }
     <button
       type="button"
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
+        "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow,scale] outline-none focus-visible:ring-3 active:scale-[0.97] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
         variant === "default" && "bg-primary text-primary-foreground hover:bg-primary/90",
         variant === "outline" && "border bg-background hover:bg-accent hover:text-accent-foreground",
         variant === "ghost" && "hover:bg-accent hover:text-accent-foreground",
@@ -55,7 +57,7 @@ export function Switch({
     >
       <span
         className={cn(
-          "block size-4 rounded-full bg-background shadow-sm transition-transform",
+          "block size-4 rounded-full bg-background shadow-sm transition-transform duration-300",
           checked ? "translate-x-[18px]" : "translate-x-[2px]",
         )}
       />
@@ -205,6 +207,8 @@ export function Segmented<T extends string>({
   options: { value: T; label: string }[];
   onChange: (value: T) => void;
 }) {
+  // The selected thumb slides between options; the id keeps two Segmented controls from sharing it.
+  const id = React.useId();
   return (
     <div className="inline-flex max-w-full overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none]">
       {options.map((o) => (
@@ -213,11 +217,12 @@ export function Segmented<T extends string>({
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "shrink-0 rounded-md px-3 py-1 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-            value === o.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+            "relative shrink-0 rounded-md px-3 py-1 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+            value === o.value ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {o.label}
+          {value === o.value && <motion.span layoutId={`segmented-${id}`} transition={spring} className="absolute inset-0 rounded-md bg-background shadow-sm" />}
+          <span className="relative">{o.label}</span>
         </button>
       ))}
     </div>
@@ -242,7 +247,7 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
 export function Progress({ value }: { value: number }) {
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-      <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${Math.round(value * 100)}%` }} />
+      <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${Math.round(value * 100)}%` }} />
     </div>
   );
 }

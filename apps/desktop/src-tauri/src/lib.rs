@@ -59,6 +59,13 @@ pub fn run() {
             }
             commands::preload(app.handle());
 
+            // The UI draws its own title bar. macOS keeps its traffic lights over the content
+            // (`titleBarStyle: Overlay` in tauri.conf.json); elsewhere the frame goes entirely.
+            #[cfg(not(target_os = "macos"))]
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_decorations(false)?;
+            }
+
             // No Dock icon until the main window opens (dock::show).
             #[cfg(target_os = "macos")]
             {
@@ -97,6 +104,8 @@ pub fn run() {
             commands::overlay_reset_position,
             commands::overlay_toggle_dictation,
             commands::overlay_open,
+            commands::overlay_hide,
+            commands::quit,
             commands::hotkey_label,
             commands::hotkey_suspend,
             commands::hotkey_error,

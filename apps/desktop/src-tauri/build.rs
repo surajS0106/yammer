@@ -17,5 +17,7 @@ fn link_clang_runtime() {
     let lib = std::path::Path::new(&dir).join("libclang_rt.osx.a");
     if lib.is_file() {
         println!("cargo:rustc-link-arg={}", lib.display());
+    } else {
+        println!("cargo:warning=clang runtime not found at {}; link may fail on ___isPlatformVersionAtLeast", lib.display());
     }
 }

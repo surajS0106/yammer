@@ -2,6 +2,7 @@ import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import * as React from "react";
 
 import { PageHeader } from "@/App";
+import { Collapse } from "@/components/motion";
 import { Button, Card, Input, Intro, Mapping, Textarea } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import type { Snippet } from "@/lib/tauri";
@@ -82,11 +83,11 @@ export function SnippetsPage() {
         to expand it in place.
       </Intro>
 
-      {editing === "new" && (
+      <Collapse show={editing === "new"}>
         <Card>
           <Editor initial={{ trigger: "", text: "" }} onSave={(s) => save(s, "new")} onCancel={() => setEditing(null)} />
         </Card>
-      )}
+      </Collapse>
 
       {list.length > 3 && (
         <div className="relative">

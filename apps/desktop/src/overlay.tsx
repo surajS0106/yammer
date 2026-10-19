@@ -7,7 +7,19 @@
 // no mouse moves; hover comes from the cursor position Rust polls instead.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AlertCircle, Check, History, Loader2, Mic, Settings2 } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowDownToLine,
+  Check,
+  EyeOff,
+  History,
+  Loader2,
+  type LucideIcon,
+  Mic,
+  Power,
+  Settings2,
+  Square,
+} from "lucide-react";
 import { motion, type MotionValue, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import * as React from "react";
 
@@ -98,10 +110,8 @@ function near(r: DOMRect, p: Point, pad: number) {
   return p.x >= r.left - pad && p.x < r.right + pad && p.y >= r.top - pad && p.y < r.bottom + pad;
 }
 
-/** The hovered idle pill's buttons. Clicking one doesn't take focus. */
-function IslandButtons({ cursor }: { cursor: Point | null }) {
-  const buttons = React.useRef<(HTMLButtonElement | null)[]>([]);
-  const tip = cursor && ISLAND.find((_, i) => buttons.current[i] && near(buttons.current[i].getBoundingClientRect(), cursor, 0))?.id;
+/** The dictation hotkey as shown to the user, e.g. "Ctrl+Shift+Space". */
+function useHotkeyLabel() {
   const [hotkey, setHotkey] = React.useState("");
   React.useEffect(() => {
     const load = () => api.hotkeyLabel().then(setHotkey, () => {});
@@ -109,6 +119,14 @@ function IslandButtons({ cursor }: { cursor: Point | null }) {
     const unlisten = on.settingsChanged(load);
     return () => void unlisten.then((f) => f());
   }, []);
+  return hotkey;
+}
+
+/** The hovered idle pill's buttons. Clicking one doesn't take focus. */
+function IslandButtons({ cursor }: { cursor: Point | null }) {
+  const buttons = React.useRef<(HTMLButtonElement | null)[]>([]);
+  const tip = cursor && ISLAND.find((_, i) => buttons.current[i] && near(buttons.current[i].getBoundingClientRect(), cursor, 0))?.id;
+  const hotkey = useHotkeyLabel();
 
   return (
     <div className="flex items-center gap-1" style={{ animation: "pill-in 140ms 80ms ease-out both" }}>
@@ -144,6 +162,92 @@ function IslandButtons({ cursor }: { cursor: Point | null }) {
   );
 }
 
+const MENU_WIDTH = 224;
+/** How long the cursor can stray from the menu before it closes. */
+const MENU_LINGER_MS = 350;
+
+type MenuItem = { id: string; label: string; icon: LucideIcon; run: () => Promise<void>; hint?: string; danger?: boolean };
+
+/**
+ * The right-click menu, drawn like the island rather than as the webview's own.
+ * Like the island, it can't take focus or see mouse moves, so its highlight
+ * follows the cursor Rust polls, and it closes once the cursor wanders off.
+ */
+const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point | null; phase: OverlayState["phase"]; onClose: () => void }>(
+  function ContextMenu({ at, cursor, phase, onClose }, ref) {
+    const hotkey = useHotkeyLabel();
+    const dictating = phase === "listening" || phase === "transcribing" || phase === "polishing";
+    const groups: MenuItem[][] = [
+      [{ id: "dictate", label: dictating ? "Stop dictation" : "Start dictation", icon: dictating ? Square : Mic, hint: hotkey, run: api.overlayToggleDictation }],
+      [
+        { id: "history", label: "History", icon: History, run: () => api.overlayOpen("history") },
+        { id: "settings", label: "Settings", icon: Settings2, run: () => api.overlayOpen("general") },
+      ],
+      [
+        { id: "reset", label: "Move to bottom", icon: ArrowDownToLine, run: api.overlayResetPosition },
+        // Outside dictation, a visible pill means "Always show the pill" is on.
+        ...(phase === "idle" ? [{ id: "hide", label: "Hide pill", icon: EyeOff, run: api.overlayHide }] : []),
+      ],
+      [{ id: "quit", label: "Quit Yammer", icon: Power, run: api.quit, danger: true }],
+    ];
+
+    const items = React.useRef(new Map<string, HTMLButtonElement>());
+    const hot =
+      cursor && [...items.current].find(([, el]) => el.isConnected && near(el.getBoundingClientRect(), cursor, 0))?.[0];
+
+    // Opens up and to the right of the click, kept inside the window.
+    const left = Math.min(Math.max(6, at.x - 10), window.innerWidth - MENU_WIDTH - 6);
+    const bottom = Math.max(6, window.innerHeight - at.y + 6);
+
+    return (
+      <motion.div
+        ref={ref}
+        role="menu"
+        initial={{ opacity: 0, y: 4, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.12, ease: "easeOut" }}
+        className="fixed z-30 origin-bottom-left rounded-2xl border border-white/10 bg-neutral-900/95 p-1.5 text-[13px] text-white shadow-[0_12px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl select-none"
+        style={{ left, bottom, width: MENU_WIDTH }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        {groups.map((group, g) => (
+          <React.Fragment key={g}>
+            {g > 0 && <div className="mx-2 my-1 h-px bg-white/[0.08]" />}
+            {group.map(({ id, label, icon: Icon, hint, danger, run }) => (
+              <button
+                key={id}
+                ref={(el) => {
+                  if (el) items.current.set(id, el);
+                  else items.current.delete(id);
+                }}
+                type="button"
+                role="menuitem"
+                className={cn(
+                  "flex h-8 w-full cursor-default items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors duration-75",
+                  danger ? "text-red-300/90" : "text-white/85",
+                  hot === id && (danger ? "bg-red-500/15 text-red-200" : "bg-white/10 text-white"),
+                )}
+                onClick={() => {
+                  onClose();
+                  void run().catch(() => {});
+                }}
+              >
+                <Icon className={cn("size-4 shrink-0", !danger && (hot === id ? "text-white" : "text-white/55"))} strokeWidth={2} />
+                <span className="flex-1 truncate">{label}</span>
+                {hint && <span className="shrink-0 text-[11px] text-white/40">{hint}</span>}
+              </button>
+            ))}
+          </React.Fragment>
+        ))}
+      </motion.div>
+    );
+  },
+);
+
 export function Overlay() {
   const [state, setState] = React.useState<OverlayState>({ phase: "hidden" });
   React.useEffect(() => {
@@ -157,12 +261,16 @@ export function Overlay() {
     return () => void unlisten.then((f) => f());
   }, []);
 
+  const [menu, setMenu] = React.useState<Point | null>(null);
+  React.useEffect(() => setMenu(null), [state.phase]);
+
   const sushiRef = React.useRef<HTMLDivElement>(null);
   const pillRef = React.useRef<HTMLDivElement>(null);
-  // Tell Rust where Sushi and the pill are, so only they take the mouse.
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  // Tell Rust where Sushi, the pill and an open menu are, so only they take the mouse.
   React.useEffect(() => {
     const report = () => {
-      const areas = [sushiRef.current, pillRef.current].flatMap((el) => {
+      const areas = [sushiRef.current, pillRef.current, menuRef.current].flatMap((el) => {
         if (!el) return [];
         const r = el.getBoundingClientRect();
         return [{ x: r.x, y: r.y, width: r.width, height: r.height }];
@@ -173,12 +281,12 @@ export function Overlay() {
     // Again once the pill's entrance animation has settled.
     const t = setTimeout(report, 200);
     const observer = new ResizeObserver(report);
-    for (const el of [sushiRef.current, pillRef.current]) if (el) observer.observe(el);
+    for (const el of [sushiRef.current, pillRef.current, menuRef.current]) if (el) observer.observe(el);
     return () => {
       clearTimeout(t);
       observer.disconnect();
     };
-  }, [state.phase]);
+  }, [state.phase, menu]);
 
   // The idle pill opens into the island while the cursor is on it or on Sushi.
   // The thin pill gets some slack to be easier to catch.
@@ -196,7 +304,16 @@ export function Overlay() {
     });
     return () => void unlisten.then((f) => f());
   }, []);
-  const open = state.phase === "idle" && hovered;
+  const open = state.phase === "idle" && hovered && !menu;
+
+  // A click elsewhere goes to another app, unseen, so the menu closes once
+  // the cursor has been off it (and off Sushi and the pill) for a moment.
+  const onMenu = !!menu && !!cursor && [menuRef.current, pillRef.current, sushiRef.current].some((el) => el && near(el.getBoundingClientRect(), cursor, 12));
+  React.useEffect(() => {
+    if (!menu || onMenu) return;
+    const t = setTimeout(() => setMenu(null), MENU_LINGER_MS);
+    return () => clearTimeout(t);
+  }, [menu, onMenu]);
 
   // Held while being dragged: until the window stops moving for a moment.
   const [held, setHeld] = React.useState(false);
@@ -218,6 +335,7 @@ export function Overlay() {
 
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    setMenu(null);
     // The native drag swallows the second click, so spot the double-click here.
     const now = Date.now();
     if (now - lastDown.current < 350) {
@@ -237,7 +355,15 @@ export function Overlay() {
   return (
     // Sushi stands on the pill's top edge, as it stands on Sush's composer, and
     // stays mounted across phases so it can act out each change.
-    <div className="flex h-svh flex-col items-center justify-end pb-2 [&>*]:cursor-grab" onMouseDown={onMouseDown}>
+    <div
+      className="flex h-svh flex-col items-center justify-end pb-2 [&>*]:cursor-grab"
+      onMouseDown={onMouseDown}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
+      }}
+    >
+      {menu && <ContextMenu ref={menuRef} at={menu} cursor={cursor} phase={state.phase} onClose={() => setMenu(null)} />}
       <div ref={sushiRef} className="relative z-10 -mb-px">
         <Sushi mood={moodOf(state)} held={held} className="text-white/70" />
       </div>

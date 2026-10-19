@@ -1,8 +1,10 @@
 // The settings window's shared state: settings (saved through Rust on every
 // change), which API keys are stored, and a toast for errors.
 
+import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 
+import { smooth } from "@/components/motion";
 import { api, errorMessage, on, type SecretName, type Settings } from "./tauri";
 import { setTheme } from "./theme";
 
@@ -82,19 +84,24 @@ export function SettingsProvider({ initial, children }: { initial: Settings; chi
   return (
     <SettingsContext.Provider value={{ settings, update, secrets, setSecret, toast }}>
       {children}
-      {toastState && (
-        <div
-          key={toastState.id}
-          role="status"
-          className={
-            "fixed right-4 bottom-4 z-50 max-w-sm rounded-lg border px-3.5 py-2.5 text-sm shadow-lg " +
-            (toastState.tone === "error" ? "border-destructive/30 bg-card text-destructive" : "bg-card")
-          }
-          style={{ animation: "pill-in 160ms ease-out" }}
-        >
-          {toastState.message}
-        </div>
-      )}
+      <AnimatePresence>
+        {toastState && (
+          <motion.div
+            key={toastState.id}
+            role="status"
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.98 }}
+            transition={smooth}
+            className={
+              "fixed right-4 bottom-4 z-50 max-w-sm rounded-lg border px-3.5 py-2.5 text-sm shadow-lg " +
+              (toastState.tone === "error" ? "border-destructive/30 bg-card text-destructive" : "bg-card")
+            }
+          >
+            {toastState.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </SettingsContext.Provider>
   );
 }

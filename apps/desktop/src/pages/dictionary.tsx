@@ -1,7 +1,9 @@
 import { ArrowRight, Plus, Trash2, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 
 import { PageHeader } from "@/App";
+import { smooth } from "@/components/motion";
 import { Button, Input, Intro, Mapping, Section } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import type { Replacement } from "@/lib/tauri";
@@ -43,21 +45,32 @@ function Words() {
         </Button>
       </form>
       {words.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 p-3">
-          {words.map((w) => (
-            <span key={w} className="inline-flex items-center gap-1 rounded-full border bg-background py-0.5 pr-1 pl-2.5 text-sm">
-              {w}
-              <button
-                type="button"
-                title={`Remove ${w}`}
-                aria-label={`Remove ${w}`}
-                className="rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                onClick={() => save(words.filter((x) => x !== w))}
+        <div className="relative flex flex-wrap gap-1.5 p-3">
+          {/* A removed chip pops out of the flow and the rest slide over to close the gap. */}
+          <AnimatePresence mode="popLayout" initial={false}>
+            {words.map((w) => (
+              <motion.span
+                key={w}
+                layout
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={smooth}
+                className="inline-flex items-center gap-1 rounded-full border bg-background py-0.5 pr-1 pl-2.5 text-sm"
               >
-                <X className="size-3" />
-              </button>
-            </span>
-          ))}
+                {w}
+                <button
+                  type="button"
+                  title={`Remove ${w}`}
+                  aria-label={`Remove ${w}`}
+                  className="rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  onClick={() => save(words.filter((x) => x !== w))}
+                >
+                  <X className="size-3" />
+                </button>
+              </motion.span>
+            ))}
+          </AnimatePresence>
         </div>
       ) : (
         <p className="px-4 py-3 text-xs text-muted-foreground">No words yet.</p>

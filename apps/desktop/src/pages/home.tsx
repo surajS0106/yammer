@@ -2,6 +2,7 @@ import { CheckCircle2, Circle, Copy, Download } from "lucide-react";
 import * as React from "react";
 
 import { PageHeader, PlatformContext, type PageId } from "@/App";
+import { AnimatedList, Collapse, ListRow } from "@/components/motion";
 import { NavCards } from "@/components/nav-cards";
 import { moodOf, Sushi } from "@/components/sushi";
 import { Badge, Button, Card, Hotkey, Kbd, Notice, Progress, Row, Textarea } from "@/components/ui";
@@ -155,16 +156,17 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
         </Row>
       </Card>
 
-      {hotkeyError && (
+      <Collapse show={!!hotkeyError}>
         <Notice tone="error">
           {hotkeyError}{" "}
           <button type="button" className="font-medium underline" onClick={() => go("general")}>
             Pick another hotkey
           </button>
         </Notice>
-      )}
+      </Collapse>
 
-      {!ready && (
+      {/* Folds away once the last step is done. */}
+      <Collapse show={!ready}>
         <section className="space-y-2">
           <h2 className="px-1 text-sm font-semibold">Get set up</h2>
           <Card className="divide-y">
@@ -207,7 +209,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
             )}
           </Card>
         </section>
-      )}
+      </Collapse>
 
       {platform?.wayland && (
         <Notice tone="warn">
@@ -243,15 +245,19 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
             <div key={day} className="space-y-1.5">
               <h3 className="px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{dayLabel(day)}</h3>
               <Card className="divide-y">
-                {entries.map((e) => (
-                  <div key={e.id} className="group flex items-start gap-3 px-4 py-3 @md:gap-4">
-                    <span className="w-14 shrink-0 pt-0.5 text-xs @md:w-16 text-muted-foreground tabular-nums">{timeFmt.format(e.at)}</span>
-                    <p className="min-w-0 flex-1 text-sm leading-relaxed">{e.text}</p>
-                    <Button size="icon" variant="ghost" className="pointer-fine:opacity-0 group-hover:opacity-100 focus-visible:opacity-100" title="Copy" onClick={() => void api.copyText(e.text)}>
-                      <Copy />
-                    </Button>
-                  </div>
-                ))}
+                <AnimatedList>
+                  {entries.map((e) => (
+                    <ListRow key={e.id}>
+                      <div className="group flex items-start gap-3 px-4 py-3 @md:gap-4">
+                        <span className="w-14 shrink-0 pt-0.5 text-xs @md:w-16 text-muted-foreground tabular-nums">{timeFmt.format(e.at)}</span>
+                        <p className="min-w-0 flex-1 text-sm leading-relaxed">{e.text}</p>
+                        <Button size="icon" variant="ghost" className="pointer-fine:opacity-0 group-hover:opacity-100 focus-visible:opacity-100" title="Copy" onClick={() => void api.copyText(e.text)}>
+                          <Copy />
+                        </Button>
+                      </div>
+                    </ListRow>
+                  ))}
+                </AnimatedList>
               </Card>
             </div>
           ))}

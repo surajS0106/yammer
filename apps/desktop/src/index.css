@@ -48,6 +48,23 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Motion: one easing for the whole app, a quick start that settles gently. Every transition-* utility
+   picks up the default duration and curve, so hovers and state changes share the same feel. */
+@theme {
+    --ease-smooth: cubic-bezier(0.32, 0.72, 0, 1);
+    --default-transition-duration: 200ms;
+    --default-transition-timing-function: var(--ease-smooth);
+    --animate-rise-in: rise-in 350ms var(--ease-smooth) backwards;
+    --animate-pop-in: pop-in 250ms var(--ease-smooth) backwards;
+
+    @keyframes rise-in {
+        from { opacity: 0; translate: 0 6px; }
+    }
+    @keyframes pop-in {
+        from { opacity: 0; scale: 0.96; }
+    }
+}
+
 :root {
     /* Neutrals carry a faint tint of the logo teal (hue ~190-205). */
     --background: oklch(0.995 0.003 190);
@@ -134,6 +151,38 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* A newly opened page's blocks rise in one after another. `backwards` fill leaves no transform
+   behind once they land, so nothing inside gets a new containing block. */
+.page-enter > * > * {
+  animation: var(--animate-rise-in);
+}
+.page-enter > * > :nth-child(2) { animation-delay: 40ms; }
+.page-enter > * > :nth-child(3) { animation-delay: 80ms; }
+.page-enter > * > :nth-child(4) { animation-delay: 120ms; }
+.page-enter > * > :nth-child(5) { animation-delay: 160ms; }
+.page-enter > * > :nth-child(6) { animation-delay: 200ms; }
+.page-enter > * > :nth-child(n + 7) { animation-delay: 240ms; }
+
+/* Switching light and dark crossfades the whole window (lib/theme.ts). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 250ms;
+  animation-timing-function: var(--ease-smooth);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
   }
 }
 

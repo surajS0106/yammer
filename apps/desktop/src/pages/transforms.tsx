@@ -2,6 +2,7 @@ import { Check, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
 import * as React from "react";
 
 import { PageHeader, type PageId } from "@/App";
+import { AnimatedList, Collapse, ListRow } from "@/components/motion";
 import { Badge, Button, Card, Input, Intro, Notice, Textarea } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import type { Transform } from "@/lib/tauri";
@@ -73,20 +74,20 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
         them on a note in the Scratchpad.
       </Intro>
 
-      {!settings.cleanup.enabled && (
+      <Collapse show={!settings.cleanup.enabled}>
         <Notice tone="warn">
           Transforms run through the AI cleanup model, which is off.{" "}
           <button type="button" className="font-medium underline" onClick={() => go("cleanup")}>
             Set up AI cleanup
           </button>
         </Notice>
-      )}
+      </Collapse>
 
-      {editing === "new" && (
+      <Collapse show={editing === "new"}>
         <Card>
           <Editor initial={{ id: `custom-${Date.now()}`, name: "", instructions: "" }} onSave={(t) => void save(t)} onCancel={() => setEditing(null)} />
         </Card>
-      )}
+      </Collapse>
 
       <section className="space-y-2">
         <div className="px-1">
@@ -95,29 +96,32 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
         </div>
         <Card className="divide-y" role="radiogroup" aria-label="Active transform">
           <Option checked={!active} onSelect={() => setActive("")} name="None" description="Paste what you said, cleaned up but not restyled." />
-          {list.map((t) =>
-            editing === t.id ? (
-              <Editor key={t.id} initial={t} onSave={(next) => void save(next)} onCancel={() => setEditing(null)} />
-            ) : (
-              <Option
-                key={t.id}
-                checked={active === t.id}
-                onSelect={() => setActive(t.id)}
-                name={t.name}
-                description={t.instructions}
-                actions={
-                  <>
-                    <Button size="icon" variant="ghost" title="Edit" onClick={() => setEditing(t.id)}>
-                      <Pencil />
-                    </Button>
-                    <Button size="icon" variant="ghost" title="Delete" onClick={() => remove(t.id)}>
-                      <Trash2 />
-                    </Button>
-                  </>
-                }
-              />
-            ),
-          )}
+          <AnimatedList>
+            {list.map((t) => (
+              <ListRow key={t.id}>
+                {editing === t.id ? (
+                  <Editor initial={t} onSave={(next) => void save(next)} onCancel={() => setEditing(null)} />
+                ) : (
+                  <Option
+                    checked={active === t.id}
+                    onSelect={() => setActive(t.id)}
+                    name={t.name}
+                    description={t.instructions}
+                    actions={
+                      <>
+                        <Button size="icon" variant="ghost" title="Edit" onClick={() => setEditing(t.id)}>
+                          <Pencil />
+                        </Button>
+                        <Button size="icon" variant="ghost" title="Delete" onClick={() => remove(t.id)}>
+                          <Trash2 />
+                        </Button>
+                      </>
+                    }
+                  />
+                )}
+              </ListRow>
+            ))}
+          </AnimatedList>
         </Card>
       </section>
 

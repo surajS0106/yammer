@@ -2,6 +2,7 @@ import { ArrowLeft, Copy, Loader2, Plus, Search, Trash2, Undo2, Wand2 } from "lu
 import * as React from "react";
 
 import { PageHeader, type PageId } from "@/App";
+import { AnimatedList, ListRow } from "@/components/motion";
 import { Button, Card, Hotkey, Input, Intro, Select, Textarea } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import { api, errorMessage } from "@/lib/tauri";
@@ -104,6 +105,7 @@ function NoteEditor({ note, onChange, onDelete, onBack }: { note: Note; onChange
           <Button
             size="sm"
             variant="ghost"
+            className="animate-pop-in"
             onClick={() => {
               onChange(undo);
               setUndo(null);
@@ -189,15 +191,19 @@ export function ScratchpadPage({ go }: { go: (page: PageId) => void }) {
         </div>
         {shown.length > 0 ? (
           <Card className="divide-y">
-            {shown.map((n) => (
-              <button key={n.id} type="button" className="block w-full px-4 py-3 text-left transition-colors hover:bg-accent/60" onClick={() => setOpen(n.id)}>
-                <div className="flex flex-wrap items-baseline gap-x-3">
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{titleOf(n)}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{when.format(n.updatedAt)}</span>
-                </div>
-                <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{n.text.trim().split("\n").slice(1).join(" ") || " "}</p>
-              </button>
-            ))}
+            <AnimatedList>
+              {shown.map((n) => (
+                <ListRow key={n.id}>
+                  <button type="button" className="block w-full px-4 py-3 text-left transition-colors hover:bg-accent/60" onClick={() => setOpen(n.id)}>
+                    <div className="flex flex-wrap items-baseline gap-x-3">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{titleOf(n)}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{when.format(n.updatedAt)}</span>
+                    </div>
+                    <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{n.text.trim().split("\n").slice(1).join(" ") || " "}</p>
+                  </button>
+                </ListRow>
+              ))}
+            </AnimatedList>
           </Card>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground">{q ? `Nothing matches “${query}”.` : "No notes yet."}</p>

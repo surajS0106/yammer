@@ -53,6 +53,18 @@ pub fn overlay_open(app: AppHandle, page: String) {
     let _ = app.emit_to("main", "navigate", page);
 }
 
+/// The overlay's right-click menu: "Hide the pill".
+#[tauri::command]
+pub fn overlay_hide(app: AppHandle) {
+    overlay::hide_pill(&app);
+}
+
+/// The overlay's right-click menu: "Quit Yammer".
+#[tauri::command]
+pub fn quit(app: AppHandle) {
+    app.exit(0);
+}
+
 /// The dictation hotkey as the island's tooltip shows it, e.g. "⌘⇧Space".
 #[tauri::command]
 pub fn hotkey_label(state: State<'_, AppState>) -> String {

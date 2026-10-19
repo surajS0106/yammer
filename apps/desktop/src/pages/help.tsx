@@ -10,10 +10,10 @@ function Item({ q, children }: { q: string; children: React.ReactNode }) {
   return (
     <details className="group px-4 py-3">
       <summary className="cursor-pointer list-none text-sm font-medium marker:hidden [&::-webkit-details-marker]:hidden">
-        <span className="mr-2 inline-block text-muted-foreground transition-transform group-open:rotate-90">›</span>
+        <span className="mr-2 inline-block text-muted-foreground transition-transform duration-300 group-open:rotate-90">›</span>
         {q}
       </summary>
-      <div className="mt-2 pl-4 text-xs leading-relaxed text-muted-foreground">{children}</div>
+      <div className="mt-2 animate-rise-in pl-4 text-xs leading-relaxed text-muted-foreground">{children}</div>
     </details>
   );
 }

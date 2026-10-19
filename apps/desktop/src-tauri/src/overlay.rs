@@ -167,6 +167,21 @@ fn mouse_down() -> bool {
     objc2_app_kit::NSEvent::pressedMouseButtons() & 1 != 0
 }
 
+/// Turn off "Always show the pill", as the setting in General would.
+pub fn hide_pill(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let settings = {
+        let mut settings = state.settings.lock().unwrap();
+        settings.overlay_always_visible = false;
+        settings.clone()
+    };
+    if let Err(e) = settings.save(&state.settings_path) {
+        eprintln!("saving settings failed: {e}");
+    }
+    let _ = app.emit("settings-changed", &settings);
+    set_always_visible(app, false);
+}
+
 /// Put the pill back at the bottom centre of the screen.
 pub fn reset_position(app: &AppHandle) {
     save_position(app, None);
