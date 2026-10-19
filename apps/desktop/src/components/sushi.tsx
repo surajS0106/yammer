@@ -361,9 +361,11 @@ export function Sushi({ mood, px = 2, interactive = false, held = false, restles
             transition: { duration: 0.55, times: [0, 0.45, 0.75, 1], ease: "easeOut" },
           })
         : Promise.resolve();
-    // The same act again means it's back on screen: carry on from rest
-    // (`hidden` below), restarting only the acts that loop.
+    // The same act again means it's back on screen, or StrictMode remounted it
+    // (which stops the drop-in at opacity 0): carry on from rest, restarting
+    // only the acts that loop.
     const resumed = from === act;
+    if (resumed) controls.set({ ...settle, opacity: 1 });
     void intro.then(async () => {
       if (!alive) return;
       if (resumed && act !== "held" && act !== "transcribing" && act !== "polishing") return;

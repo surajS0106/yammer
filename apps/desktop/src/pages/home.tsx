@@ -1,5 +1,5 @@
-import { BarChart3, Check, ChevronRight, Cloud, Copy, Cpu, Download, Mic, NotebookPen, Scissors, Sparkles } from "lucide-react";
-import { animate, motion, useMotionValue, useReducedMotion, type AnimationPlaybackControlsWithThen } from "motion/react";
+import { BarChart3, Check, Cloud, Copy, Cpu, Download, Mic, NotebookPen, Scissors, Sparkles } from "lucide-react";
+import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion, type AnimationPlaybackControlsWithThen } from "motion/react";
 import * as React from "react";
 
 import { PlatformContext, type PageId } from "@/App";
@@ -118,7 +118,7 @@ function Stroll({ idle, children }: { idle: boolean; children: React.ReactNode }
   }, [idle, reduce, x, y, rotate]);
 
   return (
-    <div ref={area} className="relative hidden h-full min-h-44 items-end justify-center pb-8 @2xl:flex">
+    <div ref={area} className="relative hidden h-full min-h-36 items-end justify-center pb-8 @2xl:flex">
       <motion.div style={{ x, y, rotate }} className="relative flex flex-col items-center">
         {children}
       </motion.div>
@@ -141,23 +141,45 @@ function SetupChip({ icon: Icon, title, onClick, children }: { icon: React.Eleme
   );
 }
 
-/** A row in the side lists: icon tile, title and detail, chevron. */
-function LinkRow({ icon: Icon, title, detail, onClick }: { icon: React.ElementType; title: string; detail: string; onClick: () => void }) {
+/** Copies a dictation; the icon pops to a green check, and stays visible, for a moment after. */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  React.useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [copied]);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors outline-none hover:bg-accent/50 focus-visible:bg-accent/50"
+    <Button
+      size="icon"
+      variant="ghost"
+      className={cn("-my-1 group-hover:opacity-100 focus-visible:opacity-100", copied ? "text-emerald-600 dark:text-emerald-400" : "pointer-fine:opacity-0")}
+      title={copied ? "Copied" : "Copy"}
+      aria-label={copied ? "Copied" : "Copy"}
+      onClick={() => void api.copyText(text).then(() => setCopied(true), () => {})}
     >
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/12 group-hover:text-primary">
-        <Icon className="size-4" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{title}</span>
-        <span className="block truncate text-xs text-muted-foreground">{detail}</span>
-      </span>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5" />
-    </button>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={copied ? "check" : "copy"}
+          initial={{ scale: 0.4, opacity: 0, rotate: copied ? -45 : 0 }}
+          animate={{ scale: 1, opacity: 1, rotate: 0 }}
+          exit={{ scale: 0.4, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 500, damping: 22 }}
+          className="flex"
+        >
+          {copied ? <Check strokeWidth={2.75} /> : <Copy />}
+        </motion.span>
+      </AnimatePresence>
+    </Button>
+  );
+}
+
+/** A page link in the header, with its detail as the tooltip. */
+function HeaderLink({ icon: Icon, title, detail, onClick }: { icon: React.ElementType; title: string; detail: string; onClick: () => void }) {
+  return (
+    <Button size="sm" variant="ghost" title={detail} onClick={onClick} className="text-muted-foreground hover:text-foreground">
+      <Icon /> {title}
+    </Button>
   );
 }
 
@@ -169,7 +191,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
   const history = useHistory();
   const stats = React.useMemo(() => computeStats(history), [history]);
   const weekWords = React.useMemo(() => lastDays(7).reduce((sum, d) => sum + (stats.byDay.get(d) ?? 0), 0), [stats]);
-  const recent = history.slice(0, 6);
+  const recent = history.slice(0, 20);
   const [hotkeyError, setHotkeyError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -196,7 +218,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
   const stepsDone = steps.filter(Boolean).length;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6 @3xl:h-full @3xl:gap-5">
       <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pt-2">
         <div className="min-w-0">
           <h1 className="text-3xl font-semibold tracking-tight text-balance">{greeting(new Date().getHours())}</h1>
@@ -210,10 +232,15 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
             )}
           </p>
         </div>
+        <nav className="-mr-2 flex flex-wrap gap-0.5">
+          <HeaderLink icon={BarChart3} title="Insights" detail="Speed, streaks, top words" onClick={() => go("insights")} />
+          <HeaderLink icon={Scissors} title="Snippets" detail="Say a trigger, paste a block" onClick={() => go("snippets")} />
+          <HeaderLink icon={NotebookPen} title="Scratchpad" detail="Brain-dump, then reshape" onClick={() => go("scratchpad")} />
+        </nav>
       </header>
 
       {/* The one loud surface on the page: how to dictate, with Sushi reacting live. */}
-      <Card className="overflow-hidden border-primary/20 bg-primary/[0.06] dark:bg-primary/[0.08]">
+      <Card className="shrink-0 overflow-hidden border-primary/20 bg-primary/[0.06] dark:bg-primary/[0.08]">
         {/* Sushi has the whole right side, the pixel grid, to roam. */}
         <div className="relative grid items-center @2xl:grid-cols-[auto_1fr]">
           {/* The grid is its own masked layer: WebKit drops animated children of a masked element, which hid Sushi. */}
@@ -227,7 +254,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
               WebkitMaskImage: "linear-gradient(to right, transparent, black 45%)",
             }}
           />
-          <div className="relative max-w-xl space-y-4 px-5 pt-6 pb-5 @md:px-7 @md:pt-7">
+          <div className="relative max-w-xl space-y-4 px-5 pt-5 pb-4 @md:px-7 @md:pt-6">
             <div className="flex flex-wrap items-center gap-1.5">
             <div
               aria-live="polite"
@@ -269,13 +296,13 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
         {/* Focused on arrival, so the hotkey works here straight away; the coral edge says it's live. */}
         <div className="border-t border-primary/15 bg-card/70 p-3">
           <div className="flex items-start gap-2.5 rounded-lg bg-background/60 px-3 py-2 ring-1 ring-primary/30 transition-shadow focus-within:ring-2 focus-within:ring-primary/60 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--brand)_12%,transparent)]">
-            <Mic className="mt-2 size-4 shrink-0 text-primary" />
+            <Mic className="mt-1.5 size-4 shrink-0 text-primary" />
             <Textarea
               autoFocus
-              rows={2}
+              rows={1}
               aria-label="Try dictating here"
               placeholder="Try it here: hold the hotkey and say something…"
-              className="min-h-12 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
+              className="min-h-8 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
           </div>
         </div>
@@ -359,9 +386,10 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
         </Notice>
       )}
 
-      <div className="grid items-start gap-6 @3xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <section className="min-w-0 space-y-2">
-          <div className="flex h-7 items-center justify-between px-1">
+      {/* The stats card sets the row's height; Recent fills it and scrolls inside. */}
+      <div className="grid items-start gap-6 @3xl:grid-cols-[minmax(0,1fr)_18rem] @3xl:items-stretch">
+        <section className="flex min-w-0 flex-col gap-2">
+          <div className="flex h-7 shrink-0 items-center justify-between px-1">
             <h2 className="text-sm font-semibold">Recent</h2>
             {recent.length > 0 && (
               <Button size="sm" variant="ghost" onClick={() => go("history")}>
@@ -369,58 +397,44 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
               </Button>
             )}
           </div>
-          {recent.length > 0 ? (
-            <Card className="overflow-hidden">
-              {groupByDay(recent).map(([day, entries]) => (
-                <div key={day} className="border-b last:border-b-0">
-                  <h3 className="bg-muted/50 px-4 py-1.5 text-xs font-medium text-muted-foreground">{dayLabel(day)}</h3>
-                  <div className="divide-y">
-                    <AnimatedList>
-                      {entries.map((e) => (
-                        <ListRow key={e.id}>
-                          <div className="group flex items-start gap-3 px-4 py-3 @md:gap-4">
-                            <span className="w-14 shrink-0 pt-0.5 text-xs text-muted-foreground tabular-nums @md:w-16">{timeFmt.format(e.at)}</span>
-                            <p className="line-clamp-3 min-w-0 flex-1 text-sm leading-relaxed">{e.text}</p>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="-my-1 pointer-fine:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                              title="Copy"
-                              onClick={() => void api.copyText(e.text)}
-                            >
-                              <Copy />
-                            </Button>
-                          </div>
-                        </ListRow>
-                      ))}
-                    </AnimatedList>
+          {/* Out of flow, so the list's length never stretches the row. */}
+          <div className="relative @3xl:flex-1">
+            {recent.length > 0 ? (
+              <Card className="overflow-y-auto @3xl:absolute @3xl:inset-x-0 @3xl:top-0 @3xl:max-h-full">
+                {groupByDay(recent).map(([day, entries]) => (
+                  <div key={day} className="border-b last:border-b-0">
+                    <h3 className="bg-muted/50 px-4 py-1.5 text-xs font-medium text-muted-foreground">{dayLabel(day)}</h3>
+                    <div className="divide-y">
+                      <AnimatedList>
+                        {entries.map((e) => (
+                          <ListRow key={e.id}>
+                            <div className="group flex items-start gap-3 px-4 py-3 @md:gap-4">
+                              <span className="w-14 shrink-0 pt-0.5 text-xs text-muted-foreground tabular-nums @md:w-16">{timeFmt.format(e.at)}</span>
+                              <p className="line-clamp-3 min-w-0 flex-1 text-sm leading-relaxed">{e.text}</p>
+                              <CopyButton text={e.text} />
+                            </div>
+                          </ListRow>
+                        ))}
+                      </AnimatedList>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </Card>
-          ) : (
-            <Card className="border-dashed bg-transparent px-6 py-10 text-center">
-              <p className="text-sm font-medium">Nothing here yet</p>
-              <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
-                Everything you dictate lands here, so you can copy it again later.
-              </p>
-            </Card>
-          )}
+                ))}
+              </Card>
+            ) : (
+              <Card className="border-dashed bg-transparent px-6 py-10 text-center @3xl:absolute @3xl:inset-0 @3xl:flex @3xl:flex-col @3xl:justify-center">
+                <p className="text-sm font-medium">Nothing here yet</p>
+                <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
+                  Everything you dictate lands here, so you can copy it again later.
+                </p>
+              </Card>
+            )}
+          </div>
         </section>
 
-        <aside className="@3xl:sticky @3xl:top-4 @3xl:pt-9">
+        <aside className="@3xl:pt-9">
           <WeekStats stats={stats} onOpen={() => go("insights")} />
         </aside>
       </div>
-
-      <section className="space-y-2">
-        <h2 className="px-1 text-sm font-semibold">Explore</h2>
-        <Card className="grid divide-y overflow-hidden @2xl:grid-cols-3 @2xl:divide-x @2xl:divide-y-0">
-          <LinkRow icon={BarChart3} title="Insights" detail="Speed, streaks, top words" onClick={() => go("insights")} />
-          <LinkRow icon={Scissors} title="Snippets" detail="Say a trigger, paste a block" onClick={() => go("snippets")} />
-          <LinkRow icon={NotebookPen} title="Scratchpad" detail="Brain-dump, then reshape" onClick={() => go("scratchpad")} />
-        </Card>
-      </section>
     </div>
   );
 }

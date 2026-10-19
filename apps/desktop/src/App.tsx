@@ -1,9 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { BarChart3, BookA, CircleHelp, Copy, History, Home, Minus, NotebookPen, PanelLeft, Scissors, Settings, Square, Wand2, X } from "lucide-react";
+import { Copy, Minus, PanelLeft, Square, X } from "lucide-react";
 import { MotionConfig } from "motion/react";
 import * as React from "react";
 
-import { HoverHighlight } from "@/components/ui/motion-highlight";
+import { navPageIds, Sidebar } from "@/components/sidebar";
 import { Segmented } from "@/components/ui";
 import { CleanupPage } from "@/pages/cleanup";
 import { DictionaryPage } from "@/pages/dictionary";
@@ -32,18 +32,6 @@ export type PageId =
   | "cleanup"
   | "help";
 
-type NavItem = { id: PageId; label: string; icon: React.ElementType };
-
-const pages: NavItem[] = [
-  { id: "home", label: "Home", icon: Home },
-  { id: "insights", label: "Insights", icon: BarChart3 },
-  { id: "dictionary", label: "Dictionary", icon: BookA },
-  { id: "snippets", label: "Snippets", icon: Scissors },
-  { id: "transforms", label: "Transforms", icon: Wand2 },
-  { id: "scratchpad", label: "Scratchpad", icon: NotebookPen },
-  { id: "history", label: "History", icon: History },
-];
-
 /** The three settings pages share one nav entry and switch with tabs. */
 const settingsTabs: { value: "general" | "engine" | "cleanup"; label: string }[] = [
   { value: "general", label: "General" },
@@ -52,15 +40,10 @@ const settingsTabs: { value: "general" | "engine" | "cleanup"; label: string }[]
 ];
 const isSettings = (id: PageId) => settingsTabs.some((t) => t.value === id);
 
-const footer: (NavItem & { active: (page: PageId) => boolean })[] = [
-  { id: "general", label: "Settings", icon: Settings, active: isSettings },
-  { id: "help", label: "Help", icon: CircleHelp, active: (p) => p === "help" },
-];
-
 /** Pages that lay out dashboards or card grids get more room; forms and lists stay at a readable measure. */
 const widePages = new Set<PageId>(["insights", "help"]);
 
-const allIds = new Set<string>([...pages.map((p) => p.id), ...settingsTabs.map((t) => t.value), "help"]);
+const allIds = new Set<string>([...navPageIds, ...settingsTabs.map((t) => t.value), "help"]);
 
 /** Known synchronously, so the title bar lays out right on first paint. */
 const isMac = navigator.userAgent.includes("Mac");
@@ -122,33 +105,17 @@ export default function App() {
             inert={collapsed}
             className={cn(
               "shrink-0 overflow-hidden transition-[width] duration-300 ease-smooth motion-reduce:transition-none",
-              collapsed ? "w-0" : "w-52",
+              collapsed ? "w-0" : "w-56",
             )}
           >
-            <nav
+            <div
               className={cn(
-                "flex h-full w-52 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar p-3 transition-[opacity,translate] duration-300 ease-smooth motion-reduce:transition-none",
+                "h-full transition-[opacity,translate] duration-300 ease-smooth motion-reduce:transition-none",
                 collapsed && "-translate-x-4 opacity-0",
               )}
             >
-              {/* No native title bar: on macOS this strip sits under the traffic lights. */}
-              {isMac && <div data-tauri-drag-region className="h-7 shrink-0" />}
-              <div data-tauri-drag-region className="mb-4 flex items-center gap-2 px-2 pt-1">
-                <img src="/yammer-mark.png" alt="" className="pointer-events-none size-6" />
-                <span className="pointer-events-none text-xl font-semibold tracking-tight">Yammer</span>
-              </div>
-              {/* One hover background glides between items as the pointer moves, as in Sush's sidebar. */}
-              <HoverHighlight className="flex flex-1 flex-col gap-0.5" highlightClassName="rounded-md bg-sidebar-accent/60">
-                {pages.map((item) => (
-                  <NavButton key={item.id} item={item} active={page === item.id} onClick={() => setPage(item.id)} />
-                ))}
-                <div className="mt-auto space-y-0.5 border-t pt-3">
-                  {footer.map((item) => (
-                    <NavButton key={item.id} item={item} active={item.active(page)} onClick={() => setPage(item.id)} />
-                  ))}
-                </div>
-              </HoverHighlight>
-            </nav>
+              <Sidebar page={page} go={setPage} settingsActive={isSettings(page)} dragStrip={isMac} />
+            </div>
           </div>
           <main className="flex min-w-0 flex-1 flex-col">
             {/* With the sidebar hidden, the macOS traffic lights sit at the left of this bar. */}
@@ -157,15 +124,21 @@ export default function App() {
               onToggleSidebar={() => setCollapsed((c) => !c)}
             />
             <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-              <div className="px-4 pt-2 pb-6 sm:px-6 sm:pt-4 sm:pb-8 lg:px-10">
-                <div className={cn("@container mx-auto w-full", widePages.has(page) ? "max-w-6xl" : page === "home" ? "max-w-4xl" : "max-w-3xl")}>
+              {/* Home is one screen: the chain down to it takes the full height, and its Recent list scrolls inside. */}
+              <div className={cn("px-4 pt-2 pb-6 sm:px-6 sm:pt-4 sm:pb-8 lg:px-10", page === "home" && "h-full")}>
+                <div
+                  className={cn(
+                    "@container mx-auto w-full",
+                    widePages.has(page) ? "max-w-6xl" : page === "home" ? "h-full max-w-4xl" : "max-w-3xl",
+                  )}
+                >
                   {isSettings(page) && (
                     <div className="mb-6">
                       <Segmented value={page as (typeof settingsTabs)[number]["value"]} options={settingsTabs} onChange={setPage} />
                     </div>
                   )}
                   {/* Keyed so each page mounts fresh and its blocks rise in (.page-enter in index.css). */}
-                  <div key={page} className="page-enter">
+                  <div key={page} className={cn("page-enter", page === "home" && "h-full")}>
                     {page === "home" && <HomePage go={setPage} />}
                     {page === "insights" && <InsightsPage go={setPage} />}
                     {page === "dictionary" && <DictionaryPage />}
@@ -243,26 +216,6 @@ function WindowButton({ label, danger, onClick, children }: { label: string; dan
       )}
     >
       {children}
-    </button>
-  );
-}
-
-function NavButton({ item: { label, icon: Icon }, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      data-hover-item
-      className={cn(
-        "relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        active ? "font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {/* The selected page sits in place, as in Sush; only the hover background (HoverHighlight) moves. */}
-      {active && <span className="absolute inset-0 rounded-md bg-sidebar-accent" />}
-      <Icon className="relative size-4 shrink-0" />
-      <span className="relative truncate">{label}</span>
     </button>
   );
 }
