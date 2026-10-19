@@ -6,6 +6,12 @@ Last updated: 2026-10-19
 
 ## What changed
 
+### 2026-10-19 (dark icon never reached the catalog; second Dock tile)
+- `AppIcon.icon/icon.json` set both `image-name` and `image-name-specializations`. With both present, `actool` uses `image-name` and drops the dark entry, so every `Assets.car` so far held only the light artwork (`assetutil --info` lists `AppIcon_Assets/light` and no `dark`). The idle Dock tile, Finder and Launchpad showed the light icon in dark mode. `image-name` is removed; Sush had the same file and got the same fix.
+- `build-mac-icon.sh` now fails if the compiled catalog lacks either `AppIcon_Assets/light` or `AppIcon_Assets/dark` (checked with `assetutil`), so the Mac icon workflow can't commit a one-appearance catalog again. Sush's script got the same check.
+- `dock::set_icon` does nothing on macOS 26 when the bundle has `CFBundleIconName` (`system_swaps_icon`, as in Sush's `dock_icon.rs`). The system then draws the running tile too, following the user's icon style (Default, Dark, Clear, Tinted) instead of a fixed image. The runtime swap stays for `tauri dev` and older macOS.
+- `dock::show` runs the duplicate-tile check again after the Dock icon appears. After a reinstall the Dock added the second "recent app" tile only once Yammer became a Regular app, after the startup check had already found one tile.
+
 ### 2026-10-19 (Yammer: new logo, Apple corner, stale-icon guard)
 - Renamed Larp to Yammer everywhere a user or build sees it: product and window names, binary `yammer`, crate `yammer`, bundle id `com.sush.yammer`, keyring service, tray, plists, UI copy, workflows and skills. The repo folder and GitHub remote keep the name `larp`.
 - New sources replace the ribbon L: `icons/source/yammer-{light,dark,mark}.png`. `larp-*.png` and `public/larp-mark.png` are deleted; the in-app mark is now `public/yammer-mark.png` (`src/App.tsx`).

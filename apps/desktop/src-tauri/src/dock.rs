@@ -1,7 +1,9 @@
 //! macOS: the Dock icon shows only while the main window is open (not closed or
-//! minimized), and follows the
-//! system light/dark setting. The bundled `icon.icns` is static (light), so Finder
-//! and Launchpad keep showing that one.
+//! minimized), and follows the system light/dark setting. On macOS 26 the system
+//! does that itself from the bundle's `Assets.car`, including the Clear and Tinted
+//! icon styles, so the app leaves it alone there. Elsewhere (`tauri dev`, older
+//! macOS) the bundle has only the static light `icon.icns`, so the running app
+//! sets the matching Dock image itself.
 
 use std::ptr::NonNull;
 use std::time::Duration;
@@ -10,7 +12,9 @@ use block2::RcBlock;
 use objc2::runtime::AnyObject;
 use objc2::{AllocAnyThread, MainThreadMarker};
 use objc2_app_kit::{NSApplication, NSImage, NSWindowDidDeminiaturizeNotification, NSWindowDidMiniaturizeNotification};
-use objc2_foundation::{NSData, NSNotification, NSNotificationCenter, NSOperationQueue};
+use objc2_foundation::{
+    ns_string, NSBundle, NSData, NSNotification, NSNotificationCenter, NSOperatingSystemVersion, NSOperationQueue, NSProcessInfo,
+};
 use tauri::{ActivationPolicy, AppHandle, Manager, Theme, WebviewWindow};
 
 const LIGHT: &[u8] = include_bytes!("../icons/macos-light.png");
@@ -19,12 +23,23 @@ const DARK: &[u8] = include_bytes!("../icons/macos-dark.png");
 /// Call from the main thread (app setup and window events run there).
 pub fn set_icon(theme: Theme) {
     let Some(mtm) = MainThreadMarker::new() else { return };
+    if system_swaps_icon() {
+        return;
+    }
     let bytes = if matches!(theme, Theme::Dark) { DARK } else { LIGHT };
     let Some(image) = NSImage::initWithData(NSImage::alloc(), &NSData::with_bytes(bytes)) else { return };
     let ns_app = NSApplication::sharedApplication(mtm);
     unsafe { ns_app.setApplicationIconImage(Some(&image)) };
     // The Dock doesn't always redraw the tile for a new image on its own.
     ns_app.dockTile().display();
+}
+
+/// Whether macOS already switches the icon: 26+ with an asset-catalog icon (`CFBundleIconName`).
+/// Setting an image over it would pin one look and ignore the user's icon style.
+fn system_swaps_icon() -> bool {
+    let tahoe = NSOperatingSystemVersion { majorVersion: 26, minorVersion: 0, patchVersion: 0 };
+    NSProcessInfo::processInfo().isOperatingSystemAtLeastVersion(tahoe)
+        && NSBundle::mainBundle().objectForInfoDictionaryKey(ns_string!("CFBundleIconName")).is_some()
 }
 
 /// Show or hide the Dock icon. macOS keeps a Dock app's windows off other apps'
@@ -38,6 +53,7 @@ pub fn show(app: &AppHandle, visible: bool) {
         // the policy changes; an icon set before then is lost. So set the themed
         // one once the tile is there, and again in case the Dock was slow.
         let handle = app.clone();
+        let id = app.config().identifier.clone();
         std::thread::spawn(move || {
             for delay in [300, 1200] {
                 std::thread::sleep(Duration::from_millis(delay));
@@ -47,6 +63,11 @@ pub fn show(app: &AppHandle, visible: bool) {
                     set_icon(theme.unwrap_or(Theme::Light));
                 });
             }
+            // After a reinstall the Dock may not match the new bundle to its old tile and add a
+            // second one only now, after the startup check has run, so check again.
+            if let Err(e) = remove_duplicate_tiles(&id) {
+                eprintln!("dock: couldn't check for duplicate tiles: {e}");
+            }
         });
     }
 }
@@ -54,7 +75,8 @@ pub fn show(app: &AppHandle, visible: bool) {
 /// The Dock sometimes keeps two "recent app" tiles for Yammer, both pointing at the
 /// same bundle (seen after reinstalling a rebuilt copy). Only one of them is the
 /// running app; the other shows the static icon and never goes away on its own.
-/// At startup, keep the first Yammer tile and drop the rest. The Dock rereads its
+/// At startup, and again each time the Dock icon appears (`show`), keep the first
+/// Yammer tile and drop the rest. The Dock rereads its
 /// preferences only on restart, so it's restarted, but only when a duplicate
 /// was actually found.
 pub fn dedupe_recents(app: &AppHandle) {
