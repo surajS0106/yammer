@@ -1,4 +1,5 @@
 import { BarChart3, Check, ChevronRight, Cloud, Copy, Cpu, Download, Mic, NotebookPen, Scissors, Sparkles } from "lucide-react";
+import { animate, motion, useMotionValue, useReducedMotion, type AnimationPlaybackControlsWithThen } from "motion/react";
 import * as React from "react";
 
 import { PlatformContext, type PageId } from "@/App";
@@ -71,6 +72,58 @@ function statusText(s: OverlayState): string | null {
     default:
       return null;
   }
+}
+
+/** Sushi wanders the hero's open right side while idle, with a waddle and a lean into each walk. It stays put mid-dictation. */
+function Stroll({ idle, children }: { idle: boolean; children: React.ReactNode }) {
+  const area = React.useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotate = useMotionValue(0);
+
+  React.useEffect(() => {
+    if (!idle || reduce) return;
+    let alive = true;
+    let timer = 0;
+    let walking: AnimationPlaybackControlsWithThen[] = [];
+    const rest = (ms: number) => (timer = window.setTimeout(walk, ms));
+    function walk() {
+      if (!alive) return;
+      // Room either side of centre, less half of Sushi and its plate.
+      const half = Math.max(0, (area.current?.clientWidth ?? 0) / 2 - 72);
+      const from = Math.max(-half, Math.min(half, x.get()));
+      let to = (Math.random() * 2 - 1) * half;
+      if (Math.abs(to - from) < 48) to = -Math.sign(from || 1) * (0.4 + Math.random() * 0.6) * half;
+      const dist = Math.abs(to - from);
+      if (dist < 24) return void rest(4000);
+      const dir = Math.sign(to - from);
+      const duration = dist / 60;
+      const steps = Math.max(2, Math.round(duration / 0.3));
+      walking = [
+        animate(x, to, { duration, ease: "easeInOut" }),
+        animate(y, [0, -3, 0], { duration: duration / steps, repeat: steps - 1, ease: "easeOut" }),
+        animate(rotate, [0, 5 * dir, 5 * dir, 0], { duration, times: [0, 0.15, 0.85, 1] }),
+      ];
+      void walking[0].then(() => rest(5000 + Math.random() * 6000));
+    }
+    rest(2500 + Math.random() * 2500);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+      for (const a of walking) a.stop();
+      animate(y, 0, { duration: 0.15 });
+      animate(rotate, 0, { duration: 0.15 });
+    };
+  }, [idle, reduce, x, y, rotate]);
+
+  return (
+    <div ref={area} className="relative hidden h-full min-h-44 items-end justify-center pb-8 @2xl:flex">
+      <motion.div style={{ x, y, rotate }} className="relative flex flex-col items-center">
+        {children}
+      </motion.div>
+    </div>
+  );
 }
 
 /** A setting beside the hero's status pill; opens its settings tab. */
@@ -161,8 +214,8 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
 
       {/* The one loud surface on the page: how to dictate, with Sushi reacting live. */}
       <Card className="overflow-hidden border-primary/20 bg-primary/[0.06] dark:bg-primary/[0.08]">
-        {/* Sushi stands right beside the text at any width; the pixel grid, not Sushi, fills the rest. */}
-        <div className="relative grid items-center @2xl:grid-cols-[auto_12rem_1fr]">
+        {/* Sushi has the whole right side, the pixel grid, to roam. */}
+        <div className="relative grid items-center @2xl:grid-cols-[auto_1fr]">
           {/* The grid is its own masked layer: WebKit drops animated children of a masked element, which hid Sushi. */}
           <div
             aria-hidden
@@ -207,13 +260,11 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
               <Kbd className="h-5 min-w-5 text-[11px]">Esc</Kbd> cancels.
             </p>
           </div>
-          {/* Sushi on its plate, over the pixel grid that echoes the sprite. */}
-          <div className="relative hidden h-full min-h-44 items-end justify-center pb-8 @2xl:flex">
-            <div className="relative flex flex-col items-center">
-              <Sushi mood={moodOf(status)} px={4} interactive className="relative z-10 text-muted-foreground" />
-              <span className="-mt-2 h-3 w-28 rounded-[50%] bg-foreground/10 dark:bg-foreground/15" />
-            </div>
-          </div>
+          {/* Sushi on its plate, strolling the pixel grid that echoes the sprite. */}
+          <Stroll idle={moodOf(status) === "idle"}>
+            <Sushi mood={moodOf(status)} px={4} interactive className="relative z-10 text-muted-foreground" />
+            <span className="-mt-2 h-3 w-28 rounded-[50%] bg-foreground/10 dark:bg-foreground/15" />
+          </Stroll>
         </div>
         {/* Focused on arrival, so the hotkey works here straight away; the coral edge says it's live. */}
         <div className="border-t border-primary/15 bg-card/70 p-3">
