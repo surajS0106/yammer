@@ -26,7 +26,7 @@ use tauri_plugin_autostart::MacosLauncher;
 use crate::dictation::{Dictation, Input};
 
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // Must come first: a second launch hands its arguments to this instance and exits.
         // `yammer --toggle` is how Wayland users bind a system shortcut to dictation.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
@@ -66,10 +66,9 @@ pub fn run() {
                 window.set_decorations(false)?;
             }
 
-            // No Dock icon until the main window opens (dock::show).
+            // No Dock icon until the main window opens (dock::show); see dock::start_hidden.
             #[cfg(target_os = "macos")]
             {
-                dock::show(app.handle(), false);
                 dock::dedupe_recents(app.handle());
                 if let Some(window) = app.get_webview_window("main") {
                     dock::follow_minimize(&window);
@@ -127,24 +126,26 @@ pub fn run() {
             whisper::model_delete,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building Yammer")
-        .run(|app, event| match event {
-            // Keep running in the tray when the last window is hidden or closed.
-            tauri::RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(),
-            // Every way out (tray Quit, Dock Quit, logout) passes here before exit() runs C++ destructors.
-            tauri::RunEvent::Exit => app.state::<whisper::Whisper>().unload(),
-            // After Tauri's own startup icon (dev builds set one on Ready), so ours wins.
-            #[cfg(target_os = "macos")]
-            tauri::RunEvent::Ready => {
-                if let Some(window) = app.get_webview_window("main") {
-                    dock::set_icon(window.theme().unwrap_or(tauri::Theme::Light));
-                }
+        .expect("error while building Yammer");
+    #[cfg(target_os = "macos")]
+    let app = dock::start_hidden(app);
+    app.run(|app, event| match event {
+        // Keep running in the tray when the last window is hidden or closed.
+        tauri::RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(),
+        // Every way out (tray Quit, Dock Quit, logout) passes here before exit() runs C++ destructors.
+        tauri::RunEvent::Exit => app.state::<whisper::Whisper>().unload(),
+        // After Tauri's own startup icon (dev builds set one on Ready), so ours wins.
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Ready => {
+            if let Some(window) = app.get_webview_window("main") {
+                dock::set_icon(window.theme().unwrap_or(tauri::Theme::Light));
             }
-            // Clicking the Dock icon brings back the hidden window.
-            #[cfg(target_os = "macos")]
-            tauri::RunEvent::Reopen { .. } => tray::show_main(app),
-            _ => {}
-        });
+        }
+        // Clicking the Dock icon brings back the hidden window.
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => tray::show_main(app),
+        _ => {}
+    });
 }
 
 /// Yammer was called Larp (bundle id `com.sush.larp`), and the app's folders are named after the bundle id.

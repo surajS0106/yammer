@@ -4,5 +4,8 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Yammer listens while you hold the dictation hotkey, to turn your speech into text.</string>
+  <!-- Launch without a Dock tile; dock::show adds one when the main window opens. -->
+  <key>LSUIElement</key>
+  <true/>
 </dict>
 </plist>

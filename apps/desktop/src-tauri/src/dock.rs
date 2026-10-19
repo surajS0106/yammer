@@ -15,7 +15,7 @@ use objc2_app_kit::{NSApplication, NSImage, NSWindowDidDeminiaturizeNotification
 use objc2_foundation::{
     ns_string, NSBundle, NSData, NSNotification, NSNotificationCenter, NSOperatingSystemVersion, NSOperationQueue, NSProcessInfo,
 };
-use tauri::{ActivationPolicy, AppHandle, Manager, Theme, WebviewWindow};
+use tauri::{ActivationPolicy, App, AppHandle, Manager, Theme, WebviewWindow};
 
 const LIGHT: &[u8] = include_bytes!("../icons/macos-light.png");
 const DARK: &[u8] = include_bytes!("../icons/macos-dark.png");
@@ -40,6 +40,15 @@ fn system_swaps_icon() -> bool {
     let tahoe = NSOperatingSystemVersion { majorVersion: 26, minorVersion: 0, patchVersion: 0 };
     NSProcessInfo::processInfo().isOperatingSystemAtLeastVersion(tahoe)
         && NSBundle::mainBundle().objectForInfoDictionaryKey(ns_string!("CFBundleIconName")).is_some()
+}
+
+/// Start as an accessory app, so launching adds no Dock tile until `show` does. tao otherwise makes the
+/// app Regular as it finishes launching, before `setup` runs, and the Dock answered that tile going on,
+/// off and on again within a moment with a second Yammer tile. Must be called before `App::run`; the
+/// bundle's `LSUIElement` keeps macOS from adding a tile even earlier, at exec.
+pub fn start_hidden(mut app: App) -> App {
+    app.set_activation_policy(ActivationPolicy::Accessory);
+    app
 }
 
 /// Show or hide the Dock icon. macOS keeps a Dock app's windows off other apps'
@@ -73,8 +82,9 @@ pub fn show(app: &AppHandle, visible: bool) {
 }
 
 /// The Dock sometimes keeps two "recent app" tiles for Yammer, both pointing at the
-/// same bundle (seen after reinstalling a rebuilt copy). Only one of them is the
-/// running app; the other shows the static icon and never goes away on its own.
+/// same bundle. Builds before `start_hidden` and `LSUIElement` made them at launch,
+/// and they stay in the Dock's preferences after the update. Only one of them is the
+/// running app; the other never goes away on its own.
 /// At startup, and again each time the Dock icon appears (`show`), keep the first
 /// Yammer tile and drop the rest. The Dock rereads its
 /// preferences only on restart, so it's restarted, but only when a duplicate

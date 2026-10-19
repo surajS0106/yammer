@@ -10,5 +10,10 @@
        rather than merging. Keep the two in sync. -->
   <key>NSMicrophoneUsageDescription</key>
   <string>Yammer listens while you hold the dictation hotkey, to turn your speech into text.</string>
+  <!-- Launch without a Dock tile; dock::show adds one when the main window opens. Without this,
+       macOS gives every launch a tile before any app code runs, including a second launch that
+       single-instance quits at once, and the Dock kept that one as a second Yammer tile. -->
+  <key>LSUIElement</key>
+  <true/>
 </dict>
 </plist>
