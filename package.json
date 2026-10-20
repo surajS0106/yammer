@@ -4,8 +4,8 @@
   "workspaces": ["apps/*"],
   "scripts": {
     "dev": "bun --filter desktop tauri dev",
-    "build": "bun --filter desktop tauri build",
-    "build:mac": "export PATH=\"$HOME/.cargo/bin:$PATH\" MACOSX_DEPLOYMENT_TARGET=11.0 && bun --filter desktop tauri build --bundles dmg",
+    "build": "bun --filter desktop tauri build --config src-tauri/tauri.local.conf.json",
+    "build:mac": "export PATH=\"$HOME/.cargo/bin:$PATH\" MACOSX_DEPLOYMENT_TARGET=11.0 && bun --filter desktop tauri build --bundles dmg --config src-tauri/tauri.local.conf.json",
     "typecheck": "bun --filter '*' typecheck"
   }
 }

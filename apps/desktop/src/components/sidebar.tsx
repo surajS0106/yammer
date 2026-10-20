@@ -1,4 +1,4 @@
-import { BarChart3, BookA, CircleHelp, Flame, History, Home, NotebookPen, Scissors, Settings, Wand2 } from "lucide-react";
+import { BarChart3, BookA, CircleArrowUp, CircleHelp, Flame, History, Home, LoaderCircle, NotebookPen, Scissors, Settings, Wand2 } from "lucide-react";
 import { motion } from "motion/react";
 import * as React from "react";
 
@@ -8,6 +8,7 @@ import { Hotkey } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import { computeStats, dayKey, formatCompact, useHistory } from "@/lib/stats";
 import { api, on, type OverlayState } from "@/lib/tauri";
+import { installUpdate, useUpdate } from "@/lib/updater";
 import { cn } from "@/lib/utils";
 
 type NavItem = { id: PageId; label: string; icon: React.ElementType };
@@ -112,6 +113,7 @@ export function Sidebar({
 
         <div className="mt-auto flex flex-col gap-3 pt-6">
           <MicCard streak={stats.dayStreak} todayWords={stats.byDay.get(today) ?? 0} onClick={() => go("home")} />
+          <UpdateCard />
           <div className="flex flex-col gap-0.5 border-t pt-2">
             {footer.map((item) => (
               <NavButton key={item.id} item={item} active={item.active} onClick={() => go(item.id)} />
@@ -249,6 +251,46 @@ function MicCard({ streak, todayWords, onClick }: { streak: number; todayWords: 
         <span className="tabular-nums">{formatCompact(todayWords)} today</span>
       </span>
     </button>
+  );
+}
+
+/** Only there when a newer release is out: one click downloads it, installs it and relaunches Yammer. */
+function UpdateCard() {
+  const update = useUpdate();
+  if (update.phase === "idle") return null;
+
+  const installing = update.phase === "installing";
+  const pct = installing && update.progress !== null ? Math.round(update.progress * 100) : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={SPRING}
+      className="rounded-xl border border-primary/40 bg-primary/8 p-3 text-xs"
+    >
+      <div className="flex items-center gap-2 font-medium">
+        <CircleArrowUp className="size-4 shrink-0 text-primary" />
+        Yammer {update.version} is out
+      </div>
+      {update.phase === "error" && (
+        <p className="mt-1.5 text-[11px] text-destructive" title={update.message}>
+          Couldn't update. Try again.
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() => void installUpdate()}
+        disabled={installing}
+        className="relative mt-2.5 flex w-full items-center justify-center gap-1.5 overflow-hidden rounded-lg bg-primary px-2.5 py-1.5 font-medium text-primary-foreground shadow-sm shadow-primary/30 transition-[filter] outline-none hover:brightness-110 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:hover:brightness-100"
+      >
+        {pct !== null && (
+          <span aria-hidden className="absolute inset-y-0 left-0 bg-white/20 transition-[width]" style={{ width: `${pct}%` }} />
+        )}
+        {installing && <LoaderCircle className="relative size-3.5 animate-spin" />}
+        <span className="relative">{installing ? (pct !== null ? `Updating… ${pct}%` : "Updating…") : "Upgrade now"}</span>
+      </button>
+    </motion.div>
   );
 }
 

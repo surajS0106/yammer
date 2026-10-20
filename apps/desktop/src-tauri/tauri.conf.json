@@ -30,9 +30,17 @@
       "csp": "default-src 'self'; script-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://localhost:1430"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5MUM2NjRBMjk1RjU1M0YKUldRL1ZWOHBTbVljR1NobDRWQ3dCUVRIWVFVb1ArbjJjcmNwQ1VRdDVhazIrZDJxL3Fwc2h0R1UK",
+      "endpoints": ["https://github.com/surajS0106/yammer/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
