@@ -377,9 +377,17 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
         <Notice tone="warn">
           <p className="font-medium">You’re on Wayland.</p>
           <p className="mt-1">
-            Wayland doesn’t let apps listen for global hotkeys or press keys. Bind a system shortcut (GNOME: Settings → Keyboard → Custom
-            Shortcuts) to <code className="rounded bg-muted px-1">yammer --toggle</code>.{" "}
-            {platform.wtype || platform.ydotool
+            {platform.gnomeShortcut ? (
+              <>Yammer added its hotkey to GNOME’s keyboard shortcuts, so tap it to start and tap again to finish. </>
+            ) : (
+              <>
+                Wayland doesn’t let apps listen for global hotkeys or press keys. Bind a system shortcut (GNOME: Settings → Keyboard → Custom
+                Shortcuts) to <code className="rounded bg-muted px-1">yammer --toggle</code>.{" "}
+              </>
+            )}
+            {platform.gnomeShortcut
+              ? "To paste for you, Yammer asks GNOME for keyboard control once; allow it in the dialog."
+              : platform.wtype || platform.ydotool
               ? `Pasting will use ${platform.wtype ? "wtype" : "ydotool"}.`
               : "Install wtype or ydotool for auto-paste; otherwise the text is copied and you press Ctrl+V."}
           </p>

@@ -402,15 +402,26 @@ export function Overlay() {
   const [hovered, setHovered] = React.useState(false);
   React.useEffect(() => setHovered(false), [state.phase]);
   React.useEffect(() => {
-    const unlisten = on.overlayCursor((p) => {
+    const point = (p: Point | null) => {
       setCursor(p);
       setHovered((was) => {
         if (!p) return false;
         const pad = was ? 4 : 10;
         return [pillRef.current, sushiRef.current].some((el) => el && near(el.getBoundingClientRect(), p, pad));
       });
-    });
-    return () => void unlisten.then((f) => f());
+    };
+    const unlisten = on.overlayCursor(point);
+    // Where the webview does get the mouse (Linux, over the hit areas), its own
+    // events are fresher: under XWayland the polled cursor freezes on leaving.
+    const move = (e: MouseEvent) => point({ x: e.clientX, y: e.clientY });
+    const leave = () => point(null);
+    document.addEventListener("mousemove", move);
+    document.documentElement.addEventListener("mouseleave", leave);
+    return () => {
+      void unlisten.then((f) => f());
+      document.removeEventListener("mousemove", move);
+      document.documentElement.removeEventListener("mouseleave", leave);
+    };
   }, []);
   const open = state.phase === "idle" && hovered && !menu;
 

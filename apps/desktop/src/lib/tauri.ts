@@ -106,6 +106,7 @@ export interface HistoryEntry {
 export interface Platform {
   os: string;
   wayland: boolean;
+  gnomeShortcut: boolean;
   wtype: boolean;
   ydotool: boolean;
   accessibility: boolean | null;

@@ -35,7 +35,9 @@ export function GeneralPage() {
         <Row
           label="Hotkey"
           description={
-            platform?.wayland
+            platform?.gnomeShortcut
+              ? "Added to GNOME's keyboard shortcuts. Tap to start, tap again to finish; Esc cancels."
+              : platform?.wayland
               ? "Wayland only delivers this to X11 apps. Bind a system shortcut to `yammer --toggle` instead."
               : "Hold to talk, or tap to start and tap again to finish."
           }

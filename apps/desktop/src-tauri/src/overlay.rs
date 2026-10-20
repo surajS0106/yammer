@@ -90,6 +90,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     crate::panel::make_panel(&window);
     #[cfg(target_os = "macos")]
     crate::panel::keep_rendering(&window);
+    // tao sets the input shape on the GdkWindow, which a never-shown GTK
+    // window doesn't have yet, so it panics unless the window is realized.
+    #[cfg(target_os = "linux")]
+    gtk::prelude::WidgetExt::realize(&window.gtk_window()?);
     window.set_ignore_cursor_events(true)?;
     watch_cursor(app.clone());
     Ok(())
@@ -111,6 +115,8 @@ fn watch_cursor(app: AppHandle) {
                 .is_some_and(|(x, y)| HIT_AREAS.lock().unwrap().iter().any(|r| x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height));
             if over != GRABBABLE.load(Ordering::SeqCst) {
                 GRABBABLE.store(over, Ordering::SeqCst);
+                // Linux shapes the window's input to the hit areas instead (`set_hit_areas`).
+                #[cfg(not(target_os = "linux"))]
                 let _ = window.set_ignore_cursor_events(!over);
             }
             if cursor != last {
@@ -137,8 +143,41 @@ fn cursor_in(app: &AppHandle, window: &WebviewWindow) -> Option<(f64, f64)> {
     ((0.0..SIZE).contains(&x) && (0.0..SIZE).contains(&y)).then_some((x, y))
 }
 
-pub fn set_hit_areas(areas: Vec<HitArea>) {
+pub fn set_hit_areas(app: &AppHandle, areas: Vec<HitArea>) {
+    #[cfg(target_os = "linux")]
+    shape_input(app, &areas);
+    #[cfg(not(target_os = "linux"))]
+    let _ = app;
     *HIT_AREAS.lock().unwrap() = areas;
+}
+
+/// Extra px around each hit area that takes the mouse, so the thin pill is easier to catch.
+#[cfg(target_os = "linux")]
+const HIT_SLACK: f64 = 10.0;
+
+/// Linux: only the hit areas take the mouse, always. The overlay runs under
+/// XWayland (lib.rs), which only knows where the cursor is while it's over an
+/// X11 window, so polling can't see it reach a click-through overlay that sits
+/// over a Wayland app. Over a hit area it's over the overlay itself, so the
+/// poll sees it and the webview gets the mouse.
+#[cfg(target_os = "linux")]
+fn shape_input(app: &AppHandle, areas: &[HitArea]) {
+    use gtk::cairo::{RectangleInt, Region};
+    use gtk::prelude::WidgetExt;
+
+    let Some(window) = app.get_webview_window(LABEL) else { return };
+    let rects: Vec<_> = areas
+        .iter()
+        .map(|r| {
+            let (x, y) = ((r.x - HIT_SLACK).floor() as i32, (r.y - HIT_SLACK).floor() as i32);
+            let (right, bottom) = ((r.x + r.width + HIT_SLACK).ceil() as i32, (r.y + r.height + HIT_SLACK).ceil() as i32);
+            RectangleInt::new(x, y, right - x, bottom - y)
+        })
+        .collect();
+    let _ = app.run_on_main_thread(move || {
+        let Some(gdk) = window.gtk_window().ok().and_then(|w| w.window()) else { return };
+        gdk.input_shape_combine_region(&Region::create_rectangles(&rects), 0, 0);
+    });
 }
 
 /// The window moved. If the user dragged it, remember where, once it's dropped.

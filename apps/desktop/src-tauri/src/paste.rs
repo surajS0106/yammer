@@ -2,8 +2,9 @@
 //! synthesize the paste shortcut in the focused app, then put the user's
 //! own clipboard back.
 //!
-//! Wayland doesn't let apps inject keys, so there we try `wtype` and
-//! `ydotool` and otherwise leave the text on the clipboard for Ctrl+V.
+//! Wayland doesn't let apps inject keys, so there we try `wtype`, GNOME's
+//! RemoteDesktop portal and `ydotool`, and otherwise leave the text on the
+//! clipboard for Ctrl+V.
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -108,6 +109,14 @@ fn wayland_paste() -> Result<(), String> {
     // wtype speaks the virtual-keyboard protocol (wlroots compositors, KDE).
     if run("wtype", &["-M", "ctrl", "-k", "v", "-m", "ctrl"]) {
         return Ok(());
+    }
+    // GNOME doesn't speak virtual-keyboard, but lets the user allow keyboard control (portal.rs).
+    #[cfg(target_os = "linux")]
+    if crate::gnome::available() {
+        match crate::portal::paste() {
+            Ok(()) => return Ok(()),
+            Err(e) => eprintln!("RemoteDesktop portal paste failed: {e}"),
+        }
     }
     // ydotool goes through uinput, so it works on GNOME too (needs ydotoold running).
     // 29 = KEY_LEFTCTRL, 47 = KEY_V.

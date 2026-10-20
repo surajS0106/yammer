@@ -8,12 +8,15 @@ mod dictation;
 mod dock;
 mod error;
 mod focus;
+mod gnome;
 mod hotkey;
 mod overlay;
 #[cfg(target_os = "macos")]
 mod panel;
 mod paste;
 mod platform;
+#[cfg(target_os = "linux")]
+mod portal;
 mod recorder;
 mod secrets;
 mod sounds;
@@ -27,12 +30,21 @@ use tauri_plugin_autostart::MacosLauncher;
 use crate::dictation::{Dictation, Input};
 
 pub fn run() {
+    // Wayland has no keep-above, so GNOME lets other apps cover the overlay and ignores
+    // where it's placed. Under XWayland both work. Must be set before GTK starts.
+    // Overrides an inherited GDK_BACKEND=wayland, which VS Code's terminal (for one) passes on.
+    if paste::is_wayland() {
+        std::env::set_var("GDK_BACKEND", "x11");
+    }
     let app = tauri::Builder::default()
         // Must come first: a second launch hands its arguments to this instance and exits.
-        // `yammer --toggle` is how Wayland users bind a system shortcut to dictation.
+        // `yammer --toggle` is how Wayland users bind a system shortcut to dictation
+        // (gnome.rs binds it, and `--cancel` to Esc while recording, on GNOME).
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if args.iter().any(|a| a == "--toggle") {
                 app.state::<Dictation>().send(Input::Toggle);
+            } else if args.iter().any(|a| a == "--cancel") {
+                app.state::<Dictation>().send(Input::Cancel);
             } else {
                 tray::show_main(app);
             }
@@ -45,11 +57,20 @@ pub fn run() {
         .manage(whisper::Whisper::default())
         .manage(hotkey::Hotkey::default())
         .setup(|app| {
+            // Esc stays bound to `--cancel` if Yammer died while recording. Free it rather than open the app.
+            if std::env::args().any(|a| a == "--cancel") {
+                gnome::set_cancel(false);
+                std::process::exit(0);
+            }
             let config_dir = app.path().app_config_dir()?;
             let data_dir = app.path().app_data_dir()?;
             adopt_larp_dir(&config_dir);
             adopt_larp_dir(&data_dir);
             secrets::init(&config_dir);
+            #[cfg(target_os = "linux")]
+            if gnome::available() {
+                portal::init(&config_dir);
+            }
             app.manage(state::AppState::new(config_dir, data_dir)?);
             app.manage(dictation::spawn(app.handle().clone()));
 

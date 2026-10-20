@@ -30,10 +30,14 @@ Grant **Microphone** access when asked. Then turn on Yammer under System Setting
 
 ### Linux
 
-X11 sessions work fully. **Wayland** (the Ubuntu default) doesn't let apps grab global hotkeys or send keystrokes, so:
+X11 sessions work fully. **Wayland** (the Ubuntu default) doesn't let apps grab global hotkeys or send keystrokes.
 
-1. Bind a system shortcut (GNOME: Settings → Keyboard → Custom Shortcuts) to `yammer --toggle`. Press it once to start and again to stop.
-2. For auto-paste, install `wtype` (wlroots or KDE) or `ydotool` (any compositor, including GNOME, with `ydotoold` running). Without either, the text is copied to the clipboard and you press Ctrl+V yourself.
+On **GNOME** Yammer works around both itself. It adds its hotkey to GNOME's keyboard shortcuts, so you tap it to start and tap again to stop; Esc cancels. At launch GNOME asks you, once, to allow Yammer to control the keyboard, which it needs in order to press Ctrl+V for you.
+
+On other Wayland compositors:
+
+1. Bind a system shortcut to `yammer --toggle`. Press it once to start and again to stop.
+2. For auto-paste, install `wtype` (wlroots or KDE) or `ydotool` (any compositor, with `ydotoold` running). Without either, the text is copied to the clipboard and you press Ctrl+V yourself.
 
 ## Develop
 

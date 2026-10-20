@@ -29,8 +29,8 @@ pub fn overlay_state() -> OverlayState {
 
 /// Sushi and the pill, which take the mouse so the overlay can be dragged.
 #[tauri::command]
-pub fn overlay_hit_areas(areas: Vec<overlay::HitArea>) {
-    overlay::set_hit_areas(areas);
+pub fn overlay_hit_areas(app: AppHandle, areas: Vec<overlay::HitArea>) {
+    overlay::set_hit_areas(&app, areas);
 }
 
 /// Put the dragged pill back at the bottom centre of the screen.

@@ -10,6 +10,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutEv
 
 use crate::dictation::{Dictation, Input};
 use crate::error::{AppError, AppResult};
+use crate::gnome;
 
 #[derive(Default)]
 pub struct Hotkey {
@@ -48,23 +49,22 @@ pub fn register(app: &AppHandle, accelerator: &str) -> AppResult<()> {
     if let Some(old) = current.take() {
         let _ = app.global_shortcut().unregister(old);
     }
-    let result = app
-        .global_shortcut()
-        .register(shortcut)
-        .map_err(|e| AppError::Invalid(format!("Couldn't use {} as the hotkey ({e}). Another app may already be using it.", display(accelerator))));
-    match &result {
-        Ok(()) => {
-            *current = Some(shortcut);
-            *state.error.lock().unwrap() = None;
-        }
-        Err(e) => *state.error.lock().unwrap() = Some(e.to_string()),
-    }
+    let result = if gnome::available() {
+        gnome::bind(&shortcut).map_err(|e| AppError::Invalid(format!("Couldn't add {} as a GNOME shortcut ({e}).", display(accelerator))))
+    } else {
+        app.global_shortcut().register(shortcut).map(|()| *current = Some(shortcut)).map_err(|e| {
+            AppError::Invalid(format!("Couldn't use {} as the hotkey ({e}). Another app may already be using it.", display(accelerator)))
+        })
+    };
+    *state.error.lock().unwrap() = result.as_ref().err().map(|e| e.to_string());
     result
 }
 
 /// Release the hotkey (while the UI records a new one) or take it back.
 pub fn suspend(app: &AppHandle, suspended: bool, accelerator: &str) -> AppResult<()> {
-    if suspended {
+    if suspended && gnome::available() {
+        gnome::unbind().map_err(AppError::Invalid)
+    } else if suspended {
         if let Some(old) = app.state::<Hotkey>().current.lock().unwrap().take() {
             let _ = app.global_shortcut().unregister(old);
         }
@@ -75,6 +75,9 @@ pub fn suspend(app: &AppHandle, suspended: bool, accelerator: &str) -> AppResult
 }
 
 pub fn set_escape(app: &AppHandle, on: bool) {
+    if gnome::available() {
+        return gnome::set_cancel(on);
+    }
     let gs = app.global_shortcut();
     if on {
         if !gs.is_registered(escape()) {

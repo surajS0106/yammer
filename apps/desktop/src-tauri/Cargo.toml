@@ -37,6 +37,12 @@ enigo = "0.6"
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 sha2 = "0.10"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Realizes the hidden overlay before it's made click-through (overlay.rs).
+gtk = "0.18"
+# Presses Ctrl+V on GNOME Wayland, which has no other way in (portal.rs).
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "remote_desktop", "screencast"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 # Apple Silicon and recent Intel Macs run whisper on the GPU.
 whisper-rs = { version = "0.16", features = ["metal"] }

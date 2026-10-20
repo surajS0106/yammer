@@ -9,6 +9,8 @@ pub struct Platform {
     os: &'static str,
     /// Linux on Wayland: no global hotkeys or synthetic keystrokes for apps.
     wayland: bool,
+    /// GNOME on Wayland: the hotkey is a GNOME custom shortcut instead (gnome.rs).
+    gnome_shortcut: bool,
     /// Wayland helpers found on PATH.
     wtype: bool,
     ydotool: bool,
@@ -17,7 +19,7 @@ pub struct Platform {
     version: &'static str,
 }
 
-fn on_path(program: &str) -> bool {
+pub fn on_path(program: &str) -> bool {
     let Some(path) = std::env::var_os("PATH") else { return false };
     std::env::split_paths(&path).any(|dir| dir.join(program).is_file())
 }
@@ -36,6 +38,7 @@ pub fn info() -> Platform {
     Platform {
         os: std::env::consts::OS,
         wayland: crate::paste::is_wayland(),
+        gnome_shortcut: crate::gnome::available(),
         wtype: linux && on_path("wtype"),
         ydotool: linux && on_path("ydotool"),
         #[cfg(target_os = "macos")]
