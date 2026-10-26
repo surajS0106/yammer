@@ -31,6 +31,10 @@ pub struct Settings {
     pub language: String,
     /// Names and terms to bias recognition toward, e.g. "Sush, Tauri, Kubernetes".
     pub vocabulary: String,
+    /// After a dictation, offer to add names and jargon it heard to the vocabulary.
+    pub suggest_words: bool,
+    /// Suggested words the user turned down, so they aren't offered again.
+    pub ignored_words: Vec<String>,
     pub cloud: CloudStt,
     pub cleanup: Cleanup,
     /// The settings window's colour scheme.
@@ -209,6 +213,15 @@ impl Cleanup {
     }
 }
 
+fn parse_words(s: &str) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    s.split([',', '\n'])
+        .map(str::trim)
+        .filter(|w| !w.is_empty() && seen.insert(w.to_lowercase()))
+        .map(String::from)
+        .collect()
+}
+
 pub fn default_hotkey() -> &'static str {
     "CommandOrControl+Shift+Space"
 }
@@ -227,6 +240,8 @@ impl Default for Settings {
             local_model: DEFAULT_MODEL.into(),
             language: "en".into(),
             vocabulary: String::new(),
+            suggest_words: true,
+            ignored_words: Vec::new(),
             cloud: CloudStt::default(),
             cleanup: Cleanup::default(),
             theme: Theme::System,
@@ -248,6 +263,26 @@ impl Settings {
                 format!("On-device · {name}")
             }
             Engine::Cloud => self.cloud.label(),
+        }
+    }
+
+    /// The vocabulary as a list: split on commas and newlines, trimmed, with
+    /// repeats (ignoring case) dropped. Matches `parseWords` in the UI.
+    pub fn vocabulary_words(&self) -> Vec<String> {
+        parse_words(&self.vocabulary)
+    }
+
+    /// Add `words` to the end of the vocabulary, skipping ones already in it.
+    pub fn add_vocabulary(&mut self, words: &[String]) {
+        self.vocabulary = parse_words(&format!("{},{}", self.vocabulary, words.join(","))).join(", ");
+    }
+
+    /// Remember turned-down suggestions, skipping ones already remembered.
+    pub fn ignore_words(&mut self, words: &[String]) {
+        for w in words.iter().map(|w| w.trim()).filter(|w| !w.is_empty()) {
+            if !self.ignored_words.iter().any(|i| i.eq_ignore_ascii_case(w)) {
+                self.ignored_words.push(w.to_string());
+            }
         }
     }
 
@@ -341,6 +376,17 @@ mod tests {
         s.save(&path).unwrap();
         assert_eq!(Settings::load(&path), s);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn adds_and_ignores_words_without_repeats() {
+        let mut s = Settings { vocabulary: "Sush,\n Tauri, sush".into(), ..Settings::default() };
+        assert_eq!(s.vocabulary_words(), ["Sush", "Tauri"]);
+        s.add_vocabulary(&["tauri".into(), " Wispr Flow ".into()]);
+        assert_eq!(s.vocabulary, "Sush, Tauri, Wispr Flow");
+        s.ignore_words(&["Monday".into(), "monday".into(), " ".into()]);
+        assert_eq!(s.ignored_words, ["Monday"]);
+        assert!(Settings::default().suggest_words);
     }
 
     #[test]

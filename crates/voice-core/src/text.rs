@@ -1,7 +1,108 @@
 //! Deterministic text fixes applied to every dictation, with no model involved:
-//! dictionary corrections and snippet expansion.
+//! dictionary corrections and snippet expansion. Also spots words worth
+//! offering to add to the Dictionary.
 
-use crate::settings::{Replacement, Snippet};
+use std::collections::HashSet;
+
+use crate::settings::{Replacement, Settings, Snippet};
+
+/// At most this many words are offered after one dictation.
+const MAX_SUGGESTIONS: usize = 5;
+
+/// Capitalised by grammar or habit, not because they're names or jargon.
+const COMMON: &[&str] = &[
+    "i",
+    "i'm",
+    "i'll",
+    "i've",
+    "i'd",
+    "ok",
+    "okay",
+    "am",
+    "pm",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+];
+
+/// Names, product names, acronyms and jargon in `text` that the Dictionary
+/// doesn't know yet: words capitalised mid-sentence ("Kubernetes"), with
+/// inner capitals ("OpenAI", "API"), or mixing letters and digits ("GPT4").
+/// Neighbouring capitalised words make one phrase ("Wispr Flow"). Words in
+/// the vocabulary, turned down before, or written by a correction are skipped.
+pub fn suggest_words(text: &str, settings: &Settings) -> Vec<String> {
+    let known: HashSet<String> = settings
+        .vocabulary_words()
+        .into_iter()
+        .chain(settings.ignored_words.iter().cloned())
+        .chain(settings.replacements.iter().map(|r| r.to.clone()))
+        .map(|w| w.trim().to_lowercase())
+        .collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut offer = |run: &mut Vec<&str>| {
+        let phrase = run.join(" ");
+        let lower = phrase.to_lowercase();
+        let all_known = known.contains(&lower) || run.iter().all(|w| known.contains(&w.to_lowercase()));
+        if !run.is_empty() && !all_known && !out.iter().any(|o| o.to_lowercase() == lower) {
+            out.push(phrase);
+        }
+        run.clear();
+    };
+
+    for line in text.lines() {
+        let mut sentence_start = true;
+        let mut run = Vec::new();
+        for raw in line.split_whitespace() {
+            let word = raw.trim_matches(|c: char| !c.is_alphanumeric());
+            let word = word.strip_suffix("'s").or_else(|| word.strip_suffix("’s")).unwrap_or(word);
+            // URLs and emails come from snippets, not speech.
+            let spoken = !raw.contains(['@', '/']);
+            if spoken && looks_like_a_name(word, sentence_start) {
+                run.push(word);
+                if !raw.ends_with(word) {
+                    offer(&mut run);
+                }
+            } else {
+                offer(&mut run);
+            }
+            if !word.is_empty() {
+                let end = raw.trim_end_matches(['"', '\'', '”', '’', ')', ']']);
+                sentence_start = end.ends_with(['.', '!', '?', ':']);
+            }
+        }
+        offer(&mut run);
+    }
+    out.truncate(MAX_SUGGESTIONS);
+    out
+}
+
+fn looks_like_a_name(word: &str, sentence_start: bool) -> bool {
+    let mut chars = word.chars();
+    let Some(first) = chars.next() else { return false };
+    if word.chars().count() < 2 || COMMON.contains(&word.to_lowercase().as_str()) {
+        return false;
+    }
+    let has_upper = word.chars().any(char::is_uppercase);
+    let inner_upper = chars.any(char::is_uppercase);
+    let mixed = word.chars().any(|c| c.is_ascii_digit()) && word.chars().any(char::is_alphabetic);
+    inner_upper || (mixed && has_upper) || (first.is_uppercase() && !sentence_start)
+}
 
 /// The snippet whose trigger is the whole utterance ("My LinkedIn." → its text).
 /// Speech-to-text adds capitals and punctuation, so both are ignored.
@@ -111,6 +212,36 @@ mod tests {
         let r = [rep("sush", "Sush"), rep("sush pack", "sush-pack")];
         let s = [snip("my email", "me@example.com")];
         assert_eq!(apply("Send sush pack to my email, thanks", &r, &s), "Send sush-pack to me@example.com, thanks");
+    }
+
+    fn suggest(text: &str) -> Vec<String> {
+        suggest_words(text, &Settings::default())
+    }
+
+    #[test]
+    fn suggests_names_acronyms_and_jargon() {
+        assert_eq!(suggest("We deploy to Kubernetes with OpenAI and GPT4."), ["Kubernetes", "OpenAI", "GPT4"]);
+        assert_eq!(suggest("I think we should try Wispr Flow, then Sush's app."), ["Wispr Flow", "Sush"]);
+        assert_eq!(suggest("Check the API on AWS and the API again"), ["API", "AWS"]);
+    }
+
+    #[test]
+    fn skips_sentence_starts_and_ordinary_words() {
+        assert!(suggest("Hello there. Today I'm busy! Okay, see you on Monday at 5 PM.").is_empty());
+        assert!(suggest("Meeting notes:\nAction items for the 2nd week").is_empty());
+        assert!(suggest("Mail me@Example.com or see https://Sush.dev/Docs").is_empty());
+    }
+
+    #[test]
+    fn skips_known_words() {
+        let s = Settings {
+            vocabulary: "Kubernetes, wispr".into(),
+            ignored_words: vec!["openai".into()],
+            replacements: vec![rep("sush pack", "Sush-Pack")],
+            ..Settings::default()
+        };
+        assert!(suggest_words("so Kubernetes and OpenAI and Sush-Pack", &s).is_empty());
+        assert_eq!(suggest_words("so Wispr Flow", &s), ["Wispr Flow"]);
     }
 
     #[test]

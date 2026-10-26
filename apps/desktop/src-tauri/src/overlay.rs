@@ -63,7 +63,11 @@ pub enum OverlayState {
     Message { text: String, error: bool },
     /// No text box had focus, so the transcript is shown in a card to copy.
     /// The card closes itself (`dismiss`) on its timer, its close button or Copy.
-    Transcript { text: String },
+    /// `words` are new words to offer for the Dictionary, as in `Words`.
+    Transcript { text: String, words: Vec<String> },
+    /// The dictation was pasted and had words the Dictionary doesn't know; a
+    /// card offers to add them. It closes itself (`dismiss`) like the transcript card.
+    Words { words: Vec<String> },
     /// Not dictating, but the pill stays on screen ("Always show the pill").
     Idle,
     Hidden,
@@ -334,9 +338,9 @@ pub fn hide(app: &AppHandle) {
     show(app, OverlayState::Hidden);
 }
 
-/// Close the transcript card, unless something newer has replaced it.
+/// Close the transcript or words card, unless something newer has replaced it.
 pub fn dismiss(app: &AppHandle) {
-    if matches!(current(), OverlayState::Transcript { .. }) {
+    if matches!(current(), OverlayState::Transcript { .. } | OverlayState::Words { .. }) {
         hide(app);
     }
 }

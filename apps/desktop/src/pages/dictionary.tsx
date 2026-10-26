@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { PageHeader } from "@/App";
 import { smooth } from "@/components/motion";
-import { Button, Input, Intro, Mapping, Section } from "@/components/ui";
+import { Button, Input, Intro, Mapping, Row, Section, Switch } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import type { Replacement } from "@/lib/tauri";
 
@@ -75,6 +75,23 @@ function Words() {
       ) : (
         <p className="px-4 py-3 text-xs text-muted-foreground">No words yet.</p>
       )}
+      <Row
+        label="Suggest new words"
+        description={
+          settings.ignoredWords.length
+            ? `After a dictation, offer to add names and jargon it heard. You turned down ${settings.ignoredWords.length === 1 ? "1 word" : `${settings.ignoredWords.length} words`}, so they won't be offered again.`
+            : "After a dictation, offer to add names and jargon it heard."
+        }
+      >
+        <div className="flex items-center gap-2">
+          {settings.ignoredWords.length > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => void update({ ignoredWords: [] })}>
+              Offer them again
+            </Button>
+          )}
+          <Switch checked={settings.suggestWords} onChange={(suggestWords) => void update({ suggestWords })} label="Suggest new words" />
+        </div>
+      </Row>
     </Section>
   );
 }

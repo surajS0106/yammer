@@ -4,7 +4,9 @@
 // drag either to move the overlay anywhere, double-click to send it home.
 // Hovering the idle pill opens it into the island: a row of buttons, each
 // named by a tooltip above it. When a dictation had no text box to go into,
-// the pill becomes a card holding the transcript, with Sushi inside it. The overlay never takes focus, so macOS sends it
+// the pill becomes a card holding the transcript, with Sushi inside it. When a
+// dictation heard words the Dictionary doesn't know, a card offers to add them
+// (inside the transcript card, if that's showing). The overlay never takes focus, so macOS sends it
 // no mouse moves; hover comes from the cursor position Rust polls instead.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -18,6 +20,7 @@ import {
   Loader2,
   type LucideIcon,
   Mic,
+  Plus,
   Power,
   Settings2,
   Square,
@@ -253,22 +256,189 @@ const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point 
 
 /** How long the transcript card stays up. Hovering it holds the countdown. */
 const TRANSCRIPT_MS = 12_000;
+/** How long the new-words card stays up, held the same way. */
+const WORDS_MS = 10_000;
 const RING_RADIUS = 14;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+const CARD =
+  "relative z-20 flex w-[304px] flex-col gap-3 rounded-[20px] border border-white/10 bg-neutral-900/95 p-4 text-white shadow-[0_12px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl";
+
+/** A card's text button (Copy, Add, …), lit while the cursor is on it. */
+function pillButton(hot: boolean) {
+  return cn(
+    "flex h-8 cursor-pointer items-center gap-1.5 rounded-full px-4 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-50",
+    hot ? "bg-white/20 text-white" : "bg-white/12 text-white/90",
+  );
+}
+
+/** A card's close button, with a ring around it that counts down to closing the card. */
+function CloseRing({ ms, paused, hot, onClose, buttonRef }: { ms: number; paused: boolean; hot: boolean; onClose: () => void; buttonRef: React.RefObject<HTMLButtonElement | null> }) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      aria-label="Close"
+      className={cn(
+        "relative grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-white/70 transition-colors",
+        hot && "bg-white/10 text-white",
+      )}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={onClose}
+    >
+      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 32 32" aria-hidden>
+        <circle cx={16} cy={16} r={RING_RADIUS} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth={2} />
+        <circle
+          cx={16}
+          cy={16}
+          r={RING_RADIUS}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeDasharray={RING_LENGTH}
+          style={
+            {
+              "--ring-length": RING_LENGTH,
+              animation: `ring-drain ${ms}ms linear forwards`,
+              animationPlayState: paused ? "paused" : "running",
+            } as React.CSSProperties
+          }
+          onAnimationEnd={onClose}
+        />
+      </svg>
+      <X className="size-3.5" strokeWidth={2.5} />
+    </button>
+  );
+}
+
+/**
+ * Words the dictation heard that the Dictionary doesn't know, as chips that
+ * click on and off. Add saves the ticked ones and never offers the rest
+ * again; "Don't ask" never offers any of them again. `actions` are the
+ * card's own buttons, kept on the same row.
+ */
+function NewWords({
+  words,
+  label,
+  over,
+  onDone,
+  actions,
+}: {
+  words: string[];
+  label?: string;
+  over: (el: HTMLElement | null) => boolean;
+  onDone: () => void;
+  actions?: React.ReactNode;
+}) {
+  const [picked, setPicked] = React.useState(() => new Set(words));
+  // How many were added, once saved.
+  const [added, setAdded] = React.useState<number | null>(null);
+  const chips = React.useRef<(HTMLButtonElement | null)[]>([]);
+  const skipRef = React.useRef<HTMLButtonElement>(null);
+  const addRef = React.useRef<HTMLButtonElement>(null);
+
+  const save = (add: string[]) =>
+    void api.dictionaryAdd(add, words.filter((w) => !add.includes(w))).then(() => {
+      setAdded(add.length);
+      onDone();
+    }, () => {});
+  const toggle = (w: string) =>
+    setPicked((p) => {
+      const next = new Set(p);
+      if (!next.delete(w)) next.add(w);
+      return next;
+    });
+
+  return (
+    <>
+      {added === null ? (
+        <div className="flex flex-col gap-2">
+          {label && <p className="text-[11px] leading-4 text-white/55">{label}</p>}
+          <div className="flex flex-wrap gap-1.5">
+            {words.map((w, i) => {
+              const on = picked.has(w);
+              return (
+                <button
+                  key={w}
+                  ref={(el) => {
+                    chips.current[i] = el;
+                  }}
+                  type="button"
+                  aria-pressed={on}
+                  className={cn(
+                    "flex h-7 max-w-full cursor-pointer items-center gap-1 rounded-full border px-2.5 text-xs transition-colors",
+                    on ? "border-white/15 bg-white/12 text-white" : "border-white/10 text-white/45",
+                    over(chips.current[i]) && "bg-white/20 text-white",
+                  )}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => toggle(w)}
+                >
+                  {on ? <Check className="size-3 shrink-0 text-emerald-400" strokeWidth={2.5} /> : <Plus className="size-3 shrink-0" strokeWidth={2.5} />}
+                  <span className={cn("truncate", !on && "line-through decoration-white/30")}>{w}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <p className="flex items-center gap-1.5 text-xs text-white/75">
+          <Check className="size-3.5 shrink-0 text-emerald-400" strokeWidth={2.5} />
+          {added ? `Added ${added === 1 ? "1 word" : `${added} words`} to your Dictionary` : "Got it. I won't ask about those again."}
+        </p>
+      )}
+      {(actions || added === null) && (
+        <div className="flex items-center justify-end gap-1.5">
+          {actions}
+          {added === null && (
+            <>
+              <button
+                ref={skipRef}
+                type="button"
+                className={cn(
+                  "h-8 cursor-pointer rounded-full px-3 text-xs font-medium transition-colors",
+                  over(skipRef.current) ? "bg-white/10 text-white" : "text-white/60",
+                )}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => save([])}
+              >
+                Don't ask
+              </button>
+              <button
+                ref={addRef}
+                type="button"
+                disabled={!picked.size}
+                className={pillButton(over(addRef.current) && picked.size > 0)}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => save(words.filter((w) => picked.has(w)))}
+              >
+                <Plus className="size-3.5" strokeWidth={2.25} />
+                Add
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
 
 /**
  * The transcript, when no text box had focus to paste it into. Sushi fools
  * around in the corner, a ring around the close button counts down to closing
- * the card, and Copy puts the text on the clipboard. Like the island, it sees
- * no mouse moves, so hover comes from the cursor Rust polls.
+ * the card, and Copy puts the text on the clipboard. New words it heard can be
+ * added to the Dictionary from here too. Like the island, it sees no mouse
+ * moves, so hover comes from the cursor Rust polls.
  */
 function TranscriptCard({
   text,
+  words,
   cursor,
   held,
   cardRef,
 }: {
   text: string;
+  words: string[];
   cursor: Point | null;
   held: boolean;
   cardRef: React.RefObject<HTMLDivElement | null>;
@@ -288,70 +458,68 @@ function TranscriptCard({
   }, [copied, dismiss]);
 
   const paused = hovered || held || copied;
+  const copy = (
+    <button
+      ref={copyRef}
+      type="button"
+      className={cn(pillButton(over(copyRef.current) || copied), words.length > 0 && "mr-auto")}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={() => void api.copyText(text).then(() => setCopied(true), () => {})}
+    >
+      {copied ? <Check className="size-3.5 text-emerald-400" strokeWidth={2.5} /> : <Copy className="size-3.5" strokeWidth={2.25} />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
 
   return (
-    <div
-      ref={cardRef}
-      className="relative z-20 flex w-[304px] flex-col gap-3 rounded-[20px] border border-white/10 bg-neutral-900/95 p-4 text-white shadow-[0_12px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl"
-      style={{ animation: "pill-in 160ms ease-out" }}
-    >
+    <div ref={cardRef} className={CARD} style={{ animation: "pill-in 160ms ease-out" }}>
       <div className="flex items-center gap-3">
         <Sushi mood="idle" restless held={held} className="shrink-0 text-white/70" />
         <p className="flex-1 text-[11px] leading-4 text-white/55">Got it! Click a text box next time and I'll type it in for you.</p>
-        <button
-          ref={closeRef}
-          type="button"
-          aria-label="Close"
-          className={cn(
-            "relative grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-white/70 transition-colors",
-            over(closeRef.current) && "bg-white/10 text-white",
-          )}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={dismiss}
-        >
-          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 32 32" aria-hidden>
-            <circle cx={16} cy={16} r={RING_RADIUS} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth={2} />
-            <circle
-              cx={16}
-              cy={16}
-              r={RING_RADIUS}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeDasharray={RING_LENGTH}
-              style={
-                {
-                  "--ring-length": RING_LENGTH,
-                  animation: `ring-drain ${TRANSCRIPT_MS}ms linear forwards`,
-                  animationPlayState: paused ? "paused" : "running",
-                } as React.CSSProperties
-              }
-              onAnimationEnd={dismiss}
-            />
-          </svg>
-          <X className="size-3.5" strokeWidth={2.5} />
-        </button>
+        <CloseRing ms={TRANSCRIPT_MS} paused={paused} hot={over(closeRef.current)} onClose={dismiss} buttonRef={closeRef} />
       </div>
-      <p className="max-h-[120px] overflow-y-auto text-[13px] leading-5 break-words whitespace-pre-wrap text-white/90">{text}</p>
-      <div className="flex justify-end">
-        <button
-          ref={copyRef}
-          type="button"
-          className={cn(
-            "flex h-8 cursor-pointer items-center gap-1.5 rounded-full px-4 text-xs font-medium transition-colors",
-            over(copyRef.current) || copied ? "bg-white/20 text-white" : "bg-white/12 text-white/90",
-          )}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={() => void api.copyText(text).then(() => setCopied(true), () => {})}
-        >
-          {copied ? <Check className="size-3.5 text-emerald-400" strokeWidth={2.5} /> : <Copy className="size-3.5" strokeWidth={2.25} />}
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
+      {/* Shorter with new words below it, so the card still fits the overlay window. */}
+      <p className={cn("overflow-y-auto text-[13px] leading-5 break-words whitespace-pre-wrap text-white/90", words.length ? "max-h-[80px]" : "max-h-[120px]")}>
+        {text}
+      </p>
+      {words.length > 0 ? (
+        <NewWords words={words} label="New words. Add them to your Dictionary?" over={over} onDone={() => {}} actions={copy} />
+      ) : (
+        <div className="flex justify-end">{copy}</div>
+      )}
     </div>
   );
 }
+
+/**
+ * After a paste, the words it heard that the Dictionary doesn't know, offered
+ * for adding. It closes on its own like the transcript card, and soon after
+ * the words are added or turned down.
+ */
+function WordsCard({ words, cursor, held, cardRef }: { words: string[]; cursor: Point | null; held: boolean; cardRef: React.RefObject<HTMLDivElement | null> }) {
+  const closeRef = React.useRef<HTMLButtonElement>(null);
+  const over = (el: HTMLElement | null) => !!cursor && !!el && near(el.getBoundingClientRect(), cursor, 0);
+
+  const [done, setDone] = React.useState(false);
+  const dismiss = React.useCallback(() => void api.overlayDismiss().catch(() => {}), []);
+  React.useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(dismiss, 1200);
+    return () => clearTimeout(t);
+  }, [done, dismiss]);
+
+  return (
+    <div ref={cardRef} className={CARD} style={{ animation: "pill-in 160ms ease-out" }}>
+      <div className="flex items-center gap-3">
+        <Sushi mood={done ? "done" : "idle"} restless={!done} held={held} className="shrink-0 text-white/70" />
+        <p className="flex-1 text-[11px] leading-4 text-white/55">I heard some new words. Add them to your Dictionary so I always spell them right?</p>
+        <CloseRing ms={WORDS_MS} paused={over(cardRef.current) || held || done} hot={over(closeRef.current)} onClose={dismiss} buttonRef={closeRef} />
+      </div>
+      <NewWords words={words} over={over} onDone={() => setDone(true)} />
+    </div>
+  );
+}
+
 
 export function Overlay() {
   const [state, setState] = React.useState<OverlayState>({ phase: "hidden" });
@@ -484,9 +652,11 @@ export function Overlay() {
       }}
     >
       {menu && <ContextMenu ref={menuRef} at={menu} cursor={cursor} phase={state.phase} onClose={() => setMenu(null)} />}
+      {/* A card counts as the pill: a hit area that drags the overlay. */}
       {state.phase === "transcript" ? (
-        // The card counts as the pill: a hit area that drags the overlay.
-        <TranscriptCard key={shown} text={state.text} cursor={cursor} held={held} cardRef={pillRef} />
+        <TranscriptCard key={shown} text={state.text} words={state.words} cursor={cursor} held={held} cardRef={pillRef} />
+      ) : state.phase === "words" ? (
+        <WordsCard key={shown} words={state.words} cursor={cursor} held={held} cardRef={pillRef} />
       ) : (
         <>
           <div ref={sushiRef} className="relative z-10 -mb-px">

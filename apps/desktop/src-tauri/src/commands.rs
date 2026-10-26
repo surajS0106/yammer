@@ -65,6 +65,20 @@ pub fn overlay_dismiss(app: AppHandle) {
     overlay::dismiss(&app);
 }
 
+/// The overlay's new-words card: add `add` to the Dictionary and never offer `ignore` again.
+#[tauri::command]
+pub fn dictionary_add(app: AppHandle, state: State<'_, AppState>, add: Vec<String>, ignore: Vec<String>) -> AppResult<()> {
+    let settings = {
+        let mut settings = state.settings.lock().unwrap();
+        settings.add_vocabulary(&add);
+        settings.ignore_words(&ignore);
+        settings.clone()
+    };
+    settings.save(&state.settings_path)?;
+    let _ = app.emit("settings-changed", &settings);
+    Ok(())
+}
+
 /// The overlay's right-click menu: "Quit Yammer".
 #[tauri::command]
 pub fn quit(app: AppHandle) {

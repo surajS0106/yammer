@@ -173,13 +173,14 @@ impl Controller {
         let tx = self.tx.clone();
         tauri::async_runtime::spawn(async move {
             match pipeline(&app, rec).await {
-                Ok(Done::Pasted { warning: None }) => overlay::hide(&app),
-                Ok(Done::Pasted { warning: Some(w) }) => overlay::flash(&app, OverlayState::Message { text: w, error: false }, 3500),
+                Ok(Done::Pasted { warning: None, words }) if words.is_empty() => overlay::hide(&app),
+                Ok(Done::Pasted { warning: None, words }) => overlay::show(&app, OverlayState::Words { words }),
+                Ok(Done::Pasted { warning: Some(w), .. }) => overlay::flash(&app, OverlayState::Message { text: w, error: false }, 3500),
                 Ok(Done::Copied) => {
                     let keys = if cfg!(target_os = "macos") { "⌘V" } else { "Ctrl+V" };
                     overlay::flash(&app, OverlayState::Message { text: format!("Copied. Press {keys} to paste."), error: false }, 3500);
                 }
-                Ok(Done::NoTextField { text }) => overlay::show(&app, OverlayState::Transcript { text }),
+                Ok(Done::NoTextField { text, words }) => overlay::show(&app, OverlayState::Transcript { text, words }),
                 Ok(Done::NothingHeard) => overlay::flash(&app, OverlayState::Message { text: "Didn't catch that".into(), error: false }, 1500),
                 Err(e) => {
                     if app.state::<AppState>().settings().sounds {
@@ -202,14 +203,17 @@ fn cleanup_label(settings: &voice_core::Settings) -> String {
     }
 }
 
+/// `words` are new words to offer for the Dictionary.
 enum Done {
     Pasted {
         warning: Option<String>,
+        words: Vec<String>,
     },
     Copied,
     /// No text box had focus, so nothing was pasted.
     NoTextField {
         text: String,
+        words: Vec<String>,
     },
     NothingHeard,
 }
@@ -264,6 +268,7 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
     let mut text = raw.clone();
     let mut warning = None;
     let mut cleaned_by = None;
+    let mut words = Vec::new();
     // A snippet said on its own is pasted as is: no cleanup, no corrections.
     if let Some(snippet) = fixes::whole_snippet(&raw, &settings.snippets) {
         text = snippet.to_string();
@@ -285,6 +290,9 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
             }
         }
         text = fixes::apply(&text, &settings.replacements, &settings.snippets);
+        if settings.suggest_words {
+            words = fixes::suggest_words(&text, &settings);
+        }
     }
 
     // With no text box focused, the paste would go nowhere; the overlay shows the text instead.
@@ -312,8 +320,8 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
     }
 
     Ok(match outcome {
-        Some(Outcome::Pasted) => Done::Pasted { warning },
+        Some(Outcome::Pasted) => Done::Pasted { warning, words },
         Some(Outcome::Copied) => Done::Copied,
-        None => Done::NoTextField { text: shown },
+        None => Done::NoTextField { text: shown, words },
     })
 }

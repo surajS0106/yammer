@@ -55,6 +55,10 @@ export interface Settings {
   localModel: string;
   language: string;
   vocabulary: string;
+  /** After a dictation, offer to add names and jargon it heard to the vocabulary. */
+  suggestWords: boolean;
+  /** Suggested words the user turned down, so they aren't offered again. */
+  ignoredWords: string[];
   cloud: CloudStt;
   cleanup: Cleanup;
   theme: Theme;
@@ -121,7 +125,9 @@ export type OverlayState =
   | { phase: "polishing"; model: string }
   | { phase: "message"; text: string; error: boolean }
   /** No text box had focus, so the transcript is shown to copy instead of pasted. */
-  | { phase: "transcript"; text: string }
+  | { phase: "transcript"; text: string; words: string[] }
+  /** Pasted, and it heard words the Dictionary doesn't know: offer to add them. */
+  | { phase: "words"; words: string[] }
   | { phase: "idle" }
   | { phase: "hidden" };
 
@@ -136,6 +142,8 @@ export const api = {
   overlayHide: () => invoke<void>("overlay_hide"),
   /** Close the transcript card (no-op if something newer is showing). */
   overlayDismiss: () => invoke<void>("overlay_dismiss"),
+  /** Add words to the Dictionary, and never offer `ignore` again. */
+  dictionaryAdd: (add: string[], ignore: string[]) => invoke<void>("dictionary_add", { add, ignore }),
   quit: () => invoke<void>("quit"),
   hotkeyLabel: () => invoke<string>("hotkey_label"),
   hotkeySuspend: (suspended: boolean) => invoke<void>("hotkey_suspend", { suspended }),

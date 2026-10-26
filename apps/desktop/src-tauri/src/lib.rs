@@ -129,6 +129,7 @@ pub fn run() {
             commands::overlay_open,
             commands::overlay_hide,
             commands::overlay_dismiss,
+            commands::dictionary_add,
             commands::quit,
             commands::hotkey_label,
             commands::hotkey_suspend,
