@@ -53,12 +53,70 @@ pub fn rms(samples: &[f32]) -> f32 {
     (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt()
 }
 
+/// 20 ms at 16 kHz, the unit silence is judged in.
+const WINDOW: usize = SAMPLE_RATE as usize / 50;
+/// A window at or below this level counts as silence.
+const THRESHOLD: f32 = 0.004;
+/// Windows of silence (200 ms) kept on each side of a pause by `squeeze_silence`.
+const PAUSE_KEEP: usize = 10;
+
 /// True when no 20 ms window of a 16 kHz clip rises above a whisper of noise.
 /// Whisper hallucinates text ("Thank you.") on silence, so we skip such clips.
 pub fn is_silent(samples: &[f32]) -> bool {
-    const WINDOW: usize = SAMPLE_RATE as usize / 50;
-    const THRESHOLD: f32 = 0.004;
     !samples.chunks(WINDOW).any(|w| rms(w) > THRESHOLD)
+}
+
+/// Drop the silence a per-second-billed service would charge for: leading and
+/// trailing silence shrinks to 200 ms, and any pause to 400 ms.
+pub fn squeeze_silence(samples: &[f32]) -> Vec<f32> {
+    let windows: Vec<&[f32]> = samples.chunks(WINDOW).collect();
+    let silent: Vec<bool> = windows.iter().map(|w| rms(w) <= THRESHOLD).collect();
+    let mut out = Vec::with_capacity(samples.len());
+    let mut i = 0;
+    while i < windows.len() {
+        if !silent[i] {
+            out.extend_from_slice(windows[i]);
+            i += 1;
+            continue;
+        }
+        let end = i + silent[i..].iter().take_while(|&&s| s).count();
+        let head = if i == 0 { 0 } else { PAUSE_KEEP };
+        let tail = if end == windows.len() { 0 } else { PAUSE_KEEP };
+        if end - i <= head + tail {
+            windows[i..end].iter().for_each(|w| out.extend_from_slice(w));
+        } else {
+            windows[i..i + head].iter().chain(&windows[end - tail..end]).for_each(|w| out.extend_from_slice(w));
+        }
+        i = end;
+    }
+    out
+}
+
+/// Cut a 16 kHz clip into pieces of at most `max` samples. Each cut falls in
+/// the quietest 200 ms of the back half of its piece, so words stay whole.
+pub fn split_at_pauses(samples: &[f32], max: usize) -> Vec<&[f32]> {
+    let mut pieces = Vec::new();
+    let mut rest = samples;
+    while rest.len() > max {
+        let (piece, tail) = rest.split_at(max / 2 + quietest_point(&rest[max / 2..max]));
+        pieces.push(piece);
+        rest = tail;
+    }
+    if !rest.is_empty() {
+        pieces.push(rest);
+    }
+    pieces
+}
+
+/// The offset of the middle of the quietest 200 ms of `samples`.
+fn quietest_point(samples: &[f32]) -> usize {
+    let levels: Vec<f32> = samples.chunks(WINDOW).map(rms).collect();
+    if levels.len() <= PAUSE_KEEP {
+        return samples.len() / 2;
+    }
+    let level = |at: usize| levels[at..at + PAUSE_KEEP].iter().sum::<f32>();
+    let best = (0..=levels.len() - PAUSE_KEEP).min_by(|&a, &b| level(a).total_cmp(&level(b))).unwrap_or(0);
+    (best + PAUSE_KEEP / 2) * WINDOW
 }
 
 /// whisper.cpp drops clips shorter than a second; pad with silence.
@@ -167,6 +225,42 @@ mod tests {
         let mut speech = vec![0.0; 16_000];
         speech[8_000..8_400].fill(0.2);
         assert!(!is_silent(&speech));
+    }
+
+    #[test]
+    fn squeezes_silence() {
+        let ms = |n: usize| n * 16;
+        let mut clip = vec![0.0; ms(1000)];
+        clip.extend(vec![0.2; ms(500)]);
+        clip.extend(vec![0.0; ms(2000)]);
+        clip.extend(vec![0.2; ms(500)]);
+        clip.extend(vec![0.0; ms(100)]);
+        clip.extend(vec![0.2; ms(500)]);
+        clip.extend(vec![0.0; ms(1000)]);
+        // 1 s lead -> 200 ms, 2 s pause -> 400 ms, the 100 ms gap stays, 1 s tail -> 200 ms.
+        assert_eq!(squeeze_silence(&clip).len(), ms(200 + 500 + 400 + 500 + 100 + 500 + 200));
+        assert!(squeeze_silence(&vec![0.0; ms(1000)]).is_empty());
+    }
+
+    #[test]
+    fn splits_at_the_quietest_pause() {
+        let max = 16_000 * 25;
+        let short = vec![0.2; max];
+        assert_eq!(split_at_pauses(&short, max).len(), 1);
+
+        // 40 s of speech with a pause at 18-18.3 s: the cut lands inside it.
+        let mut clip = vec![0.2; 16_000 * 40];
+        clip[16_000 * 18..16_000 * 18 + 4_800].fill(0.0);
+        let pieces = split_at_pauses(&clip, max);
+        assert_eq!(pieces.len(), 2);
+        assert!((16_000 * 18..16_000 * 18 + 4_800).contains(&pieces[0].len()), "cut at {}", pieces[0].len());
+        assert_eq!(pieces.iter().map(|p| p.len()).sum::<usize>(), clip.len());
+
+        // No pause at all still yields pieces no longer than `max`.
+        let flat = vec![0.2; 16_000 * 70];
+        let pieces = split_at_pauses(&flat, max);
+        assert!(pieces.iter().all(|p| p.len() <= max));
+        assert_eq!(pieces.iter().map(|p| p.len()).sum::<usize>(), 16_000 * 70);
     }
 
     #[test]

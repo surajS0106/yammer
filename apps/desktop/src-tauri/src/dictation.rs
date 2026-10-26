@@ -252,7 +252,7 @@ async fn pipeline(app: &AppHandle, rec: Recording) -> AppResult<Done> {
                 code => Some(code.to_string()),
             };
             let opts = transcribe::Options { language: language.as_deref(), vocabulary: &settings.vocabulary };
-            let text = transcribe::transcribe(&settings.cloud, key.as_deref(), &state.http, audio::encode_wav(&samples), opts).await?;
+            let text = transcribe::transcribe(&settings.cloud, key.as_deref(), &state.http, &samples, opts).await?;
             (text, format!("cloud:{}", settings.cloud.model.trim()), language)
         }
     };

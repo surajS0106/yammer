@@ -7,14 +7,22 @@
 use std::time::Duration;
 
 use base64::Engine;
+use futures::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
 
 use crate::error::check_status;
 use crate::settings::{CloudStt, SttApi};
-use crate::{Error, Result};
+use crate::{audio, Error, Result, SAMPLE_RATE};
 
 const OLLAMA_PROMPT: &str = "Transcribe this audio verbatim. Output only the transcription, with punctuation. \
 If there is no speech, output nothing.";
+
+/// Sarvam's REST endpoint takes at most 30 s of audio; pieces stay under it.
+const SARVAM_PIECE_SECS: usize = 25;
+/// Pieces in flight at once, so a long dictation doesn't trip rate limits.
+const SARVAM_PARALLEL: usize = 4;
+/// Retries of a piece that hit a rate limit or a server error.
+const SARVAM_RETRIES: u64 = 2;
 
 pub struct Options<'a> {
     /// ISO 639-1 code; `None` lets the service detect it.
@@ -23,15 +31,15 @@ pub struct Options<'a> {
     pub vocabulary: &'a str,
 }
 
-/// Transcribe a 16 kHz mono WAV clip.
-pub async fn transcribe(cfg: &CloudStt, key: Option<&str>, http: &reqwest::Client, wav: Vec<u8>, opts: Options<'_>) -> Result<String> {
+/// Transcribe a 16 kHz mono clip.
+pub async fn transcribe(cfg: &CloudStt, key: Option<&str>, http: &reqwest::Client, samples: &[f32], opts: Options<'_>) -> Result<String> {
     if cfg.base_url.trim().is_empty() || cfg.model.trim().is_empty() {
         return Err(Error::Config("Choose a speech provider and model in Settings → Engine.".into()));
     }
     let base = cfg.base_url.trim().trim_end_matches('/');
     let text = match cfg.api {
         SttApi::Transcriptions => {
-            let file = reqwest::multipart::Part::bytes(wav).file_name("audio.wav").mime_str("audio/wav")?;
+            let file = reqwest::multipart::Part::bytes(audio::encode_wav(samples)).file_name("audio.wav").mime_str("audio/wav")?;
             let mut form = reqwest::multipart::Form::new()
                 .text("model", cfg.model.trim().to_string())
                 .text("response_format", "json")
@@ -49,28 +57,9 @@ pub async fn transcribe(cfg: &CloudStt, key: Option<&str>, http: &reqwest::Clien
             let resp = req.send().await.map_err(Error::sending("the speech service"))?;
             parse_transcription(&check_status("Transcription", resp).await?.json().await?)?
         }
-        SttApi::Sarvam => {
-            let file = reqwest::multipart::Part::bytes(wav).file_name("audio.wav").mime_str("audio/wav")?;
-            let model = cfg.model.trim();
-            let mut form = reqwest::multipart::Form::new()
-                .text("model", model.to_string())
-                .text("language_code", sarvam_language(opts.language))
-                .part("file", file);
-            // Only saaras:v4 takes key terms; older models reject the field.
-            if model.starts_with("saaras:v4") {
-                if let Some(terms) = sarvam_keyterms(opts.vocabulary) {
-                    form = form.text("keyterms", terms);
-                }
-            }
-            let mut req = http.post(format!("{base}/speech-to-text")).multipart(form).timeout(Duration::from_secs(120));
-            if let Some(key) = key {
-                req = req.header("api-subscription-key", key);
-            }
-            let resp = req.send().await.map_err(Error::sending("Sarvam"))?;
-            parse_sarvam(&check_status("Sarvam", resp).await?.json().await?)?
-        }
+        SttApi::Sarvam => sarvam(base, cfg.model.trim(), key, http, samples, &opts).await?,
         SttApi::OllamaChat => {
-            let audio = base64::engine::general_purpose::STANDARD.encode(&wav);
+            let audio = base64::engine::general_purpose::STANDARD.encode(audio::encode_wav(samples));
             let body = json!({
                 "model": cfg.model.trim(),
                 "stream": false,
@@ -88,6 +77,59 @@ pub async fn transcribe(cfg: &CloudStt, key: Option<&str>, http: &reqwest::Clien
         }
     };
     Ok(text.trim().to_string())
+}
+
+/// Sarvam bills per second and caps a request at 30 s, so the clip loses its
+/// silence and is cut at pauses into pieces sent a few at a time, in order.
+async fn sarvam(base: &str, model: &str, key: Option<&str>, http: &reqwest::Client, samples: &[f32], opts: &Options<'_>) -> Result<String> {
+    let samples = audio::squeeze_silence(samples);
+    let pieces = audio::split_at_pauses(&samples, SARVAM_PIECE_SECS * SAMPLE_RATE as usize);
+    // Collected first: a stream holding a borrowing closure isn't `Send` to the spawned dictation task.
+    let requests: Vec<_> = pieces
+        .into_iter()
+        .filter(|p| !audio::is_silent(p))
+        .map(|piece| sarvam_piece(base, model, key, http, piece, opts))
+        .collect();
+    let texts: Vec<String> = futures::stream::iter(requests).buffered(SARVAM_PARALLEL).try_collect().await?;
+    Ok(join_pieces(texts))
+}
+
+async fn sarvam_piece(base: &str, model: &str, key: Option<&str>, http: &reqwest::Client, piece: &[f32], opts: &Options<'_>) -> Result<String> {
+    let mut attempt = 0;
+    loop {
+        match sarvam_request(base, model, key, http, piece, opts).await {
+            Err(Error::Status { status, .. }) if (status == 429 || status >= 500) && attempt < SARVAM_RETRIES => {
+                attempt += 1;
+                tokio::time::sleep(Duration::from_secs(attempt)).await;
+            }
+            result => return result,
+        }
+    }
+}
+
+async fn sarvam_request(base: &str, model: &str, key: Option<&str>, http: &reqwest::Client, piece: &[f32], opts: &Options<'_>) -> Result<String> {
+    let file = reqwest::multipart::Part::bytes(audio::encode_wav(piece)).file_name("audio.wav").mime_str("audio/wav")?;
+    let mut form = reqwest::multipart::Form::new()
+        .text("model", model.to_string())
+        .text("language_code", sarvam_language(opts.language))
+        .part("file", file);
+    // Only saaras:v4 takes key terms; older models reject the field.
+    if model.starts_with("saaras:v4") {
+        if let Some(terms) = sarvam_keyterms(opts.vocabulary) {
+            form = form.text("keyterms", terms);
+        }
+    }
+    let mut req = http.post(format!("{base}/speech-to-text")).multipart(form).timeout(Duration::from_secs(120));
+    if let Some(key) = key {
+        req = req.header("api-subscription-key", key);
+    }
+    let resp = req.send().await.map_err(Error::sending("Sarvam"))?;
+    parse_sarvam(&check_status("Sarvam", resp).await?.json().await?)
+}
+
+/// The pieces' transcripts as one, skipping any that heard nothing.
+fn join_pieces(texts: Vec<String>) -> String {
+    texts.iter().map(|t| t.trim()).filter(|t| !t.is_empty()).collect::<Vec<_>>().join(" ")
 }
 
 fn parse_transcription(body: &Value) -> Result<String> {
@@ -168,10 +210,16 @@ mod tests {
         assert_eq!(sarvam_keyterms("  "), None);
     }
 
+    #[test]
+    fn joins_piece_transcripts() {
+        assert_eq!(join_pieces(vec!["Hello there.".into(), " ".into(), " How are you? ".into()]), "Hello there. How are you?");
+        assert_eq!(join_pieces(vec![]), "");
+    }
+
     #[tokio::test]
     async fn rejects_missing_config() {
         let cfg = CloudStt { base_url: "".into(), ..CloudStt::default() };
-        let err = transcribe(&cfg, None, &reqwest::Client::new(), vec![], Options { language: None, vocabulary: "" }).await;
+        let err = transcribe(&cfg, None, &reqwest::Client::new(), &[], Options { language: None, vocabulary: "" }).await;
         assert!(matches!(err, Err(Error::Config(_))));
     }
 }
