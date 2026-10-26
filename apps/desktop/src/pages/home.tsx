@@ -184,7 +184,7 @@ function HeaderLink({ icon: Icon, title, detail, onClick }: { icon: React.Elemen
 }
 
 export function HomePage({ go }: { go: (page: PageId) => void }) {
-  const { settings, update, secrets } = useSettings();
+  const { settings, secrets } = useSettings();
   const platform = React.useContext(PlatformContext);
   const { models, downloading, error: modelError } = useModels();
   const [status, setStatus] = React.useState<OverlayState>({ phase: "hidden" });
@@ -205,11 +205,6 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
   const engineReady = settings.engine === "local" ? !!model?.downloaded : !(preset?.needsKey ?? true) || secrets.stt;
   const accessibilityOk = platform?.accessibility !== false;
   const ready = engineReady && accessibilityOk && !hotkeyError;
-
-  // Once it can work, later launches at login may stay in the tray.
-  React.useEffect(() => {
-    if (engineReady && !settings.onboarded) void update({ onboarded: true });
-  }, [engineReady, settings.onboarded, update]);
 
   const progress = model ? downloading[model.id] : undefined;
   const live = statusText(status);

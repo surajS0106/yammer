@@ -104,6 +104,11 @@ export function GeneralPage() {
         <Row label="Launch at login" description={`Starts quietly in the ${isMac ? "menu bar" : "tray"}.`}>
           <Switch checked={!!autostart} disabled={autostart === null} onChange={(v) => void toggleAutostart(v)} label="Launch at login" />
         </Row>
+        <Row label="Setup guide" description="Walk through the first-run setup again. Your settings stay as they are.">
+          <Button size="sm" variant="outline" onClick={() => void update({ onboarded: false })}>
+            Show setup guide
+          </Button>
+        </Row>
         {platform?.os === "macos" && (
           <Row label="Permissions" description="Microphone to hear you; Accessibility to paste.">
             <div className="flex flex-wrap gap-x-3 gap-y-1">

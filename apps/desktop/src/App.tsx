@@ -13,9 +13,11 @@ import { HelpPage } from "@/pages/help";
 import { HistoryPage } from "@/pages/history";
 import { HomePage } from "@/pages/home";
 import { InsightsPage } from "@/pages/insights";
+import { Onboarding } from "@/pages/onboarding";
 import { ScratchpadPage } from "@/pages/scratchpad";
 import { SnippetsPage } from "@/pages/snippets";
 import { TransformsPage } from "@/pages/transforms";
+import { useSettings } from "@/lib/settings";
 import { api, on, type Platform } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +55,7 @@ const COLLAPSED_KEY = "sidebar-collapsed";
 export const PlatformContext = React.createContext<Platform | null>(null);
 
 export default function App() {
+  const { settings } = useSettings();
   const [page, setPage] = React.useState<PageId>("home");
   const [platform, setPlatform] = React.useState<Platform | null>(null);
   const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem(COLLAPSED_KEY) === "1");
@@ -94,6 +97,20 @@ export default function App() {
     window.addEventListener("focus", load);
     return () => window.removeEventListener("focus", load);
   }, []);
+
+  // First run: the setup guide takes the whole window until it's finished or skipped.
+  if (!settings.onboarded) {
+    return (
+      <PlatformContext.Provider value={platform}>
+        <MotionConfig reducedMotion="user">
+          <div className="flex h-svh flex-col">
+            <TitleBar className={cn(isMac && "pl-20")} />
+            <Onboarding onDone={(next) => setPage(next ?? "home")} />
+          </div>
+        </MotionConfig>
+      </PlatformContext.Provider>
+    );
+  }
 
   return (
     <PlatformContext.Provider value={platform}>
@@ -161,8 +178,8 @@ export default function App() {
   );
 }
 
-/** Drag strip standing in for the native title bar: the sidebar toggle, and off macOS the window buttons. */
-function TitleBar({ className, onToggleSidebar }: { className?: string; onToggleSidebar: () => void }) {
+/** Drag strip standing in for the native title bar: the sidebar toggle (when there's a sidebar), and off macOS the window buttons. */
+function TitleBar({ className, onToggleSidebar }: { className?: string; onToggleSidebar?: () => void }) {
   const [maximized, setMaximized] = React.useState(false);
 
   React.useEffect(() => {
@@ -177,15 +194,17 @@ function TitleBar({ className, onToggleSidebar }: { className?: string; onToggle
   const win = getCurrentWindow;
   return (
     <div data-tauri-drag-region className={cn("flex h-9 shrink-0 items-center pl-2 select-none", className)}>
-      <button
-        type="button"
-        onClick={onToggleSidebar}
-        title={`Toggle sidebar (${isMac ? "⌘" : "Ctrl+"}B)`}
-        aria-label="Toggle sidebar"
-        className="rounded-md p-1.5 text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-      >
-        <PanelLeft className="size-4" />
-      </button>
+      {onToggleSidebar && (
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          title={`Toggle sidebar (${isMac ? "⌘" : "Ctrl+"}B)`}
+          aria-label="Toggle sidebar"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <PanelLeft className="size-4" />
+        </button>
+      )}
       {!isMac && (
         <div className="ml-auto flex h-full">
           <WindowButton label="Minimize" onClick={() => void win().minimize()}>

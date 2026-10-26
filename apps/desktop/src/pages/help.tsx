@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { PageHeader, PlatformContext, type PageId } from "@/App";
 import { NavCards } from "@/components/nav-cards";
-import { Hotkey, Kbd, Section } from "@/components/ui";
+import { Button, Hotkey, Kbd, Row, Section } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import { hotkeyParts } from "@/lib/utils";
 
@@ -27,7 +27,7 @@ function Link({ to, go, children }: { to: PageId; go: (page: PageId) => void; ch
 }
 
 export function HelpPage({ go }: { go: (page: PageId) => void }) {
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
   const platform = React.useContext(PlatformContext);
   const paste = platform?.os === "macos" ? "⌘V" : "Ctrl+V";
 
@@ -70,6 +70,14 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 py-2.5 text-sm">
           Paste the last dictation if it was only copied <Kbd>{paste}</Kbd>
         </div>
+      </Section>
+
+      <Section title="Setup">
+        <Row label="Setup guide" description="Walk through the speech engine, permissions and hotkey again, step by step.">
+          <Button size="sm" variant="outline" onClick={() => void update({ onboarded: false })}>
+            Run setup again
+          </Button>
+        </Row>
       </Section>
 
       <Section title="Troubleshooting">

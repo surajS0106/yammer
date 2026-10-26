@@ -66,6 +66,7 @@ Yammer (formerly Larp), a product of Sush: a dictation app modelled on Sush (`..
 - **`apps/desktop/src`**: React 19, Vite and Tailwind 4, with hand-rolled primitives in `components/ui.tsx` (no Radix) using Sush's theme tokens. Registry components from `@ui-shrushank`/`@ui-shrushank-pro` go in `components/ui/` (configured in `components.json`; the pro registry needs `SHRUSHANK_PRO_TOKEN`, which lives in the repo-root `.env`).
   - Both windows load `index.html`. `main.tsx` renders `overlay.tsx` when the window label is `overlay`, and the settings app otherwise.
   - `lib/tauri.ts` mirrors the Rust commands and serde types. **If you change a Rust command or serde type, update this file to match.**
+  - `pages/onboarding.tsx` is the first-run setup guide (engine and API key, macOS permissions or the Wayland setup, hotkey, a first dictation). `App.tsx` shows it in place of the sidebar layout while `settings.onboarded` is false. Finishing or skipping sets the flag, and Help → "Run setup again" clears it. Nothing else sets it.
   - `lib/settings.tsx` holds the settings context. Every change saves through `settings_set`, which rejects a hotkey it can't register.
   - `lib/models.ts` is a module-level download store.
   - `lib/presets.ts` holds the provider presets.
