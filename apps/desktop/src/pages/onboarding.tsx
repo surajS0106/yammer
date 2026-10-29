@@ -547,7 +547,7 @@ function TryStep({ onCleanup }: { onCleanup: () => void }) {
   const [heard, setHeard] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    const unlisten = [on.dictation(setStatus), on.historyAdded((e) => setHeard(e.text))];
+    const unlisten = [on.dictation(setStatus), on.historyAdded((e) => !e.error && setHeard(e.text))];
     return () => unlisten.forEach((u) => void u.then((f) => f()));
   }, []);
 

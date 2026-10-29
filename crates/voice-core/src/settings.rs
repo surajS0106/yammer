@@ -13,9 +13,13 @@ use crate::models::DEFAULT_MODEL;
 pub struct Settings {
     /// Global shortcut in Tauri's accelerator syntax.
     pub hotkey: String,
+    /// Select text, then hold this and say how to change it. Empty for none.
+    pub edit_hotkey: String,
     /// Input device name; `None` follows the system default.
     pub mic_device: Option<String>,
     pub sounds: bool,
+    /// Mute the computer's sound output while recording, so music or a video doesn't play into the mic.
+    pub mute_audio: bool,
     /// Put back whatever was on the clipboard after pasting.
     pub restore_clipboard: bool,
     /// Add a space after the pasted text, so consecutive dictations don't run together.
@@ -47,8 +51,14 @@ pub struct Settings {
     pub transforms: Vec<Transform>,
     /// Id of the transform applied to dictations; empty for none.
     pub active_transform: String,
+    /// How many of the newest dictations keep their audio, so they can be transcribed again. 0 keeps none.
+    pub keep_recordings: u32,
+    /// Delete dictations older than this many days. 0 keeps them forever.
+    pub history_days: u32,
     /// Set once the first-run walkthrough is finished or skipped.
     pub onboarded: bool,
+    /// The newest version whose "What's new" the user has seen; empty before the first.
+    pub seen_changelog: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,10 +173,17 @@ pub struct Transform {
     pub id: String,
     pub name: String,
     pub instructions: String,
+    /// A hotkey that dictates with this transform, whichever one is active. Empty for none.
+    pub hotkey: String,
 }
 
 pub fn default_transforms() -> Vec<Transform> {
-    let t = |id: &str, name: &str, instructions: &str| Transform { id: id.into(), name: name.into(), instructions: instructions.into() };
+    let t = |id: &str, name: &str, instructions: &str| Transform {
+        id: id.into(),
+        name: name.into(),
+        instructions: instructions.into(),
+        hotkey: String::new(),
+    };
     vec![
         t("email", "Email", "Format the text as an email: a short greeting, the body in paragraphs, and a sign-off. Don't invent a name."),
         t("bullets", "Bullet points", "Restructure the text as a concise bulleted list, one idea per bullet."),
@@ -179,13 +196,47 @@ pub fn default_transforms() -> Vec<Transform> {
 impl Settings {
     /// The instructions of the active transform, if one is chosen and has any.
     pub fn transform_instructions(&self) -> Option<&str> {
-        self.transforms
-            .iter()
-            .find(|t| !self.active_transform.is_empty() && t.id == self.active_transform)
-            .map(|t| t.instructions.trim())
-            .filter(|i| !i.is_empty())
+        self.active().map(|t| t.instructions.trim())
+    }
+
+    /// The active transform, if one is chosen and has instructions.
+    pub fn active(&self) -> Option<&Transform> {
+        self.transform(&self.active_transform)
+    }
+
+    /// The transform with this id, if it has instructions.
+    pub fn transform(&self, id: &str) -> Option<&Transform> {
+        self.transforms.iter().find(|t| !id.is_empty() && t.id == id && !t.instructions.trim().is_empty())
     }
 }
+
+/// The languages offered in Settings and the tray, as (ISO 639-1 code, name).
+/// `languages` in the UI's `lib/presets.ts` is the same list; keep the two in sync.
+pub const LANGUAGES: &[(&str, &str)] = &[
+    ("auto", "Detect automatically"),
+    ("en", "English"),
+    ("es", "Spanish"),
+    ("fr", "French"),
+    ("de", "German"),
+    ("it", "Italian"),
+    ("pt", "Portuguese"),
+    ("nl", "Dutch"),
+    ("hi", "Hindi"),
+    ("ta", "Tamil"),
+    ("te", "Telugu"),
+    ("kn", "Kannada"),
+    ("ml", "Malayalam"),
+    ("bn", "Bengali"),
+    ("mr", "Marathi"),
+    ("ja", "Japanese"),
+    ("ko", "Korean"),
+    ("zh", "Chinese"),
+    ("ar", "Arabic"),
+    ("ru", "Russian"),
+    ("tr", "Turkish"),
+    ("pl", "Polish"),
+    ("uk", "Ukrainian"),
+];
 
 /// Display name for a provider preset id.
 pub fn provider_name(preset: &str) -> &'static str {
@@ -230,8 +281,10 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             hotkey: default_hotkey().into(),
+            edit_hotkey: String::new(),
             mic_device: None,
             sounds: true,
+            mute_audio: false,
             restore_clipboard: true,
             trailing_space: true,
             overlay_always_visible: true,
@@ -249,7 +302,10 @@ impl Default for Settings {
             snippets: Vec::new(),
             transforms: default_transforms(),
             active_transform: String::new(),
+            keep_recordings: 20,
+            history_days: 0,
             onboarded: false,
+            seen_changelog: String::new(),
         }
     }
 }
@@ -339,6 +395,8 @@ mod tests {
         assert!(s.replacements.is_empty() && s.snippets.is_empty());
         assert_eq!(s.transforms, default_transforms());
         assert_eq!(s.active_transform, "");
+        assert_eq!((s.edit_hotkey.as_str(), s.mute_audio, s.keep_recordings, s.history_days), ("", false, 20, 0));
+        assert_eq!(s.seen_changelog, "");
     }
 
     #[test]
@@ -349,6 +407,9 @@ mod tests {
         assert!(s.transform_instructions().unwrap().contains("bulleted list"));
         s.active_transform = "gone".into();
         assert_eq!(s.transform_instructions(), None);
+        assert_eq!(s.transform("formal").map(|t| t.name.as_str()), Some("Formal"));
+        s.transforms[0].instructions = " ".into();
+        assert!(s.transform("email").is_none() && s.transform("").is_none());
     }
 
     #[test]
@@ -365,6 +426,10 @@ mod tests {
         assert_eq!(v["theme"], "system");
         assert_eq!(v["cloud"]["api"], "transcriptions");
         assert_eq!(v["cleanup"]["format"], "anthropic-messages");
+        assert_eq!((v["editHotkey"].as_str(), v["muteAudio"].as_bool()), (Some(""), Some(false)));
+        assert_eq!((v["keepRecordings"].as_u64(), v["historyDays"].as_u64()), (Some(20), Some(0)));
+        assert_eq!(v["transforms"][0]["hotkey"], "");
+        assert_eq!(v["seenChangelog"], "");
     }
 
     #[test]

@@ -212,15 +212,23 @@ export function topWords(entries: HistoryEntry[], vocabulary: string[], limit = 
     .map(([w, value]) => ({ text: display.get(w) ?? w, value }));
 }
 
-/** The full history, kept current as dictations land. */
+/** Put an entry that was transcribed again in place of the old one. */
+export function replaceEntry(list: HistoryEntry[], entry: HistoryEntry): HistoryEntry[] {
+  return list.map((e) => (e.id === entry.id ? entry : e));
+}
+
+/** The full history, kept current as dictations land, without failed ones (no text to count). */
 export function useHistory(): HistoryEntry[] {
   const [entries, setEntries] = React.useState<HistoryEntry[]>([]);
   React.useEffect(() => {
     api.historyList().then(setEntries, () => {});
-    const unlisten = on.historyAdded((e) => setEntries((list) => [e, ...list]));
-    return () => void unlisten.then((f) => f());
+    const unlisten = [
+      on.historyAdded((e) => setEntries((list) => [e, ...list])),
+      on.historyUpdated((e) => setEntries((list) => replaceEntry(list, e))),
+    ];
+    return () => unlisten.forEach((u) => void u.then((f) => f()));
   }, []);
-  return entries;
+  return React.useMemo(() => entries.filter((e) => !e.error), [entries]);
 }
 
 export function formatCompact(n: number): string {

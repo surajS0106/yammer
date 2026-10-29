@@ -5,34 +5,36 @@ import { PageHeader, type PageId } from "@/App";
 import { AnimatedList, ListRow } from "@/components/motion";
 import { Button, Card, Hotkey, Input, Intro, Select, Textarea } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
-import { api, errorMessage } from "@/lib/tauri";
+import { api, errorMessage, type Note } from "@/lib/tauri";
 
-interface Note {
-  id: string;
-  text: string;
-  updatedAt: number;
-}
-
-const KEY = "yammer.scratchpad";
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-// Notes live in this webview's storage: they never leave the computer, and a
-// failure to read or write (private mode, cleared data) just starts empty.
-function load(): Note[] {
+// Notes are saved by Rust as scratchpad.json beside the history, so they never
+// leave the computer and survive the webview's storage being cleared. Older
+// versions kept them in localStorage; those move over the first time the page opens.
+const LEGACY_KEY = "yammer.scratchpad";
+/** Typing saves this long after the last keystroke. */
+const SAVE_DELAY_MS = 400;
+
+function legacyNotes(): Note[] {
   try {
-    const parsed = JSON.parse(localStorage.getItem(KEY) ?? "[]");
+    const parsed = JSON.parse(localStorage.getItem(LEGACY_KEY) ?? "[]");
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 }
 
-function store(notes: Note[]) {
+async function loadNotes(): Promise<Note[]> {
+  const saved = await api.scratchpadList();
+  const legacy = legacyNotes().filter((n) => !saved.some((s) => s.id === n.id));
+  if (!legacy.length) return saved;
+  const merged = [...saved, ...legacy].sort((a, b) => b.updatedAt - a.updatedAt);
+  await api.scratchpadSave(merged);
   try {
-    localStorage.setItem(KEY, JSON.stringify(notes));
-  } catch {
-    // Not fatal: the notes stay in memory for this session.
-  }
+    localStorage.removeItem(LEGACY_KEY);
+  } catch {}
+  return merged;
 }
 
 function titleOf(note: Note): string {
@@ -121,15 +123,37 @@ function NoteEditor({ note, onChange, onDelete, onBack }: { note: Note; onChange
 }
 
 export function ScratchpadPage({ go }: { go: (page: PageId) => void }) {
-  const { settings } = useSettings();
-  const [notes, setNotes] = React.useState<Note[]>(load);
+  const { settings, toast } = useSettings();
+  const [notes, setNotes] = React.useState<Note[] | null>(null);
   const [open, setOpen] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
 
+  React.useEffect(() => {
+    loadNotes().then(setNotes, (e) => {
+      setNotes([]);
+      toast(errorMessage(e));
+    });
+  }, [toast]);
+
+  // Saves wait for a pause in typing; one still waiting when the page closes goes straight away.
+  const pending = React.useRef<{ notes: Note[]; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const flush = React.useCallback(() => {
+    if (!pending.current) return;
+    clearTimeout(pending.current.timer);
+    const { notes } = pending.current;
+    pending.current = null;
+    api.scratchpadSave(notes).catch((e) => toast(`Couldn't save your notes: ${errorMessage(e)}`));
+  }, [toast]);
+  React.useEffect(() => flush, [flush]);
+
   const commit = (next: Note[]) => {
     setNotes(next);
-    store(next);
+    if (pending.current) clearTimeout(pending.current.timer);
+    pending.current = { notes: next, timer: setTimeout(flush, SAVE_DELAY_MS) };
   };
+
+  // Nothing to show until the saved notes load (a moment), so a new note can't race them.
+  if (!notes) return <PageHeader title="Scratchpad" />;
   const create = () => {
     const note = { id: crypto.randomUUID(), text: "", updatedAt: Date.now() };
     commit([note, ...notes]);

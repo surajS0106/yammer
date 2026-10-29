@@ -60,7 +60,12 @@ pub enum OverlayState {
     /// `engine` is the settings' engine label, e.g. "Sarvam · saaras:v4".
     Transcribing { engine: String },
     Polishing { model: String },
+    /// Rewriting the selection as the user asked (the edit hotkey).
+    Editing { model: String },
     Message { text: String, error: bool },
+    /// The dictation failed and its recording was kept: a card offers to retry
+    /// history entry `id`. It closes itself (`dismiss`) like the transcript card.
+    Failed { text: String, id: u64 },
     /// No text box had focus, so the transcript is shown in a card to copy.
     /// The card closes itself (`dismiss`) on its timer, its close button or Copy.
     /// `words` are new words to offer for the Dictionary, as in `Words`.
@@ -338,9 +343,9 @@ pub fn hide(app: &AppHandle) {
     show(app, OverlayState::Hidden);
 }
 
-/// Close the transcript or words card, unless something newer has replaced it.
+/// Close the transcript, words or failed card, unless something newer has replaced it.
 pub fn dismiss(app: &AppHandle) {
-    if matches!(current(), OverlayState::Transcript { .. } | OverlayState::Words { .. }) {
+    if matches!(current(), OverlayState::Transcript { .. } | OverlayState::Words { .. } | OverlayState::Failed { .. }) {
         hide(app);
     }
 }

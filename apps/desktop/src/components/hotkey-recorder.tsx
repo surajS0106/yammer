@@ -1,5 +1,6 @@
-// Click, then press the new shortcut. The current global hotkey is released
-// while listening, so pressing it here doesn't start a dictation.
+// Click, then press the new shortcut. Every global hotkey is released while
+// listening, so pressing one here doesn't start a dictation. An optional
+// hotkey (`onClear`) can be unset.
 
 import * as React from "react";
 
@@ -35,7 +36,19 @@ function accelerator(e: KeyboardEvent): string | null {
   return [...mods, e.code].join("+");
 }
 
-export function HotkeyRecorder({ value, onChange }: { value: string; onChange: (accelerator: string) => Promise<boolean> }) {
+/**
+ * `onChange` resolves true once the new hotkey is saved (saving registers it);
+ * false puts the saved ones back.
+ */
+export function HotkeyRecorder({
+  value,
+  onChange,
+  onClear,
+}: {
+  value: string;
+  onChange: (accelerator: string) => Promise<boolean>;
+  onClear?: () => void;
+}) {
   const [listening, setListening] = React.useState(false);
 
   React.useEffect(() => {
@@ -74,12 +87,19 @@ export function HotkeyRecorder({ value, onChange }: { value: string; onChange: (
         <span className="flex h-8 items-center gap-1.5 rounded-md border border-primary/40 bg-primary/5 px-2.5 text-xs text-muted-foreground">
           Press a shortcut… <Kbd>Esc</Kbd> to cancel
         </span>
-      ) : (
+      ) : value ? (
         <Hotkey accelerator={value} />
+      ) : (
+        <span className="text-xs text-muted-foreground">Not set</span>
       )}
       {!listening && (
         <Button variant="outline" size="sm" onClick={() => setListening(true)}>
-          Change
+          {value ? "Change" : "Set"}
+        </Button>
+      )}
+      {!listening && value && onClear && (
+        <Button variant="ghost" size="sm" onClick={onClear}>
+          Remove
         </Button>
       )}
     </div>

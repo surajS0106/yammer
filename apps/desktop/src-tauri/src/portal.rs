@@ -19,9 +19,8 @@ struct Keyboard {
 static KEYBOARD: Mutex<Option<Keyboard>> = Mutex::const_new(None);
 static TOKEN_PATH: OnceLock<PathBuf> = OnceLock::new();
 
-/// evdev key codes.
+/// evdev key code.
 const KEY_LEFTCTRL: i32 = 29;
-const KEY_V: i32 = 47;
 
 /// Open the session now, so the permission dialog shows up at launch.
 pub fn init(config_dir: &Path) {
@@ -56,11 +55,11 @@ impl Keyboard {
         self.proxy.notify_keyboard_keycode(&self.session, code, state, Default::default()).await
     }
 
-    async fn paste(&self) -> ashpd::Result<()> {
+    async fn ctrl(&self, code: i32) -> ashpd::Result<()> {
         self.key(KEY_LEFTCTRL, KeyState::Pressed).await?;
         let result = async {
-            self.key(KEY_V, KeyState::Pressed).await?;
-            self.key(KEY_V, KeyState::Released).await
+            self.key(code, KeyState::Pressed).await?;
+            self.key(code, KeyState::Released).await
         }
         .await;
         self.key(KEY_LEFTCTRL, KeyState::Released).await?;
@@ -68,14 +67,15 @@ impl Keyboard {
     }
 }
 
-/// Ctrl+V in the focused app. Blocking, so call it off the async runtime.
-pub fn paste() -> Result<(), String> {
+/// Ctrl+`code` (an evdev key code: Ctrl+V pastes, Ctrl+C copies) in the
+/// focused app. Blocking, so call it off the async runtime.
+pub fn ctrl(code: i32) -> Result<(), String> {
     tauri::async_runtime::block_on(async {
         let mut keyboard = KEYBOARD.lock().await;
         if keyboard.is_none() {
             *keyboard = Some(connect().await.map_err(|e| e.to_string())?);
         }
-        let result = keyboard.as_ref().unwrap().paste().await;
+        let result = keyboard.as_ref().unwrap().ctrl(code).await;
         // The user may have stopped the session (GNOME shows it in the top bar); open a new one next time.
         if result.is_err() {
             *keyboard = None;

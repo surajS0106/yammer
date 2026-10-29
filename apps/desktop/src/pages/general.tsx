@@ -7,6 +7,17 @@ import { useSettings } from "@/lib/settings";
 import { api, errorMessage, type Theme } from "@/lib/tauri";
 import { isMac } from "@/lib/utils";
 
+// 0 means none for recordings and forever for days, so it goes first in one list and last in the other.
+const RECORDINGS = [0, 10, 20, 50, 100];
+const DAYS = [7, 30, 90, 365, 0];
+
+/** The choices, plus `current` among the others if a hand-edited settings file holds another value. */
+function withCurrent(choices: number[], current: number) {
+  if (choices.includes(current)) return choices;
+  const at = choices.findIndex((n) => n > current);
+  return at < 0 ? [...choices, current] : [...choices.slice(0, at), current, ...choices.slice(at)];
+}
+
 export function GeneralPage() {
   const { settings, update, toast } = useSettings();
   const platform = React.useContext(PlatformContext);
@@ -44,6 +55,12 @@ export function GeneralPage() {
         >
           <HotkeyRecorder value={settings.hotkey} onChange={(hotkey) => update({ hotkey })} />
         </Row>
+        <Row
+          label="Edit by voice"
+          description="Select text in any app, hold this, and say how to change it: “make it shorter”, “turn this into bullet points”, “translate to Spanish”. Uses your AI cleanup model."
+        >
+          <HotkeyRecorder value={settings.editHotkey} onChange={(editHotkey) => update({ editHotkey })} onClear={() => void update({ editHotkey: "" })} />
+        </Row>
         <Row label="Microphone" description="Falls back to the system default if this one is unplugged.">
           <Select
             className="w-56"
@@ -78,6 +95,9 @@ export function GeneralPage() {
         <Row label="Sounds" description="A short chime when recording starts and stops.">
           <Switch checked={settings.sounds} onChange={(sounds) => void update({ sounds })} label="Sounds" />
         </Row>
+        <Row label="Mute other audio" description="Silence music, videos and calls while you dictate, so they don’t end up in the recording. Sound comes back when you stop.">
+          <Switch checked={settings.muteAudio} onChange={(muteAudio) => void update({ muteAudio })} label="Mute other audio" />
+        </Row>
       </Section>
 
       <Section title="Pasting">
@@ -86,6 +106,27 @@ export function GeneralPage() {
         </Row>
         <Row label="Add a space after" description="So consecutive dictations don’t run into each other.">
           <Switch checked={settings.trailingSpace} onChange={(trailingSpace) => void update({ trailingSpace })} label="Add a space after" />
+        </Row>
+      </Section>
+
+      <Section title="History">
+        <Row label="Keep recordings" description="The audio of your latest dictations, so one that failed or came out wrong can be transcribed again from History.">
+          <Select className="w-44" value={settings.keepRecordings} onChange={(e) => void update({ keepRecordings: Number(e.target.value) })}>
+            {withCurrent(RECORDINGS, settings.keepRecordings).map((n) => (
+              <option key={n} value={n}>
+                {n ? `Latest ${n}` : "Don’t keep"}
+              </option>
+            ))}
+          </Select>
+        </Row>
+        <Row label="Keep dictations" description="Older dictations, and their recordings, are deleted.">
+          <Select className="w-44" value={settings.historyDays} onChange={(e) => void update({ historyDays: Number(e.target.value) })}>
+            {withCurrent(DAYS, settings.historyDays).map((n) => (
+              <option key={n} value={n}>
+                {n === 0 ? "Forever" : n === 365 ? "For a year" : `For ${n} days`}
+              </option>
+            ))}
+          </Select>
         </Row>
       </Section>
 

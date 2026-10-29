@@ -67,7 +67,10 @@ function statusText(s: OverlayState): string | null {
       return `Transcribing with ${s.engine}…`;
     case "polishing":
       return `Polishing with ${s.model}…`;
+    case "editing":
+      return `Editing with ${s.model}…`;
     case "message":
+    case "failed":
       return s.text;
     default:
       return null;
@@ -208,7 +211,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
 
   const progress = model ? downloading[model.id] : undefined;
   const live = statusText(status);
-  const busy = status.phase === "listening" || status.phase === "transcribing" || status.phase === "polishing";
+  const busy = status.phase === "listening" || status.phase === "transcribing" || status.phase === "polishing" || status.phase === "editing";
   const steps = [engineReady, ...(platform?.os === "macos" ? [accessibilityOk] : [])];
   const stepsDone = steps.filter(Boolean).length;
 

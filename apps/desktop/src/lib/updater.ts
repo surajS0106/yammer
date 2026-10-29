@@ -5,14 +5,18 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import * as React from "react";
 
+import { parseNotes, type Release } from "./changelog";
 import { errorMessage } from "./tauri";
+
+/** `notes` are the release's changelog section, from the GitHub release body; empty when it has none. */
+type Pending = { version: string; notes: Release["changes"] };
 
 export type UpdateState =
   | { phase: "idle" }
-  | { phase: "available"; version: string }
+  | ({ phase: "available" } & Pending)
   /** `progress` is the fraction downloaded, or null when the server sends no length. */
-  | { phase: "installing"; version: string; progress: number | null }
-  | { phase: "error"; version: string; message: string };
+  | ({ phase: "installing"; progress: number | null } & Pending)
+  | ({ phase: "error"; message: string } & Pending);
 
 const RECHECK_MS = 6 * 60 * 60 * 1000;
 
@@ -32,7 +36,7 @@ async function checkForUpdate() {
     const found = await check();
     if (!found) return;
     update = found;
-    set({ phase: "available", version: found.version });
+    set({ phase: "available", version: found.version, notes: parseNotes(found.body ?? "") });
   } catch {
     // Offline, or no release with a latest.json yet: stay quiet and try again later.
   }
@@ -41,21 +45,21 @@ async function checkForUpdate() {
 /** Downloads and installs the update, then relaunches. On Windows the installer closes Yammer itself. */
 export async function installUpdate() {
   if (!update || state.phase === "installing") return;
-  const { version } = update;
+  const pending = { version: update.version, notes: parseNotes(update.body ?? "") };
   let total = 0;
   let received = 0;
-  set({ phase: "installing", version, progress: null });
+  set({ phase: "installing", ...pending, progress: null });
   try {
     await update.downloadAndInstall((e) => {
       if (e.event === "Started") total = e.data.contentLength ?? 0;
       else if (e.event === "Progress") {
         received += e.data.chunkLength;
-        set({ phase: "installing", version, progress: total ? received / total : null });
+        set({ phase: "installing", ...pending, progress: total ? received / total : null });
       }
     });
     await relaunch();
   } catch (e) {
-    set({ phase: "error", version, message: errorMessage(e) });
+    set({ phase: "error", ...pending, message: errorMessage(e) });
   }
 }
 

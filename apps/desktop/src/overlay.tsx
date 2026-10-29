@@ -6,7 +6,8 @@
 // named by a tooltip above it. When a dictation had no text box to go into,
 // the pill becomes a card holding the transcript, with Sushi inside it. When a
 // dictation heard words the Dictionary doesn't know, a card offers to add them
-// (inside the transcript card, if that's showing). The overlay never takes focus, so macOS sends it
+// (inside the transcript card, if that's showing). When one failed but its
+// recording was kept, a card offers to try it again. The overlay never takes focus, so macOS sends it
 // no mouse moves; hover comes from the cursor position Rust polls instead.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -22,15 +23,17 @@ import {
   Mic,
   Plus,
   Power,
+  RotateCcw,
   Settings2,
   Square,
+  Wand2,
   X,
 } from "lucide-react";
 import { motion, type MotionValue, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import * as React from "react";
 
 import { moodOf, Sushi } from "@/components/sushi";
-import { api, on, type OverlayState } from "@/lib/tauri";
+import { api, on, type OverlayState, type Settings } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 const BARS = 24;
@@ -172,7 +175,19 @@ const MENU_WIDTH = 224;
 /** How long the cursor can stray from the menu before it closes. */
 const MENU_LINGER_MS = 350;
 
-type MenuItem = { id: string; label: string; icon: LucideIcon; run: () => Promise<void>; hint?: string; danger?: boolean };
+/** `keepOpen`: clicking it doesn't close the menu (the transform switch, clicked through in turn). */
+type MenuItem = { id: string; label: string; icon: LucideIcon; run: () => Promise<void>; hint?: string; danger?: boolean; keepOpen?: boolean };
+
+/** The settings, kept current, for the menu's transform switch. */
+function useSettingsValue() {
+  const [settings, setSettings] = React.useState<Settings | null>(null);
+  React.useEffect(() => {
+    api.settingsGet().then(setSettings, () => {});
+    const unlisten = on.settingsChanged(setSettings);
+    return () => void unlisten.then((f) => f());
+  }, []);
+  return settings;
+}
 
 /**
  * The right-click menu, drawn like the island rather than as the webview's own.
@@ -182,9 +197,23 @@ type MenuItem = { id: string; label: string; icon: LucideIcon; run: () => Promis
 const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point | null; phase: OverlayState["phase"]; onClose: () => void }>(
   function ContextMenu({ at, cursor, phase, onClose }, ref) {
     const hotkey = useHotkeyLabel();
-    const dictating = phase === "listening" || phase === "transcribing" || phase === "polishing";
+    const settings = useSettingsValue();
+    const dictating = phase === "listening" || phase === "transcribing" || phase === "polishing" || phase === "editing";
+    // Each click moves on to the next transform, then back to none.
+    const transforms = settings?.transforms ?? [];
+    const active = transforms.findIndex((t) => t.id === settings?.activeTransform);
+    const nextTransform = () => {
+      if (!settings) return Promise.resolve();
+      const next = transforms[active + 1]?.id ?? "";
+      return api.settingsSet({ ...settings, activeTransform: next }).then(() => {});
+    };
     const groups: MenuItem[][] = [
-      [{ id: "dictate", label: dictating ? "Stop dictation" : "Start dictation", icon: dictating ? Square : Mic, hint: hotkey, run: api.overlayToggleDictation }],
+      [
+        { id: "dictate", label: dictating ? "Stop dictation" : "Start dictation", icon: dictating ? Square : Mic, hint: hotkey, run: api.overlayToggleDictation },
+        ...(transforms.length
+          ? [{ id: "transform", label: `Transform: ${active >= 0 ? transforms[active].name : "None"}`, icon: Wand2, hint: "Change", keepOpen: true, run: nextTransform }]
+          : []),
+      ],
       [
         { id: "history", label: "History", icon: History, run: () => api.overlayOpen("history") },
         { id: "settings", label: "Settings", icon: Settings2, run: () => api.overlayOpen("general") },
@@ -223,7 +252,7 @@ const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point 
         {groups.map((group, g) => (
           <React.Fragment key={g}>
             {g > 0 && <div className="mx-2 my-1 h-px bg-white/[0.08]" />}
-            {group.map(({ id, label, icon: Icon, hint, danger, run }) => (
+            {group.map(({ id, label, icon: Icon, hint, danger, keepOpen, run }) => (
               <button
                 key={id}
                 ref={(el) => {
@@ -238,7 +267,7 @@ const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point 
                   hot === id && (danger ? "bg-red-500/15 text-red-200" : "bg-white/10 text-white"),
                 )}
                 onClick={() => {
-                  onClose();
+                  if (!keepOpen) onClose();
                   void run().catch(() => {});
                 }}
               >
@@ -519,7 +548,45 @@ function WordsCard({ words, cursor, held, cardRef }: { words: string[]; cursor: 
     </div>
   );
 }
+/** How long the failed card stays up, held the same way. */
+const FAILED_MS = 12_000;
 
+/**
+ * A dictation failed (the service was down, say) but its recording was kept:
+ * the error, and a button that transcribes it again and pastes the result.
+ */
+function FailedCard({ text, id, cursor, held, cardRef }: { text: string; id: number; cursor: Point | null; held: boolean; cardRef: React.RefObject<HTMLDivElement | null> }) {
+  const closeRef = React.useRef<HTMLButtonElement>(null);
+  const retryRef = React.useRef<HTMLButtonElement>(null);
+  const over = (el: HTMLElement | null) => !!cursor && !!el && near(el.getBoundingClientRect(), cursor, 0);
+  const dismiss = React.useCallback(() => void api.overlayDismiss().catch(() => {}), []);
+
+  return (
+    <div ref={cardRef} className={CARD} style={{ animation: "pill-in 160ms ease-out" }}>
+      <div className="flex items-center gap-3">
+        <Sushi mood="error" held={held} className="shrink-0 text-white/70" />
+        <p className="flex-1 text-[11px] leading-4 text-white/55">That didn't work, but I kept the recording. Try again?</p>
+        <CloseRing ms={FAILED_MS} paused={over(cardRef.current) || held} hot={over(closeRef.current)} onClose={dismiss} buttonRef={closeRef} />
+      </div>
+      <p className="flex gap-2 text-xs leading-5 text-white/85">
+        <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-400" />
+        <span className="line-clamp-4 break-words">{text}</span>
+      </p>
+      <div className="flex justify-end">
+        <button
+          ref={retryRef}
+          type="button"
+          className={pillButton(over(retryRef.current))}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => void api.overlayRetry(id).catch(() => {})}
+        >
+          <RotateCcw className="size-3.5" strokeWidth={2.25} />
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function Overlay() {
   const [state, setState] = React.useState<OverlayState>({ phase: "hidden" });
@@ -657,6 +724,8 @@ export function Overlay() {
         <TranscriptCard key={shown} text={state.text} words={state.words} cursor={cursor} held={held} cardRef={pillRef} />
       ) : state.phase === "words" ? (
         <WordsCard key={shown} words={state.words} cursor={cursor} held={held} cardRef={pillRef} />
+      ) : state.phase === "failed" ? (
+        <FailedCard key={shown} text={state.text} id={state.id} cursor={cursor} held={held} cardRef={pillRef} />
       ) : (
         <>
           <div ref={sushiRef} className="relative z-10 -mb-px">
@@ -690,10 +759,10 @@ export function Overlay() {
                   <Meter />
                 </>
               )}
-              {(state.phase === "transcribing" || state.phase === "polishing") && (
+              {(state.phase === "transcribing" || state.phase === "polishing" || state.phase === "editing") && (
                 <>
                   <Loader2 className="size-4 shrink-0 animate-spin text-white/80" />
-                  <span className="shrink-0 text-white/85">{state.phase === "transcribing" ? "Transcribing…" : "Polishing…"}</span>
+                  <span className="shrink-0 text-white/85">{{ transcribing: "Transcribing…", polishing: "Polishing…", editing: "Editing…" }[state.phase]}</span>
                   <span className="truncate text-xs text-white/55">{state.phase === "transcribing" ? state.engine : state.model}</span>
                 </>
               )}

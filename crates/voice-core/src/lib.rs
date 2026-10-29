@@ -6,6 +6,7 @@ pub mod cleanup;
 pub mod error;
 pub mod history;
 pub mod models;
+pub mod scratchpad;
 pub mod settings;
 pub mod text;
 pub mod transcribe;

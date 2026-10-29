@@ -37,6 +37,10 @@ enigo = "0.6"
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 sha2 = "0.10"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+# Mutes the sound output while recording (mute.rs). The version cpal already pulls in.
+windows = { version = "0.62", features = ["Win32_Media_Audio_Endpoints", "Win32_System_Com_StructuredStorage"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # Realizes the hidden overlay before it's made click-through (overlay.rs).
 gtk = "0.18"

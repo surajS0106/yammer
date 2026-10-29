@@ -40,12 +40,18 @@ export interface Transform {
   id: string;
   name: string;
   instructions: string;
+  /** Dictates with this transform, whichever one is active; "" for none. */
+  hotkey: string;
 }
 
 export interface Settings {
   hotkey: string;
+  /** Select text, then hold this and say how to change it; "" for none. */
+  editHotkey: string;
   micDevice: string | null;
   sounds: boolean;
+  /** Mute the computer's sound output while recording. */
+  muteAudio: boolean;
   restoreClipboard: boolean;
   trailingSpace: boolean;
   overlayAlwaysVisible: boolean;
@@ -68,7 +74,13 @@ export interface Settings {
   transforms: Transform[];
   /** Id of the transform applied to dictations; "" for none. */
   activeTransform: string;
+  /** How many of the newest dictations keep their audio for "Transcribe again"; 0 keeps none. */
+  keepRecordings: number;
+  /** Delete dictations older than this many days; 0 keeps them forever. */
+  historyDays: number;
   onboarded: boolean;
+  /** The newest version whose "What's new" the user has seen; "" before the first. */
+  seenChangelog: string;
 }
 
 /** A rectangle in CSS px from the overlay window's top-left. */
@@ -105,6 +117,20 @@ export interface HistoryEntry {
   cleanup?: string;
   /** ISO 639-1 code; missing when a cloud engine auto-detected it, and on older entries. */
   language?: string;
+  /** Id of the transform whose hotkey dictated it. */
+  transform?: string;
+  /** An edit by voice: the selected text it rewrote (`raw` is then the spoken instruction). */
+  selection?: string;
+  /** Why it failed (`text` is then empty). */
+  error?: string;
+  /** Its recording is kept, so it can be transcribed again. */
+  audio?: boolean;
+}
+
+export interface Note {
+  id: string;
+  text: string;
+  updatedAt: number;
 }
 
 export interface Platform {
@@ -123,7 +149,11 @@ export type OverlayState =
   | { phase: "listening"; hint: string | null }
   | { phase: "transcribing"; engine: string }
   | { phase: "polishing"; model: string }
+  /** Rewriting the selection as asked (the edit hotkey). */
+  | { phase: "editing"; model: string }
   | { phase: "message"; text: string; error: boolean }
+  /** The dictation failed and its recording was kept: offer to retry history entry `id`. */
+  | { phase: "failed"; text: string; id: number }
   /** No text box had focus, so the transcript is shown to copy instead of pasted. */
   | { phase: "transcript"; text: string; words: string[] }
   /** Pasted, and it heard words the Dictionary doesn't know: offer to add them. */
@@ -142,6 +172,8 @@ export const api = {
   overlayHide: () => invoke<void>("overlay_hide"),
   /** Close the transcript card (no-op if something newer is showing). */
   overlayDismiss: () => invoke<void>("overlay_dismiss"),
+  /** The failed card's Retry: transcribe the entry again and paste it. */
+  overlayRetry: (id: number) => invoke<void>("overlay_retry", { id }),
   /** Add words to the Dictionary, and never offer `ignore` again. */
   dictionaryAdd: (add: string[], ignore: string[]) => invoke<void>("dictionary_add", { add, ignore }),
   quit: () => invoke<void>("quit"),
@@ -154,6 +186,12 @@ export const api = {
   historyList: () => invoke<HistoryEntry[]>("history_list"),
   historyDelete: (id: number) => invoke<void>("history_delete", { id }),
   historyClear: () => invoke<void>("history_clear"),
+  /** Transcribe a kept recording again with the current settings; resolves to the updated entry. */
+  historyRetry: (id: number) => invoke<HistoryEntry>("history_retry", { id }),
+  /** Save a file to Downloads and show it; resolves to its path. */
+  exportFile: (name: string, contents: string) => invoke<string>("export_file", { name, contents }),
+  scratchpadList: () => invoke<Note[]>("scratchpad_list"),
+  scratchpadSave: (notes: Note[]) => invoke<void>("scratchpad_save", { notes }),
   copyText: (text: string) => invoke<void>("copy_text", { text }),
   /** Rewrite text by a transform's instructions, using the AI cleanup model. */
   textRewrite: (text: string, instructions: string) => invoke<string>("text_rewrite", { text, instructions }),
@@ -175,6 +213,9 @@ export const on = {
   level: (f: (rms: number) => void): Promise<UnlistenFn> => listen<number>("level", (e) => f(e.payload)),
   historyAdded: (f: (entry: HistoryEntry) => void): Promise<UnlistenFn> =>
     listen<HistoryEntry>("history-added", (e) => f(e.payload)),
+  /** An entry was transcribed again. */
+  historyUpdated: (f: (entry: HistoryEntry) => void): Promise<UnlistenFn> =>
+    listen<HistoryEntry>("history-updated", (e) => f(e.payload)),
   settingsChanged: (f: (s: Settings) => void): Promise<UnlistenFn> => listen<Settings>("settings-changed", (e) => f(e.payload)),
   /** Where the cursor is over the overlay window (CSS px), or null when it's off it. */
   overlayCursor: (f: (p: { x: number; y: number } | null) => void): Promise<UnlistenFn> =>

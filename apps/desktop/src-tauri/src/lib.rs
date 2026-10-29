@@ -10,6 +10,7 @@ mod error;
 mod focus;
 mod gnome;
 mod hotkey;
+mod mute;
 mod overlay;
 #[cfg(target_os = "macos")]
 mod panel;
@@ -27,7 +28,7 @@ mod whisper;
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
-use crate::dictation::{Dictation, Input};
+use crate::dictation::{Dictation, Input, Mode};
 
 pub fn run() {
     // Wayland has no keep-above, so GNOME lets other apps cover the overlay and ignores
@@ -38,11 +39,17 @@ pub fn run() {
     }
     let app = tauri::Builder::default()
         // Must come first: a second launch hands its arguments to this instance and exits.
-        // `yammer --toggle` is how Wayland users bind a system shortcut to dictation
-        // (gnome.rs binds it, and `--cancel` to Esc while recording, on GNOME).
+        // `yammer --toggle` is how Wayland users bind a system shortcut to dictation (gnome.rs
+        // binds it, `--edit` and `--transform=<id>` for the other hotkeys, and `--cancel` to Esc
+        // while recording, on GNOME).
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let transform = args.iter().find_map(|a| a.strip_prefix("--transform="));
             if args.iter().any(|a| a == "--toggle") {
-                app.state::<Dictation>().send(Input::Toggle);
+                app.state::<Dictation>().send(Input::Toggle(Mode::Dictate));
+            } else if args.iter().any(|a| a == "--edit") {
+                app.state::<Dictation>().send(Input::Toggle(Mode::Edit));
+            } else if let Some(id) = transform {
+                app.state::<Dictation>().send(Input::Toggle(Mode::Transform(id.into())));
             } else if args.iter().any(|a| a == "--cancel") {
                 app.state::<Dictation>().send(Input::Cancel);
             } else {
@@ -77,8 +84,8 @@ pub fn run() {
             let settings = app.state::<state::AppState>().settings();
             overlay::create(app.handle())?;
             overlay::set_always_visible(app.handle(), settings.overlay_always_visible);
-            tray::create(app.handle(), &settings.hotkey)?;
-            if let Err(e) = hotkey::register(app.handle(), &settings.hotkey) {
+            tray::create(app.handle(), &settings)?;
+            if let Err(e) = hotkey::register(app.handle(), &settings) {
                 eprintln!("{e}");
             }
             commands::preload(app.handle());
@@ -140,6 +147,11 @@ pub fn run() {
             commands::history_list,
             commands::history_delete,
             commands::history_clear,
+            commands::history_retry,
+            commands::overlay_retry,
+            commands::export_file,
+            commands::scratchpad_list,
+            commands::scratchpad_save,
             commands::copy_text,
             commands::text_rewrite,
             commands::platform_info,
@@ -159,7 +171,10 @@ pub fn run() {
         // Keep running in the tray when the last window is hidden or closed.
         tauri::RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(),
         // Every way out (tray Quit, Dock Quit, logout) passes here before exit() runs C++ destructors.
-        tauri::RunEvent::Exit => app.state::<whisper::Whisper>().unload(),
+        tauri::RunEvent::Exit => {
+            mute::restore_now();
+            app.state::<whisper::Whisper>().unload();
+        }
         // After Tauri's own startup icon (dev builds set one on Ready), so ours wins.
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Ready => {

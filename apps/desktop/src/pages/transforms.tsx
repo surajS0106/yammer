@@ -2,8 +2,9 @@ import { Check, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
 import * as React from "react";
 
 import { PageHeader, type PageId } from "@/App";
+import { HotkeyRecorder } from "@/components/hotkey-recorder";
 import { AnimatedList, Collapse, ListRow } from "@/components/motion";
-import { Badge, Button, Card, Input, Intro, Notice, Textarea } from "@/components/ui";
+import { Badge, Button, Card, Hotkey, Input, Intro, Notice, Textarea } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import type { Transform } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -11,13 +12,14 @@ import { cn } from "@/lib/utils";
 function Editor({ initial, onSave, onCancel }: { initial: Transform; onSave: (t: Transform) => void; onCancel: () => void }) {
   const [name, setName] = React.useState(initial.name);
   const [instructions, setInstructions] = React.useState(initial.instructions);
+  const [hotkey, setHotkey] = React.useState(initial.hotkey);
   const valid = name.trim() && instructions.trim();
   return (
     <form
       className="space-y-2.5 p-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (valid) onSave({ ...initial, name: name.trim(), instructions: instructions.trim() });
+        if (valid) onSave({ ...initial, name: name.trim(), instructions: instructions.trim(), hotkey });
       }}
     >
       <label className="block space-y-1">
@@ -33,6 +35,21 @@ function Editor({ initial, onSave, onCancel }: { initial: Transform; onSave: (t:
           onChange={(e) => setInstructions(e.target.value)}
         />
       </label>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs">
+          <span className="font-medium">Hotkey</span>
+          <span className="text-muted-foreground"> · optional. Dictates with this transform, whichever one is active.</span>
+        </span>
+        {/* Kept here until the transform is saved; resolving false gives the hotkeys back meanwhile. */}
+        <HotkeyRecorder
+          value={hotkey}
+          onChange={async (h) => {
+            setHotkey(h);
+            return false;
+          }}
+          onClear={() => setHotkey("")}
+        />
+      </div>
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>
           Cancel
@@ -70,8 +87,8 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
       </div>
 
       <Intro title="Say it once, get it in the right shape">
-        A transform rewrites what you dictate before it’s pasted: into an email, bullet points, a formal note. Pick one to apply to every dictation, or run any of
-        them on a note in the Scratchpad.
+        A transform rewrites what you dictate before it’s pasted: into an email, bullet points, a formal note. Pick one to apply to every dictation, give one its
+        own hotkey, or run any of them on a note in the Scratchpad.
       </Intro>
 
       <Collapse show={!settings.cleanup.enabled}>
@@ -85,7 +102,7 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
 
       <Collapse show={editing === "new"}>
         <Card>
-          <Editor initial={{ id: `custom-${Date.now()}`, name: "", instructions: "" }} onSave={(t) => void save(t)} onCancel={() => setEditing(null)} />
+          <Editor initial={{ id: `custom-${Date.now()}`, name: "", instructions: "", hotkey: "" }} onSave={(t) => void save(t)} onCancel={() => setEditing(null)} />
         </Card>
       </Collapse>
 
@@ -106,6 +123,7 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
                     checked={active === t.id}
                     onSelect={() => setActive(t.id)}
                     name={t.name}
+                    hotkey={t.hotkey}
                     description={t.instructions}
                     actions={
                       <>
@@ -136,12 +154,14 @@ function Option({
   checked,
   onSelect,
   name,
+  hotkey,
   description,
   actions,
 }: {
   checked: boolean;
   onSelect: () => void;
   name: string;
+  hotkey?: string;
   description: string;
   actions?: React.ReactNode;
 }) {
@@ -166,6 +186,7 @@ function Option({
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
             {name}
             {checked && <Badge tone="brand">Active</Badge>}
+            {hotkey && <Hotkey accelerator={hotkey} className="font-normal" />}
           </span>
           <span className="line-clamp-2 block text-xs leading-relaxed text-muted-foreground">{description}</span>
         </span>

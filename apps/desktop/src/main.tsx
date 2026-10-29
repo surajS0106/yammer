@@ -12,9 +12,11 @@ import "./lib/theme";
 import { Overlay } from "./overlay";
 
 // The webview ignores target="_blank"; hand external links to the default browser.
+// In-app links (`#page`, as NavCards uses) resolve to the app's own http origin, so they're left alone.
 document.addEventListener("click", (e) => {
+  if (e.defaultPrevented) return;
   const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
-  if (a && /^https?:/i.test(a.href)) {
+  if (a && /^https?:/i.test(a.href) && new URL(a.href).origin !== location.origin) {
     e.preventDefault();
     void openUrl(a.href);
   }

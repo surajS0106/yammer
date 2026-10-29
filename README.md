@@ -57,7 +57,7 @@ cargo test --workspace
 bun run build               # installers for this platform
 ```
 
-Releases are manual: start `.github/workflows/release.yml` from the Actions tab or with `gh workflow run release.yml`. It builds every platform and tags the release `v<version>` from `apps/desktop/src-tauri/tauri.conf.json`. Pushing a tag does not trigger it. It signs the in-app updates with the `TAURI_SIGNING_PRIVATE_KEY` secret from the repo's `release` environment, which only `main` can use; if the environment requires a reviewer, approve the run in the Actions tab.
+Releases are manual: start `.github/workflows/release.yml` from the Actions tab or with `gh workflow run release.yml`. It builds every platform and tags the release `v<version>` from `apps/desktop/src-tauri/tauri.conf.json`. Pushing a tag does not trigger it. It signs the in-app updates with the `TAURI_SIGNING_PRIVATE_KEY` secret from the repo's `release` environment, which only `main` can use; if the environment requires a reviewer, approve the run in the Actions tab. Before releasing, rename `## Unreleased` in `CHANGELOG.md` to `## <version> — <YYYY-MM-DD>`: that section becomes the release notes and the in-app "What's new", and the workflow stops without it.
 
 ## License
 

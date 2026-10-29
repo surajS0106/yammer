@@ -154,8 +154,12 @@ export function moodOf(s: OverlayState): SushiMood {
     case "transcribing":
     case "polishing":
       return s.phase;
+    case "editing":
+      return "polishing";
     case "message":
       return s.error ? "error" : "done";
+    case "failed":
+      return "error";
     default:
       return "idle";
   }

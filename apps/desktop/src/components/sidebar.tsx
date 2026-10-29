@@ -1,10 +1,11 @@
-import { BarChart3, BookA, CircleArrowUp, CircleHelp, Flame, History, Home, LoaderCircle, NotebookPen, Scissors, Settings, Wand2 } from "lucide-react";
+import { BarChart3, BookA, CircleArrowUp, CircleHelp, Flame, History, Home, LoaderCircle, NotebookPen, Scissors, Settings, Sparkles, Wand2, X } from "lucide-react";
 import { motion } from "motion/react";
 import * as React from "react";
 
-import type { PageId } from "@/App";
+import { PlatformContext, type PageId } from "@/App";
 import { HoverHighlight } from "@/components/ui/motion-highlight";
 import { Hotkey } from "@/components/ui";
+import { releaseOf } from "@/lib/changelog";
 import { useSettings } from "@/lib/settings";
 import { computeStats, dayKey, formatCompact, useHistory } from "@/lib/stats";
 import { api, on, type OverlayState } from "@/lib/tauri";
@@ -113,7 +114,8 @@ export function Sidebar({
 
         <div className="mt-auto flex flex-col gap-3 pt-6">
           <MicCard streak={stats.dayStreak} todayWords={stats.byDay.get(today) ?? 0} onClick={() => go("home")} />
-          <UpdateCard />
+          <UpdateCard onNotes={() => go("changelog")} />
+          <WhatsNewCard onOpen={() => go("changelog")} />
           <div className="flex flex-col gap-0.5 border-t pt-2">
             {footer.map((item) => (
               <NavButton key={item.id} item={item} active={item.active} onClick={() => go(item.id)} />
@@ -255,7 +257,7 @@ function MicCard({ streak, todayWords, onClick }: { streak: number; todayWords: 
 }
 
 /** Only there when a newer release is out: one click downloads it, installs it and relaunches Yammer. */
-function UpdateCard() {
+function UpdateCard({ onNotes }: { onNotes: () => void }) {
   const update = useUpdate();
   if (update.phase === "idle") return null;
 
@@ -289,6 +291,54 @@ function UpdateCard() {
         )}
         {installing && <LoaderCircle className="relative size-3.5 animate-spin" />}
         <span className="relative">{installing ? (pct !== null ? `Updating… ${pct}%` : "Updating…") : "Upgrade now"}</span>
+      </button>
+      {update.notes.length > 0 && (
+        <button
+          type="button"
+          onClick={onNotes}
+          className="mt-1.5 w-full rounded-md py-0.5 text-[11px] text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          What's in it?
+        </button>
+      )}
+    </motion.div>
+  );
+}
+
+/** After an update, until the user opens "What's new" or dismisses this: what changed in the version they now have. */
+function WhatsNewCard({ onOpen }: { onOpen: () => void }) {
+  const { settings, update } = useSettings();
+  const version = React.useContext(PlatformContext)?.version;
+  const pending = useUpdate();
+  // An "Upgrade now" card already sits here; one card at a time.
+  if (!version || settings.seenChangelog === version || !releaseOf(version) || pending.phase !== "idle") return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={SPRING}
+      className="relative rounded-xl border bg-background/80 p-3 text-xs shadow-xs dark:bg-card"
+    >
+      <button
+        type="button"
+        onClick={() => void update({ seenChangelog: version })}
+        title="Dismiss"
+        aria-label="Dismiss"
+        className="absolute top-2 right-2 rounded-md p-0.5 text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        <X className="size-3.5" />
+      </button>
+      <div className="flex items-center gap-2 pr-5 font-medium">
+        <Sparkles className="size-4 shrink-0 text-primary" />
+        Updated to {version}
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-2.5 w-full rounded-lg border bg-background px-2.5 py-1.5 font-medium transition-colors outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        See what's new
       </button>
     </motion.div>
   );

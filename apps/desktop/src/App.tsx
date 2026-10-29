@@ -1,10 +1,11 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Copy, Minus, PanelLeft, Square, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Minus, PanelLeft, Square, X } from "lucide-react";
 import { MotionConfig } from "motion/react";
 import * as React from "react";
 
 import { navPageIds, Sidebar } from "@/components/sidebar";
 import { Segmented } from "@/components/ui";
+import { ChangelogPage } from "@/pages/changelog";
 import { CleanupPage } from "@/pages/cleanup";
 import { DictionaryPage } from "@/pages/dictionary";
 import { EnginePage } from "@/pages/engine";
@@ -32,7 +33,8 @@ export type PageId =
   | "general"
   | "engine"
   | "cleanup"
-  | "help";
+  | "help"
+  | "changelog";
 
 /** The three settings pages share one nav entry and switch with tabs. */
 const settingsTabs: { value: "general" | "engine" | "cleanup"; label: string }[] = [
@@ -42,10 +44,20 @@ const settingsTabs: { value: "general" | "engine" | "cleanup"; label: string }[]
 ];
 const isSettings = (id: PageId) => settingsTabs.some((t) => t.value === id);
 
+/** Pages reached from inside another one: they get a back button and a breadcrumb trail up to it. */
+const pageParents: Partial<Record<PageId, PageId>> = { changelog: "help" };
+const pageLabels: Partial<Record<PageId, string>> = { help: "Help", changelog: "What's new" };
+
+/** The page and its ancestors, outermost first. */
+function trail(page: PageId): PageId[] {
+  const parent = pageParents[page];
+  return parent ? [...trail(parent), page] : [page];
+}
+
 /** Pages that lay out dashboards or card grids get more room; forms and lists stay at a readable measure. */
 const widePages = new Set<PageId>(["insights", "help"]);
 
-const allIds = new Set<string>([...navPageIds, ...settingsTabs.map((t) => t.value), "help"]);
+const allIds = new Set<string>([...navPageIds, ...settingsTabs.map((t) => t.value), "help", "changelog"]);
 
 /** Known synchronously, so the title bar lays out right on first paint. */
 const isMac = navigator.userAgent.includes("Mac");
@@ -55,7 +67,7 @@ const COLLAPSED_KEY = "sidebar-collapsed";
 export const PlatformContext = React.createContext<Platform | null>(null);
 
 export default function App() {
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
   const [page, setPage] = React.useState<PageId>("home");
   const [platform, setPlatform] = React.useState<Platform | null>(null);
   const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem(COLLAPSED_KEY) === "1");
@@ -98,6 +110,11 @@ export default function App() {
     return () => window.removeEventListener("focus", load);
   }, []);
 
+  // A new install has nothing to catch up on: only versions after the one it started with count as new.
+  React.useEffect(() => {
+    if (!settings.onboarded && platform && settings.seenChangelog !== platform.version) void update({ seenChangelog: platform.version });
+  }, [settings.onboarded, settings.seenChangelog, platform, update]);
+
   // First run: the setup guide takes the whole window until it's finished or skipped.
   if (!settings.onboarded) {
     return (
@@ -131,7 +148,7 @@ export default function App() {
                 collapsed && "-translate-x-4 opacity-0",
               )}
             >
-              <Sidebar page={page} go={setPage} settingsActive={isSettings(page)} dragStrip={isMac} />
+              <Sidebar page={trail(page)[0]} go={setPage} settingsActive={isSettings(page)} dragStrip={isMac} />
             </div>
           </div>
           <main className="flex min-w-0 flex-1 flex-col">
@@ -149,6 +166,7 @@ export default function App() {
                     widePages.has(page) ? "max-w-6xl" : page === "home" ? "h-full max-w-4xl" : "max-w-3xl",
                   )}
                 >
+                  {pageParents[page] && <Breadcrumbs trail={trail(page)} go={setPage} />}
                   {isSettings(page) && (
                     <div className="mb-6">
                       <Segmented value={page as (typeof settingsTabs)[number]["value"]} options={settingsTabs} onChange={setPage} />
@@ -167,6 +185,7 @@ export default function App() {
                     {page === "engine" && <EnginePage go={setPage} />}
                     {page === "cleanup" && <CleanupPage />}
                     {page === "help" && <HelpPage go={setPage} />}
+                    {page === "changelog" && <ChangelogPage />}
                   </div>
                 </div>
               </div>
@@ -175,6 +194,43 @@ export default function App() {
         </div>
       </MotionConfig>
     </PlatformContext.Provider>
+  );
+}
+
+function Breadcrumbs({ trail, go }: { trail: PageId[]; go: (page: PageId) => void }) {
+  const parent = trail[trail.length - 2];
+  return (
+    <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1 text-sm">
+      <button
+        type="button"
+        onClick={() => go(parent)}
+        title={`Back to ${pageLabels[parent]}`}
+        aria-label={`Back to ${pageLabels[parent]}`}
+        className="mr-1 rounded-md p-1 text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        <ChevronLeft className="size-4" />
+      </button>
+      <ol className="flex min-w-0 items-center gap-1">
+        {trail.map((id, i) => (
+          <li key={id} className="flex min-w-0 items-center gap-1">
+            {i > 0 && <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground/60" />}
+            {i < trail.length - 1 ? (
+              <button
+                type="button"
+                onClick={() => go(id)}
+                className="truncate rounded-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                {pageLabels[id]}
+              </button>
+            ) : (
+              <span aria-current="page" className="truncate font-medium">
+                {pageLabels[id]}
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 

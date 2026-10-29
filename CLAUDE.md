@@ -27,7 +27,7 @@ cargo test -p voice-core --config 'profile.dev.package."*".opt-level=0'
 
 There are no JS tests and no JS linter; `typecheck` is the TypeScript gate. Building whisper.cpp needs CMake and libclang. On Windows, set `CMAKE` and `LIBCLANG_PATH` if they aren't on PATH. Dev builds compile dependencies at `opt-level = 3`, because whisper is unusably slow without it.
 
-CI (`.github/workflows/ci.yml`) has a 3-minute budget. It runs typecheck, the frontend build, `cargo fmt --check`, and voice-core clippy and tests on Linux. It never builds the `yammer` crate, so run `cargo test --workspace` locally. Releases are manual. Start `release.yml` from the Actions tab or with `gh workflow run release.yml`. It builds every platform and tags the release `v<version>` from `apps/desktop/src-tauri/tauri.conf.json`. Pushing a tag doesn't trigger it.
+CI (`.github/workflows/ci.yml`) has a 3-minute budget. It runs typecheck, the frontend build, `cargo fmt --check`, and voice-core clippy and tests on Linux. It never builds the `yammer` crate, so run `cargo test --workspace` locally. Releases are manual. Start `release.yml` from the Actions tab or with `gh workflow run release.yml`. It builds every platform and tags the release `v<version>` from `apps/desktop/src-tauri/tauri.conf.json`. Pushing a tag doesn't trigger it. Its release notes are that version's section of the user-facing `CHANGELOG.md`, and it stops if there isn't one: add user-visible changes to `## Unreleased` as you make them, and rename it to `## <version> — <YYYY-MM-DD>` when bumping the version.
 
 Rust formatting is enforced. `rustfmt.toml` matches the code's dense style (`max_width = 150`, `use_small_heuristics = "Max"`), so run `cargo fmt --all` after Rust edits. Clippy must be warning-free, and CI runs it with `-D warnings` on voice-core. macOS-only code (`dock.rs`, `panel.rs` and the `cfg(target_os = "macos")` arms) only compiles and lints on a Mac. Project skills: `/typecheck` (fast), `/check` (the pre-push gate that mirrors CI), `/ship` (check, commit, push) and `/build-dmg` (a local unsigned macOS DMG).
 
@@ -39,22 +39,25 @@ Yammer (formerly Larp), a product of Sush: a dictation app modelled on Sush (`..
   - `audio.rs`: downmix, resample to 16 kHz, silence detection, WAV encode and decode.
   - `models.rs`: the whisper model catalog, each entry pinned by size and SHA-256.
   - `settings.rs`: `settings.json`. Every field has a serde default, so old files load. Struct fields serialize as camelCase and enums as kebab-case, and `lib/tauri.ts` must use the same casing.
-  - `history.rs`
+  - `history.rs`: `history.json`, plus `recordings/<id>.wav` for the newest `keepRecordings` entries, so a dictation can be transcribed again. Failed dictations are saved too (`error`, empty `text`) so they can be retried. `prune` applies `historyDays`.
+  - `scratchpad.rs`: the Scratchpad's notes as `scratchpad.json`. Older builds kept them in localStorage; `pages/scratchpad.tsx` moves them over.
   - `transcribe.rs`: cloud speech-to-text over `/audio/transcriptions` or Ollama chat.
-  - `cleanup.rs`: the LLM cleanup prompt and request for OpenAI chat or Anthropic messages.
+  - `cleanup.rs`: the LLM cleanup prompt and request for OpenAI chat or Anthropic messages, plus `rewrite` (Scratchpad transforms) and `edit` (edit by voice).
 - **`apps/desktop/src-tauri`** (crate `yammer`) is the OS shell.
-  - `dictation.rs` is the heart of the app. A single task consumes `Input`s (hotkey Down/Up, Toggle, Cancel, Cap, Finished) in order:
+  - `dictation.rs` is the heart of the app. A single task consumes `Input`s (hotkey Down/Up, Toggle, Cancel, Cap, NoSelection, Retry, Finished) in order:
+    - **Modes:** each hotkey starts a `Mode`: `Dictate` (the active transform), `Transform(id)` (a transform's own hotkey, which runs cleanup even when it's off), or `Edit` (copies the selection with Ctrl/⌘+C as recording starts, then rewrites it as the speech asks).
     - **Hold vs. tap:** a release within 300 ms latches into toggle mode.
-    - **Pipeline:** stop recording → resample → whisper or cloud → optional cleanup (falls back to the raw text) → paste → history.
-  - `hotkey.rs`: the `tauri-plugin-global-shortcut` handler only forwards events. Registering a shortcut blocks on the main thread, so never do real work in the handler. Esc is registered only while recording.
+    - **Pipeline:** stop recording → resample → whisper or cloud → optional cleanup (falls back to the raw text) → paste → history, with the audio. A failure is saved as an entry, and the overlay's failed card offers Retry (`Input::Retry`, which pastes); History's "Transcribe again" (`dictation::retry`) only updates the entry and emits `history-updated`.
+  - `hotkey.rs`: registers every hotkey in the settings (`bindings`: dictation, edit, per-transform) and rejects duplicates. The `tauri-plugin-global-shortcut` handler only forwards events. Registering a shortcut blocks on the main thread, so never do real work in the handler. Esc is registered only while recording.
   - `recorder.rs`: cpal capture on its own thread, because the stream isn't `Send`.
   - `paste.rs`: arboard clipboard plus an enigo Ctrl/⌘+V, then restores the clipboard. On Wayland it tries `wtype`, then on GNOME the RemoteDesktop portal (`portal.rs`), then `ydotool`, and otherwise the text is copied only.
   - `portal.rs` (Linux): a RemoteDesktop portal keyboard session, opened at startup on GNOME so its one-time permission dialog doesn't steal focus mid-paste. Its restore token is saved as `remote-desktop-token` in the config dir.
-  - `gnome.rs`: on GNOME Wayland the hotkey is a GNOME custom shortcut (written with `gsettings`) that runs `yammer --toggle`. GNOME reports only the press, so it's tap-to-toggle. Esc is bound to `yammer --cancel` only while recording.
+  - `gnome.rs`: on GNOME Wayland each hotkey is a GNOME custom shortcut (written with `gsettings`) that runs `yammer --toggle`, `--edit` or `--transform=<id>`. GNOME reports only the press, so it's tap-to-toggle. Esc is bound to `yammer --cancel` only while recording.
   - `focus.rs`: macOS Accessibility check for whether a text box has focus. Only a definite "no" skips the paste; the overlay then shows the transcript in a card with Copy (`Transcript` state). Unknown, Windows and Linux paste as before.
   - `overlay.rs`: a transparent, non-focusable, click-through pill window. It must never take focus, or the paste lands in the wrong app. On macOS, `panel.rs` turns it into a non-activating `NSPanel`, which lets it appear over other apps' full-screen Spaces. On Linux, the window's input shape is the hit areas (Sushi, the pill, the menu), rather than being toggled by the cursor poll.
   - `whisper.rs`: model download with SHA check, a cached context, and inference.
-  - `tray.rs`
+  - `tray.rs`: the menu has Transform, Language and Speech engine submenus. `tray::refresh` rebuilds it, and `commands::apply` (every settings change from Settings or the tray) calls it.
+  - `mute.rs`: "Mute other audio" mutes the default output while recording (Core Audio COM on Windows, `osascript` on macOS, `wpctl`/`pactl` on Linux), and only undoes a mute it made.
   - `secrets.rs`: the OS keyring for the `stt` and `cleanup` keys. Debug builds use `dev-secrets.json` instead.
   - `commands.rs`. `error.rs`'s `AppError` serializes as a plain message string, so the UI shows it directly (`errorMessage` in `lib/tauri.ts`).
   - `state.rs`: `AppState` holds the settings and history behind mutexes, the models directory and a shared `reqwest` client.
@@ -69,7 +72,8 @@ Yammer (formerly Larp), a product of Sush: a dictation app modelled on Sush (`..
   - `pages/onboarding.tsx` is the first-run setup guide (engine and API key, macOS permissions or the Wayland setup, hotkey, a first dictation). `App.tsx` shows it in place of the sidebar layout while `settings.onboarded` is false. Finishing or skipping sets the flag, and Help → "Run setup again" clears it. Nothing else sets it.
   - `lib/settings.tsx` holds the settings context. Every change saves through `settings_set`, which rejects a hotkey it can't register.
   - `lib/models.ts` is a module-level download store.
-  - `lib/presets.ts` holds the provider presets.
+  - `lib/changelog.ts` bundles the repo-root `CHANGELOG.md` (`?raw`) for the "What's new" page (`pages/changelog.tsx`). The sidebar offers it once after an update, until `settings.seenChangelog` matches the installed version; a new install marks its own version seen during onboarding. An available update's notes come from the release body through the same parser.
+  - `lib/presets.ts` holds the provider presets. Its `languages` list is repeated as `LANGUAGES` in `settings.rs` for the tray; keep the two in sync.
   - `lib/theme.ts` toggles `.dark` on `<html>` and keeps the native window theme in sync. Only the settings window applies the `theme` setting. The overlay always follows the OS.
 
 ## Gotchas

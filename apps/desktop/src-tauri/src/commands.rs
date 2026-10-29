@@ -6,9 +6,11 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 use voice_core::history::Entry;
+use voice_core::scratchpad::{self, Note};
 use voice_core::settings::Engine;
 use voice_core::Settings;
 
+use crate::dictation::{self, Dictation, Input, Mode};
 use crate::error::{AppError, AppResult};
 use crate::hotkey::{self, Hotkey};
 use crate::overlay::{self, OverlayState};
@@ -43,7 +45,13 @@ pub fn overlay_reset_position(app: AppHandle) {
 /// from the app the text goes into.
 #[tauri::command]
 pub fn overlay_toggle_dictation(app: AppHandle) {
-    app.state::<crate::dictation::Dictation>().send(crate::dictation::Input::Toggle);
+    app.state::<Dictation>().send(Input::Toggle(Mode::Dictate));
+}
+
+/// The failed card's Retry: transcribe history entry `id` again and paste it.
+#[tauri::command]
+pub fn overlay_retry(app: AppHandle, id: u64) {
+    app.state::<Dictation>().send(Input::Retry(id));
 }
 
 /// Open the settings window at `page` ("home", "history", …).
@@ -91,29 +99,41 @@ pub fn hotkey_label(state: State<'_, AppState>) -> String {
     hotkey::display(&state.settings().hotkey)
 }
 
-/// Save new settings. A hotkey that can't be registered is rejected and the
-/// old one stays.
+/// Save new settings. Hotkeys that can't be registered are rejected and the
+/// old ones stay.
 #[tauri::command]
-pub fn settings_set(app: AppHandle, state: State<'_, AppState>, settings: Settings) -> AppResult<Settings> {
+pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
+    apply(&app, settings)
+}
+
+/// Save new settings and put them into effect, from Settings or the tray.
+pub fn apply(app: &AppHandle, settings: Settings) -> AppResult<Settings> {
+    let state = app.state::<AppState>();
     let old = state.settings();
-    if settings.hotkey != old.hotkey {
-        if let Err(e) = hotkey::register(&app, &settings.hotkey) {
-            let _ = hotkey::register(&app, &old.hotkey);
+    if !hotkey::same(&settings, &old) {
+        if let Err(e) = hotkey::register(app, &settings) {
+            let _ = hotkey::register(app, &old);
             return Err(e);
         }
-        tray::set_tooltip(&app, &settings.hotkey);
     }
     settings.save(&state.settings_path)?;
     *state.settings.lock().unwrap() = settings.clone();
     if settings.overlay_always_visible != old.overlay_always_visible {
-        overlay::set_always_visible(&app, settings.overlay_always_visible);
+        overlay::set_always_visible(app, settings.overlay_always_visible);
     }
     if settings.overlay_position != old.overlay_position {
-        overlay::place(&app);
+        overlay::place(app);
     }
     if settings.engine == Engine::Local && (old.engine != Engine::Local || old.local_model != settings.local_model) {
-        preload(&app);
+        preload(app);
     }
+    if (settings.history_days, settings.keep_recordings) != (old.history_days, old.keep_recordings) {
+        let pruned = state.history.lock().unwrap().prune(crate::state::now_ms(), settings.history_days, settings.keep_recordings as usize);
+        if let Err(e) = pruned {
+            eprintln!("couldn't drop old history: {e}");
+        }
+    }
+    tray::refresh(app);
     let _ = app.emit("settings-changed", &settings);
     Ok(settings)
 }
@@ -134,10 +154,10 @@ pub fn preload(app: &AppHandle) {
     });
 }
 
-/// Release the global hotkey while the UI listens for a new one.
+/// Release the global hotkeys while the UI listens for a new one.
 #[tauri::command]
 pub fn hotkey_suspend(app: AppHandle, state: State<'_, AppState>, suspended: bool) -> AppResult<()> {
-    hotkey::suspend(&app, suspended, &state.settings().hotkey)
+    hotkey::suspend(&app, suspended, &state.settings())
 }
 
 #[tauri::command]
@@ -174,6 +194,50 @@ pub fn history_delete(state: State<'_, AppState>, id: u64) -> AppResult<()> {
 #[tauri::command]
 pub fn history_clear(state: State<'_, AppState>) -> AppResult<()> {
     Ok(state.history.lock().unwrap().clear()?)
+}
+
+/// History's "Transcribe again": redo a kept recording with the current settings. Emits `history-updated` too.
+#[tauri::command]
+pub async fn history_retry(app: AppHandle, id: u64) -> AppResult<Entry> {
+    dictation::retry(&app, id).await
+}
+
+/// Write `contents` to `name` in Downloads (a number added if it's taken), show
+/// it in the file manager, and return where it went.
+#[tauri::command]
+pub fn export_file(app: AppHandle, name: String, contents: String) -> AppResult<String> {
+    let dir = app.path().download_dir().or_else(|_| app.path().document_dir())?;
+    let name = std::path::Path::new(&name).file_name().ok_or_else(|| AppError::Invalid("That isn't a file name.".into()))?.to_owned();
+    let (stem, ext) = {
+        let p = std::path::Path::new(&name);
+        (
+            p.file_stem().unwrap_or_default().to_string_lossy().into_owned(),
+            p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default(),
+        )
+    };
+    let mut path = dir.join(&name);
+    for n in 2.. {
+        if !path.exists() {
+            break;
+        }
+        path = dir.join(format!("{stem} ({n}){ext}"));
+    }
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(&path, contents)?;
+    if let Err(e) = tauri_plugin_opener::reveal_item_in_dir(&path) {
+        eprintln!("couldn't show the export: {e}");
+    }
+    Ok(path.display().to_string())
+}
+
+#[tauri::command]
+pub fn scratchpad_list(state: State<'_, AppState>) -> Vec<Note> {
+    scratchpad::load(&state.scratchpad_path)
+}
+
+#[tauri::command]
+pub fn scratchpad_save(state: State<'_, AppState>, notes: Vec<Note>) -> AppResult<()> {
+    Ok(scratchpad::save(&state.scratchpad_path, &notes)?)
 }
 
 /// Rewrite `text` by `instructions` with the cleanup model (a Transform run from the Scratchpad).

@@ -145,7 +145,8 @@ export function providerLabel(preset: string, model: string): string {
   return `${providerNames[preset] ?? "Custom"} · ${model.trim()}`;
 }
 
-export const languages:[code: string, name: string][] = [
+// The same list as LANGUAGES in voice-core's settings.rs, which the tray uses; keep the two in sync.
+export const languages: [code: string, name: string][] = [
   ["auto", "Detect automatically"],
   ["en", "English"],
   ["es", "Spanish"],

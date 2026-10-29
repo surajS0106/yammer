@@ -1,17 +1,23 @@
 //! GNOME on Wayland only delivers global key grabs to X11 apps, so there the
 //! hotkey is a GNOME custom keyboard shortcut that runs `yammer --toggle`,
-//! written with `gsettings`. GNOME only reports the press, so it's tap to
+//! written with `gsettings` (`--edit` for editing by voice, `--transform=<id>`
+//! for a transform's own hotkey). GNOME only reports the press, so it's tap to
 //! start, tap to finish. While recording, Esc is bound to `yammer --cancel`.
 
 use std::process::Command;
 
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 
+use crate::dictation::Mode;
+
 const LIST_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys";
 const ENTRY_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding";
 const BASE: &str = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings";
 const TOGGLE: &str = "yammer";
 const CANCEL: &str = "yammer-cancel";
+const EDIT: &str = "yammer-edit";
+/// Followed by a number: one entry per transform hotkey.
+const TRANSFORM: &str = "yammer-transform-";
 
 /// Whether hotkeys go through GNOME's custom shortcuts.
 pub fn available() -> bool {
@@ -20,16 +26,43 @@ pub fn available() -> bool {
         && crate::platform::on_path("gsettings")
 }
 
-/// Make `shortcut` start and stop dictation, and set up the (unbound) Esc entry.
-pub fn bind(shortcut: &Shortcut) -> Result<(), String> {
-    let binding = gtk_accelerator(shortcut)?;
-    entry(TOGGLE, "Yammer: dictate", "--toggle", &binding)?;
-    entry(CANCEL, "Yammer: cancel dictation", "--cancel", "")
+/// Bind each shortcut to what it starts, set up the (unbound) Esc entry, and
+/// clear entries left from hotkeys that were removed.
+pub fn bind(hotkeys: &[(&Shortcut, &Mode)]) -> Result<(), String> {
+    let mut used = vec![path(TOGGLE), path(CANCEL)];
+    let mut transforms = 0;
+    for (shortcut, mode) in hotkeys {
+        let binding = gtk_accelerator(shortcut)?;
+        let (id, name, flag) = match mode {
+            Mode::Dictate => (TOGGLE.to_string(), "Yammer: dictate".to_string(), "--toggle".to_string()),
+            Mode::Edit => (EDIT.to_string(), "Yammer: edit the selection".to_string(), "--edit".to_string()),
+            Mode::Transform(t) => {
+                transforms += 1;
+                (format!("{TRANSFORM}{transforms}"), format!("Yammer: dictate with {t}"), format!("--transform={}", shell_word(t)))
+            }
+        };
+        entry(&id, &name, &flag, &binding)?;
+        used.push(path(&id));
+    }
+    entry(CANCEL, "Yammer: cancel dictation", "--cancel", "")?;
+    for stale in ours()?.into_iter().filter(|p| !used.contains(p)) {
+        set(&stale, "binding", "")?;
+    }
+    Ok(())
 }
 
-/// Release the hotkey, so the app can see it while recording a new one.
+/// Release the hotkeys, so the app can see them while recording a new one.
 pub fn unbind() -> Result<(), String> {
-    set(&path(TOGGLE), "binding", "")
+    for p in ours()?.into_iter().filter(|p| *p != path(CANCEL)) {
+        set(&p, "binding", "")?;
+    }
+    Ok(())
+}
+
+/// The custom shortcuts Yammer added.
+fn ours() -> Result<Vec<String>, String> {
+    let current = gsettings(&["get", LIST_SCHEMA, "custom-keybindings"])?;
+    Ok(current.split('\'').skip(1).step_by(2).filter(|p| p.starts_with(&format!("{BASE}/yammer"))).map(String::from).collect())
 }
 
 /// Bind Esc to cancel while recording, and give it back afterwards.
@@ -78,7 +111,11 @@ fn quote(s: &str) -> String {
 /// This app as a shell word for GNOME to run. An AppImage runs from a temporary mount, so use the image itself.
 fn executable() -> String {
     let exe = std::env::var_os("APPIMAGE").map(Into::into).or_else(|| std::env::current_exe().ok()).unwrap_or_else(|| "yammer".into());
-    format!("'{}'", exe.to_string_lossy().replace('\'', r"'\''"))
+    shell_word(&exe.to_string_lossy())
+}
+
+fn shell_word(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
 }
 
 /// The shortcut in GTK's accelerator syntax, e.g. "<Control><Shift>space".

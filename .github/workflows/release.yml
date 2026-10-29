@@ -47,6 +47,20 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      # This version's section of CHANGELOG.md becomes the release notes, which tauri-action also puts in
+      # latest.json, where "Upgrade now" shows them. A release with no entry stops here.
+      - name: Read release notes
+        id: notes
+        shell: bash
+        run: |
+          version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)
+          notes=$(awk -v v="$version" '/^## /{on = index($0, "## " v " ") == 1; next} on' CHANGELOG.md)
+          if [ -z "$(echo "$notes" | tr -d '[:space:]')" ]; then
+            echo "::error::CHANGELOG.md has no '## $version — <date>' section. Rename Unreleased before releasing."
+            exit 1
+          fi
+          { echo "body<<NOTES_EOF"; echo "$notes"; echo "NOTES_EOF"; } >> "$GITHUB_OUTPUT"
+
       - run: bun install --frozen-lockfile
 
       # macOS 26 swaps the app icon with the system appearance; needs Xcode's actool.
@@ -69,6 +83,6 @@ jobs:
           args: --target ${{ matrix.target }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseName: Yammer ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
-          releaseBody: See the assets below to download the installer for your platform.
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false

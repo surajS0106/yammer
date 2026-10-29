@@ -72,6 +72,14 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
         </div>
       </Section>
 
+      <Section title="Updates">
+        <Row label="What's new" description="See what changed in each version of Yammer.">
+          <Button size="sm" variant="outline" onClick={() => go("changelog")}>
+            Open
+          </Button>
+        </Row>
+      </Section>
+
       <Section title="Setup">
         <Row label="Setup guide" description="Walk through the speech engine, permissions and hotkey again, step by step.">
           <Button size="sm" variant="outline" onClick={() => void update({ onboarded: false })}>

@@ -1,17 +1,36 @@
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import * as React from "react";
 
 import { PageHeader } from "@/App";
 import { Badge, Button, Card, Input, Select } from "@/components/ui";
+import { exportHistory, type ExportFormat } from "@/lib/export";
 import { useSettings } from "@/lib/settings";
-import { engineLabel } from "@/lib/stats";
+import { engineLabel, replaceEntry } from "@/lib/stats";
 import { api, errorMessage, on, type HistoryEntry } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
 
 const time = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }) {
   const { toast } = useSettings();
   const [showRaw, setShowRaw] = React.useState(false);
+  const [retrying, setRetrying] = React.useState(false);
+  // For an edit by voice the original is the selected text, and `raw` is what was said.
+  const original = entry.selection ?? entry.raw;
+
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      // The list picks up the new text from history-updated.
+      const e = await api.historyRetry(entry.id);
+      if (e.error) toast(e.error);
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   return (
     <div className="group space-y-1.5 px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -19,28 +38,52 @@ function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }
         <span>·</span>
         <span>{(entry.durationMs / 1000).toFixed(1)}s</span>
         <Badge>{engineLabel(entry)}</Badge>
-        {entry.cleanup && <Badge tone="brand">Cleaned · {entry.cleanup}</Badge>}
-        {entry.raw && (
+        {entry.error ? (
+          <Badge tone="error">Failed</Badge>
+        ) : entry.selection ? (
+          <Badge tone="brand">Edited by voice</Badge>
+        ) : (
+          entry.cleanup && <Badge tone="brand">Cleaned · {entry.cleanup}</Badge>
+        )}
+        {original && !entry.error && (
           <button type="button" className="text-primary hover:underline" onClick={() => setShowRaw((v) => !v)}>
             {showRaw ? "Hide original" : "Show original"}
           </button>
         )}
-        <div className="ml-auto flex transition-opacity pointer-fine:opacity-0 group-hover:opacity-100 focus-within:opacity-100">
-          <Button
-            size="icon"
-            variant="ghost"
-            title="Copy"
-            onClick={() => void api.copyText(entry.text).then(() => toast("Copied.", "info"), (e) => toast(errorMessage(e)))}
-          >
-            <Copy />
-          </Button>
+        {/* A failed entry's buttons stay visible: retrying is the point of it. */}
+        <div className={cn("ml-auto flex transition-opacity group-hover:opacity-100 focus-within:opacity-100", !entry.error && !retrying && "pointer-fine:opacity-0")}>
+          {entry.audio && (
+            <Button size="icon" variant="ghost" title="Transcribe again with your current settings" disabled={retrying} onClick={() => void retry()}>
+              {retrying ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+            </Button>
+          )}
+          {!entry.error && (
+            <Button
+              size="icon"
+              variant="ghost"
+              title="Copy"
+              onClick={() => void api.copyText(entry.text).then(() => toast("Copied.", "info"), (e) => toast(errorMessage(e)))}
+            >
+              <Copy />
+            </Button>
+          )}
           <Button size="icon" variant="ghost" title="Delete" onClick={onDelete}>
             <Trash2 />
           </Button>
         </div>
       </div>
-      <p className="text-sm leading-relaxed break-words whitespace-pre-wrap select-text">{entry.text}</p>
-      {showRaw && entry.raw && <p className="border-l-2 pl-3 text-sm leading-relaxed text-muted-foreground">{entry.raw}</p>}
+      {entry.error ? (
+        <p className="text-sm leading-relaxed text-destructive">
+          {entry.error}
+          {!entry.audio && <span className="text-muted-foreground"> Its recording wasn’t kept, so it can’t be retried.</span>}
+        </p>
+      ) : (
+        <>
+          {entry.selection && entry.raw && <p className="text-xs text-muted-foreground italic">“{entry.raw}”</p>}
+          <p className="text-sm leading-relaxed break-words whitespace-pre-wrap select-text">{entry.text}</p>
+        </>
+      )}
+      {showRaw && original && <p className="border-l-2 pl-3 text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">{original}</p>}
     </div>
   );
 }
@@ -114,6 +157,7 @@ function Pagination({
 }
 
 export function HistoryPage() {
+  const { toast } = useSettings();
   const [entries, setEntries] = React.useState<HistoryEntry[]>([]);
   const [query, setQuery] = React.useState("");
   const [page, setPage] = React.useState(1);
@@ -122,12 +166,15 @@ export function HistoryPage() {
 
   React.useEffect(() => {
     api.historyList().then(setEntries, () => {});
-    const unlisten = on.historyAdded((e) => setEntries((list) => [e, ...list]));
-    return () => void unlisten.then((f) => f());
+    const unlisten = [
+      on.historyAdded((e) => setEntries((list) => [e, ...list])),
+      on.historyUpdated((e) => setEntries((list) => replaceEntry(list, e))),
+    ];
+    return () => unlisten.forEach((u) => void u.then((f) => f()));
   }, []);
 
   const q = query.trim().toLowerCase();
-  const matches = q ? entries.filter((e) => e.text.toLowerCase().includes(q)) : entries;
+  const matches = q ? entries.filter((e) => (e.error ?? e.text).toLowerCase().includes(q)) : entries;
   const words = entries.reduce((n, e) => n + e.text.split(/\s+/).filter(Boolean).length, 0);
 
   const pages = Math.max(1, Math.ceil(matches.length / pageSize));
@@ -135,6 +182,16 @@ export function HistoryPage() {
   const current = Math.min(page, pages);
   const start = (current - 1) * pageSize;
   const shown = matches.slice(start, start + pageSize);
+
+  // What the search shows, or everything.
+  const exportAs = async (format: ExportFormat) => {
+    const { name, contents } = exportHistory(matches, format);
+    try {
+      toast(`Saved to ${await api.exportFile(name, contents)}`, "info");
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  };
 
   return (
     <div ref={top} className="space-y-6">
@@ -152,6 +209,19 @@ export function HistoryPage() {
               setPage(1);
             }}
           />
+          <Select
+            className="w-auto"
+            aria-label="Export"
+            title={q ? "Export the dictations that match your search to Downloads" : "Export every dictation to Downloads"}
+            value=""
+            onChange={(e) => void exportAs(e.target.value as ExportFormat)}
+          >
+            <option value="" disabled>
+              Export…
+            </option>
+            <option value="md">Markdown</option>
+            <option value="csv">CSV (spreadsheet)</option>
+          </Select>
           <Button
             variant="destructive"
             onClick={() => {
