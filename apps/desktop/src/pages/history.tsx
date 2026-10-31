@@ -120,16 +120,17 @@ function Pagination({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-      <label className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
         Rows per page
-        <Select className="w-auto" value={pageSize} onChange={(e) => onPageSize(Number(e.target.value))}>
-          {PAGE_SIZES.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </Select>
-      </label>
+        <Select
+          className="w-auto"
+          label="Rows per page"
+          align="start"
+          value={pageSize}
+          onChange={onPageSize}
+          options={PAGE_SIZES.map((n) => ({ value: n, label: String(n) }))}
+        />
+      </div>
       <div className="flex items-center gap-3">
         <span className="tabular-nums">
           {start + 1}–{start + count} of {total}
@@ -209,19 +210,18 @@ export function HistoryPage() {
               setPage(1);
             }}
           />
-          <Select
-            className="w-auto"
-            aria-label="Export"
+          <Select<ExportFormat>
+            className="w-auto shrink-0"
+            label="Export"
             title={q ? "Export the dictations that match your search to Downloads" : "Export every dictation to Downloads"}
-            value=""
-            onChange={(e) => void exportAs(e.target.value as ExportFormat)}
-          >
-            <option value="" disabled>
-              Export…
-            </option>
-            <option value="md">Markdown</option>
-            <option value="csv">CSV (spreadsheet)</option>
-          </Select>
+            value={null}
+            placeholder="Export…"
+            onChange={(format) => void exportAs(format)}
+            options={[
+              { value: "md", label: "Markdown" },
+              { value: "csv", label: "CSV (spreadsheet)" },
+            ]}
+          />
           <Button
             variant="destructive"
             onClick={() => {

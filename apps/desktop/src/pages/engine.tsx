@@ -1,13 +1,16 @@
-import { Download, Trash2 } from "lucide-react";
+import { Cloud, Cpu, Download, Trash2 } from "lucide-react";
+import type * as React from "react";
 
-import { PageHeader, type PageId } from "@/App";
+import type { PageId } from "@/App";
 import { KeyField } from "@/components/key-field";
-import { Badge, Button, CommitInput, Notice, Progress, Row, Section, Segmented, Select } from "@/components/ui";
+import { ProviderLogo } from "@/components/provider-logo";
+import { SettingsHero } from "@/components/settings-hero";
+import { Badge, Button, CommitInput, Notice, Progress, Row, Section, Select } from "@/components/ui";
 import { parseWords } from "@/pages/dictionary";
 import { deleteModel, downloadModel, useModels } from "@/lib/models";
-import { languages, sttPresets } from "@/lib/presets";
+import { languages, providerLabel, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
-import type { Engine, SttApi } from "@/lib/tauri";
+import type { SttApi } from "@/lib/tauri";
 import { cn, formatBytes } from "@/lib/utils";
 
 function LocalModels() {
@@ -85,13 +88,13 @@ function CloudProvider() {
   return (
     <Section title="Cloud service" description="Your audio is sent to this service for each dictation.">
       <Row label="Provider">
-        <Select className="w-60" value={preset.id} onChange={(e) => choosePreset(e.target.value)}>
-          {sttPresets.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </Select>
+        <Select
+          className="w-64"
+          label="Provider"
+          value={preset.id}
+          onChange={choosePreset}
+          options={sttPresets.map((p) => ({ value: p.id, label: p.label, icon: <ProviderLogo id={p.id} /> }))}
+        />
       </Row>
       <Row label="Model">
         <CommitInput className="w-60" list="stt-models" value={cloud.model} onCommit={(model) => void update({ cloud: { ...cloud, model } })} />
@@ -111,11 +114,17 @@ function CloudProvider() {
             />
           </Row>
           <Row label="API">
-            <Select className="w-60" value={cloud.api} onChange={(e) => void update({ cloud: { ...cloud, api: e.target.value as SttApi } })}>
-              <option value="transcriptions">/audio/transcriptions</option>
-              <option value="ollama-chat">Ollama chat (audio model)</option>
-              <option value="sarvam">Sarvam /speech-to-text</option>
-            </Select>
+            <Select<SttApi>
+              className="w-64"
+              label="API"
+              value={cloud.api}
+              onChange={(api) => void update({ cloud: { ...cloud, api } })}
+              options={[
+                { value: "transcriptions", label: "/audio/transcriptions" },
+                { value: "ollama-chat", label: "Ollama chat (audio model)" },
+                { value: "sarvam", label: "Sarvam /speech-to-text" },
+              ]}
+            />
           </Row>
         </>
       ) : null}
@@ -128,6 +137,58 @@ function CloudProvider() {
   );
 }
 
+/** One of the two engines, as a radio card: which one dictation uses is what's selected, and each says what it would run. */
+function EngineChoice({
+  selected,
+  icon: Icon,
+  title,
+  detail,
+  onSelect,
+  children,
+}: {
+  selected: boolean;
+  icon: React.ElementType;
+  title: string;
+  detail: React.ReactNode;
+  onSelect: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={cn(
+        "flex flex-col gap-2 rounded-xl border bg-card p-4 text-left transition-[border-color,box-shadow,background-color] outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        selected ? "border-primary bg-primary/[0.04] shadow-[0_0_0_1px_var(--brand)]" : "hover:border-foreground/20",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+            selected ? "border-primary" : "border-muted-foreground/40",
+          )}
+        >
+          {selected && <span className="size-1.5 rounded-full bg-primary" />}
+        </span>
+        <Icon className={cn("size-4", selected ? "text-primary" : "text-muted-foreground")} />
+        <span className="text-sm font-semibold">{title}</span>
+        {selected && (
+          <span className="ml-auto">
+            <Badge tone="brand">In use</Badge>
+          </span>
+        )}
+      </div>
+      <div className="text-xs leading-relaxed text-muted-foreground">{children}</div>
+      <div className={cn("flex min-w-0 items-center gap-1.5 text-xs font-medium", selected ? "text-foreground" : "text-muted-foreground")}>
+        {detail}
+      </div>
+    </button>
+  );
+}
+
 export function EnginePage({ go }: { go: (page: PageId) => void }) {
   const { settings, update } = useSettings();
   const { models } = useModels();
@@ -135,28 +196,46 @@ export function EnginePage({ go }: { go: (page: PageId) => void }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Speech engine" description="Where your speech becomes text." />
+      <SettingsHero title="Speech engine" description="Where your speech becomes text: privately on this computer, or with a cloud service." mood="transcribing" />
 
-      <Segmented<Engine>
-        value={settings.engine}
-        onChange={(engine) => void update({ engine })}
-        options={[
-          { value: "local", label: "On this computer" },
-          { value: "cloud", label: "Cloud service" },
-        ]}
-      />
+      <div role="radiogroup" aria-label="Speech engine" className="grid gap-3 @md:grid-cols-2">
+        <EngineChoice
+          selected={settings.engine === "local"}
+          icon={Cpu}
+          title="On this computer"
+          onSelect={() => void update({ engine: "local" })}
+          detail={<span className="truncate">{models.find((m) => m.id === settings.localModel)?.label ?? settings.localModel}</span>}
+        >
+          Private and works offline.
+        </EngineChoice>
+        <EngineChoice
+          selected={settings.engine === "cloud"}
+          icon={Cloud}
+          title="Cloud service"
+          onSelect={() => void update({ engine: "cloud" })}
+          detail={
+            <>
+              <ProviderLogo id={settings.cloud.preset} tile={false} className="size-3.5" />
+              <span className="truncate">{providerLabel(settings.cloud.preset, settings.cloud.model)}</span>
+            </>
+          }
+        >
+          Audio is sent to your provider.
+        </EngineChoice>
+      </div>
 
       {settings.engine === "local" ? <LocalModels /> : <CloudProvider />}
 
       <Section title="Recognition">
         <Row label="Language" description={englishOnly ? "English-only models always transcribe English. Pick a multilingual model for other languages." : undefined}>
-          <Select className="w-56" disabled={englishOnly} value={englishOnly ? "en" : settings.language} onChange={(e) => void update({ language: e.target.value })}>
-            {languages.map(([code, name]) => (
-              <option key={code} value={code}>
-                {name}
-              </option>
-            ))}
-          </Select>
+          <Select
+            className="w-56"
+            label="Language"
+            disabled={englishOnly}
+            value={englishOnly ? "en" : settings.language}
+            onChange={(language) => void update({ language })}
+            options={languages.map(([code, name]) => ({ value: code, label: name }))}
+          />
         </Row>
         <Row
           label="Vocabulary"

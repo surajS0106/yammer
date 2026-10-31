@@ -15,6 +15,15 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
   stops if that heading is missing. The app never shows Unreleased.
 -->
 
+## Unreleased
+
+### Improved
+
+- Speech engine and AI cleanup providers now show each provider's logo.
+- Settings has a fresh look, with Sushi at the top of each tab acting out what it's about.
+- The Speech engine page now makes it clear whether dictation runs on this computer or in the cloud, and which model or provider it uses.
+- Dropdowns in Settings have a cleaner look, and you can pick from them with the keyboard or by typing the first letters of an option.
+
 ## 0.4.0 — 2026-10-29
 
 ### New

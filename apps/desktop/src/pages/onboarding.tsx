@@ -12,6 +12,7 @@ import { PlatformContext, type PageId } from "@/App";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
 import { KeyField } from "@/components/key-field";
 import { smooth } from "@/components/motion";
+import { ProviderLogo } from "@/components/provider-logo";
 import { moodOf, Sushi } from "@/components/sushi";
 import { Badge, Button, Card, CommitInput, Hotkey, Kbd, Notice, Progress, Segmented, Select, Textarea } from "@/components/ui";
 import { downloadModel, useModels } from "@/lib/models";
@@ -257,13 +258,13 @@ function EngineStep() {
         <label htmlFor="onboarding-language" className="text-sm font-medium">
           What language will you speak?
         </label>
-        <Select id="onboarding-language" className="w-56" value={settings.language} onChange={(e) => setLanguage(e.target.value)}>
-          {languages.map(([code, name]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </Select>
+        <Select
+          id="onboarding-language"
+          className="w-56"
+          value={settings.language}
+          onChange={setLanguage}
+          options={languages.map(([code, name]) => ({ value: code, label: name }))}
+        />
       </div>
 
       <div className="grid gap-3 @md:grid-cols-2">
@@ -357,7 +358,11 @@ function CloudSetup() {
     <div>
       <StepHeader title="Connect a cloud service" description="Your audio goes to this service for each dictation." />
 
-      <Segmented value={preset.id} options={sttPresets.map((p) => ({ value: p.id, label: shortLabel(p.label) }))} onChange={choose} />
+      <Segmented
+        value={preset.id}
+        options={sttPresets.map((p) => ({ value: p.id, label: shortLabel(p.label), icon: <ProviderLogo id={p.id} tile={false} className="size-3.5" /> }))}
+        onChange={choose}
+      />
       <p className="mt-2 flex items-center gap-2 px-1 text-xs text-muted-foreground">
         {providerBlurbs[preset.id]}
         {preset.id === recommended && <Badge tone="brand">Recommended</Badge>}

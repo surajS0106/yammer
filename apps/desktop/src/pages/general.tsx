@@ -1,7 +1,8 @@
 import * as React from "react";
 
-import { PageHeader, PlatformContext } from "@/App";
+import { PlatformContext } from "@/App";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
+import { SettingsHero } from "@/components/settings-hero";
 import { Button, Row, Section, Segmented, Select, Switch } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import { api, errorMessage, type Theme } from "@/lib/tauri";
@@ -40,7 +41,7 @@ export function GeneralPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="General" />
+      <SettingsHero title="General" description="Your hotkeys and microphone, what Yammer keeps, and how it looks." />
 
       <Section title="Dictation">
         <Row
@@ -63,19 +64,17 @@ export function GeneralPage() {
         </Row>
         <Row label="Microphone" description="Falls back to the system default if this one is unplugged.">
           <Select
-            className="w-56"
+            className="w-64"
+            label="Microphone"
             value={settings.micDevice ?? ""}
-            onChange={(e) => void update({ micDevice: e.target.value || null })}
-            onFocus={() => void api.micDevices().then(setDevices, () => { })}
-          >
-            <option value="">System default</option>
-            {devices.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-            {settings.micDevice && !devices.includes(settings.micDevice) && <option value={settings.micDevice}>{settings.micDevice} (not connected)</option>}
-          </Select>
+            onChange={(d) => void update({ micDevice: d || null })}
+            onOpen={() => void api.micDevices().then(setDevices, () => { })}
+            options={[
+              { value: "", label: "System default" },
+              ...devices.map((d) => ({ value: d, label: d })),
+              ...(settings.micDevice && !devices.includes(settings.micDevice) ? [{ value: settings.micDevice, label: `${settings.micDevice} (not connected)` }] : []),
+            ]}
+          />
         </Row>
         <Row label="Always show the pill" description="Keep a small pill on screen between dictations, not only while recording.">
           <Switch
@@ -111,22 +110,22 @@ export function GeneralPage() {
 
       <Section title="History">
         <Row label="Keep recordings" description="The audio of your latest dictations, so one that failed or came out wrong can be transcribed again from History.">
-          <Select className="w-44" value={settings.keepRecordings} onChange={(e) => void update({ keepRecordings: Number(e.target.value) })}>
-            {withCurrent(RECORDINGS, settings.keepRecordings).map((n) => (
-              <option key={n} value={n}>
-                {n ? `Latest ${n}` : "Don’t keep"}
-              </option>
-            ))}
-          </Select>
+          <Select
+            className="w-44"
+            label="Keep recordings"
+            value={settings.keepRecordings}
+            onChange={(keepRecordings) => void update({ keepRecordings })}
+            options={withCurrent(RECORDINGS, settings.keepRecordings).map((n) => ({ value: n, label: n ? `Latest ${n}` : "Don’t keep" }))}
+          />
         </Row>
         <Row label="Keep dictations" description="Older dictations, and their recordings, are deleted.">
-          <Select className="w-44" value={settings.historyDays} onChange={(e) => void update({ historyDays: Number(e.target.value) })}>
-            {withCurrent(DAYS, settings.historyDays).map((n) => (
-              <option key={n} value={n}>
-                {n === 0 ? "Forever" : n === 365 ? "For a year" : `For ${n} days`}
-              </option>
-            ))}
-          </Select>
+          <Select
+            className="w-44"
+            label="Keep dictations"
+            value={settings.historyDays}
+            onChange={(historyDays) => void update({ historyDays })}
+            options={withCurrent(DAYS, settings.historyDays).map((n) => ({ value: n, label: n === 0 ? "Forever" : n === 365 ? "For a year" : `For ${n} days` }))}
+          />
         </Row>
       </Section>
 

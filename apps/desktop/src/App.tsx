@@ -159,10 +159,30 @@ export default function App() {
             />
             <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
               {/* Home is one screen: the chain down to it takes the full height, and its Recent list scrolls inside. */}
-              <div className={cn("px-4 pt-2 pb-6 sm:px-6 sm:pt-4 sm:pb-8 lg:px-10", page === "home" && "h-full")}>
+              <div className={cn("relative px-4 pt-2 pb-6 sm:px-6 sm:pt-4 sm:pb-8 lg:px-10", page === "home" && "h-full")}>
+                {/* Ambient backdrop behind every page: a soft coral glow at the top and a dot grid
+                    that fades out as you scroll, so the canvas isn't flat. Scrolls with the page. */}
+                <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] overflow-hidden">
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background:
+                        "radial-gradient(50% 70% at 50% 0%, color-mix(in oklch, var(--brand) 9%, transparent), transparent 70%), radial-gradient(40% 50% at 85% 10%, color-mix(in oklch, var(--chart-1) 8%, transparent), transparent 70%)",
+                    }}
+                  />
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      backgroundImage: "radial-gradient(color-mix(in oklch, var(--foreground) 9%, transparent) 1px, transparent 1.5px)",
+                      backgroundSize: "14px 14px",
+                      maskImage: "radial-gradient(70% 90% at 50% 0%, black, transparent 75%)",
+                      WebkitMaskImage: "radial-gradient(70% 90% at 50% 0%, black, transparent 75%)",
+                    }}
+                  />
+                </div>
                 <div
                   className={cn(
-                    "@container mx-auto w-full",
+                    "@container relative mx-auto w-full",
                     widePages.has(page) ? "max-w-6xl" : page === "home" ? "h-full max-w-4xl" : "max-w-3xl",
                   )}
                 >

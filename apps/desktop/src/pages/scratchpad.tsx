@@ -92,13 +92,14 @@ function NoteEditor({ note, onChange, onDelete, onBack }: { note: Note; onChange
       <Card className="flex flex-wrap items-center gap-2 p-2.5">
         <Wand2 className="ml-1 size-4 text-muted-foreground" />
         <span className="text-sm font-medium">Transform</span>
-        <Select className="w-44 min-w-0 flex-1 @md:flex-none" value={transform} onChange={(e) => setTransform(e.target.value)} aria-label="Transform">
-          {settings.transforms.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </Select>
+        <Select
+          className="w-44 min-w-0 flex-1 @md:flex-none"
+          label="Transform"
+          align="start"
+          value={transform}
+          onChange={setTransform}
+          options={settings.transforms.map((t) => ({ value: t.id, label: t.name }))}
+        />
         <Button size="sm" onClick={() => void run()} disabled={busy || !note.text.trim() || !transform}>
           {busy ? <Loader2 className="animate-spin" /> : null}
           {busy ? "Rewriting…" : "Apply"}

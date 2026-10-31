@@ -1,7 +1,8 @@
-import { PageHeader } from "@/App";
 import { KeyField } from "@/components/key-field";
+import { ProviderLogo } from "@/components/provider-logo";
+import { HeroChip, SettingsHero } from "@/components/settings-hero";
 import { Card, CommitInput, Notice, Row, Section, Select, Switch } from "@/components/ui";
-import { cleanupPresets } from "@/lib/presets";
+import { cleanupPresets, providerLabel } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import type { Cleanup, LlmFormat } from "@/lib/tauri";
 
@@ -18,10 +19,26 @@ export function CleanupPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <SettingsHero
         title="AI cleanup"
         description="Have a language model tidy each transcript before it’s pasted. Adds a moment and sends the text (not the audio) to the model."
-      />
+        mood={cleanup.enabled ? "polishing" : "idle"}
+      >
+        <HeroChip>
+          {cleanup.enabled ? (
+            <>
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+              <ProviderLogo id={cleanup.preset} tile={false} className="size-3.5 text-foreground" />
+              <span className="truncate">{providerLabel(cleanup.preset, cleanup.model)}</span>
+            </>
+          ) : (
+            <>
+              <span className="size-1.5 rounded-full bg-muted-foreground/50" />
+              Cleanup is off
+            </>
+          )}
+        </HeroChip>
+      </SettingsHero>
 
       <Card className="grid divide-y text-sm @md:grid-cols-2 @md:divide-x @md:divide-y-0">
         <div className="p-4">
@@ -42,13 +59,13 @@ export function CleanupPage() {
 
       <Section title="Model">
         <Row label="Provider">
-          <Select className="w-60" value={preset.id} onChange={(e) => choosePreset(e.target.value)}>
-            {cleanupPresets.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </Select>
+          <Select
+            className="w-64"
+            label="Provider"
+            value={preset.id}
+            onChange={choosePreset}
+            options={cleanupPresets.map((p) => ({ value: p.id, label: p.label, icon: <ProviderLogo id={p.id} /> }))}
+          />
         </Row>
         <Row label="Model">
           <CommitInput className="w-60" list="cleanup-models" value={cleanup.model} onCommit={(model) => void set({ model })} />
@@ -64,10 +81,16 @@ export function CleanupPage() {
               <CommitInput value={cleanup.baseUrl} placeholder="https://api.example.com/v1" onCommit={(baseUrl) => void set({ baseUrl })} />
             </Row>
             <Row label="API format">
-              <Select className="w-60" value={cleanup.format} onChange={(e) => void set({ format: e.target.value as LlmFormat })}>
-                <option value="openai-chat">OpenAI chat completions</option>
-                <option value="anthropic-messages">Anthropic messages</option>
-              </Select>
+              <Select<LlmFormat>
+                className="w-64"
+                label="API format"
+                value={cleanup.format}
+                onChange={(format) => void set({ format })}
+                options={[
+                  { value: "openai-chat", label: "OpenAI chat completions" },
+                  { value: "anthropic-messages", label: "Anthropic messages" },
+                ]}
+              />
             </Row>
           </>
         )}
