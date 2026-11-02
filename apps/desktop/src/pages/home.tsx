@@ -239,19 +239,8 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
 
       {/* The one loud surface on the page: how to dictate, with Sushi reacting live. */}
       <Card className="shrink-0 overflow-hidden border-primary/20 bg-primary/[0.06] dark:bg-primary/[0.08]">
-        {/* Sushi has the whole right side, the pixel grid, to roam. */}
+        {/* Sushi has the whole right side to roam. */}
         <div className="relative grid items-center @2xl:grid-cols-[auto_1fr]">
-          {/* The grid is its own masked layer: WebKit drops animated children of a masked element, which hid Sushi. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 right-0 hidden w-2/3 @2xl:block"
-            style={{
-              backgroundImage: "radial-gradient(color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1.5px)",
-              backgroundSize: "10px 10px",
-              maskImage: "linear-gradient(to right, transparent, black 45%)",
-              WebkitMaskImage: "linear-gradient(to right, transparent, black 45%)",
-            }}
-          />
           <div className="relative max-w-xl space-y-4 px-5 pt-5 pb-4 @md:px-7 @md:pt-6">
             <div className="flex flex-wrap items-center gap-1.5">
             <div

@@ -3,11 +3,15 @@ import * as React from "react";
 
 import { PageHeader, type PageId } from "@/App";
 import { AnimatedList, ListRow } from "@/components/motion";
+import { NigiriCard } from "@/components/nigiri-card";
+import { PixelBars } from "@/components/pixel";
 import { Button, Card, Hotkey, Input, Intro, Select, Textarea } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
+import { dayKey, lastDays, wordCount } from "@/lib/stats";
 import { api, errorMessage, type Note } from "@/lib/tauri";
 
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+const weekday = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
 
 // Notes are saved by Rust as scratchpad.json beside the history, so they never
 // leave the computer and survive the webview's storage being cleared. Older
@@ -123,6 +127,26 @@ function NoteEditor({ note, onChange, onDelete, onBack }: { note: Note; onChange
   );
 }
 
+/** The notes as a nigiri: how many, which days this week they were last edited, and their words. */
+function NotesCard({ notes }: { notes: Note[] }) {
+  const days = lastDays(7);
+  const edited = days.map((d) => notes.filter((n) => dayKey(n.updatedAt) === d).length);
+  const counts = notes.map((n) => wordCount(n.text));
+  return (
+    <NigiriCard
+      label="Scratchpad"
+      value={notes.length}
+      caption={notes.length === 1 ? "note, only on this computer" : "notes, only on this computer"}
+      bandLabel="Last edited, this week"
+      band={<PixelBars values={edited} labels={days.map((d) => weekday.format(d))} titles={edited.map((n) => `${n} ${n === 1 ? "note" : "notes"}`)} stack={5} />}
+      stats={[
+        { value: counts.reduce((a, b) => a + b, 0), label: "words jotted", hint: "across every note" },
+        { value: Math.max(0, ...counts), label: "longest note", hint: "in words", color: "nori" },
+      ]}
+    />
+  );
+}
+
 export function ScratchpadPage({ go }: { go: (page: PageId) => void }) {
   const { settings, toast } = useSettings();
   const [notes, setNotes] = React.useState<Note[] | null>(null);
@@ -202,6 +226,8 @@ export function ScratchpadPage({ go }: { go: (page: PageId) => void }) {
         </button>
         . Notes stay on this computer.
       </Intro>
+
+      <NotesCard notes={notes} />
 
       <section className="space-y-2">
         <div className="flex items-center gap-2 px-1">

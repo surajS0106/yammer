@@ -1,13 +1,13 @@
-import { Flame, Gauge, Hourglass, Type } from "lucide-react";
 import * as React from "react";
 
 import { PageHeader, type PageId } from "@/App";
 import { NavCards } from "@/components/nav-cards";
+import { NigiriCard } from "@/components/nigiri-card";
+import { PixelBars } from "@/components/pixel";
 import { Button, Card } from "@/components/ui";
 import { FunnelChart } from "@/components/ui/FunnelChart";
 import { HeatMap } from "@/components/ui/HeatMap";
 import { PieChart } from "@/components/ui/PieChart";
-import { StatCard } from "@/components/ui/StatCard";
 import { WordCloud } from "@/components/ui/WordCloud";
 import { parseWords } from "@/pages/dictionary";
 import { useSettings } from "@/lib/settings";
@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 const WEEKS = 26;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" });
+const weekday = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
 const monthFmt = new Intl.DateTimeFormat(undefined, { month: "short" });
 const sinceFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
@@ -64,32 +65,6 @@ function RampLegend({ stops }: { stops: string[] }) {
       ))}
       More
     </div>
-  );
-}
-
-/** "x,y" pairs in StatCard's 100×24 sparkline box. */
-function sparkline(values: number[]): string {
-  const max = Math.max(1, ...values);
-  const step = 100 / Math.max(1, values.length - 1);
-  return values.map((v, i) => `${Math.round(i * step * 10) / 10},${Math.round((22 - (v / max) * 20) * 10) / 10}`).join(" ");
-}
-
-/** StatCard, repainted with the app's tokens instead of its stone/emerald. */
-function Stat(props: React.ComponentProps<typeof StatCard>) {
-  return (
-    <StatCard
-      {...props}
-      // StatCard's own dark: classes outrank plain overrides, so each one is restated under dark: too.
-      className="rounded-xl border-border bg-card p-4 @md:p-5 dark:border-border dark:bg-card [&_svg]:text-primary dark:[&_svg]:text-primary"
-      classNames={{
-        label: "text-muted-foreground dark:text-muted-foreground",
-        value: "text-foreground dark:text-foreground text-3xl @md:text-4xl @6xl:text-5xl",
-        icon: "size-10 border-primary/15 bg-primary/10 text-primary dark:text-primary [&_svg]:size-[18px]",
-        description: "mt-3 text-sm text-muted-foreground dark:text-muted-foreground",
-        delta: "text-xs",
-        divider: "border-border dark:border-border",
-      }}
-    />
   );
 }
 
@@ -230,17 +205,8 @@ export function InsightsPage({ go }: { go: (page: PageId) => void }) {
   const ramp = dark ? RAMP.dark : RAMP.light;
   const days = lastDays(14);
   const wordsOn = (d: number) => stats.byDay.get(d) ?? 0;
-  const wpmOn = (d: number) => {
-    const ms = stats.msByDay.get(d) ?? 0;
-    return ms ? (wordsOn(d) / ms) * 60_000 : 0;
-  };
-  const avg = (v: number[]) => {
-    const real = v.filter(Boolean);
-    return real.length ? real.reduce((a, b) => a + b, 0) / real.length : 0;
-  };
-  const thisWeek = days.slice(7).reduce((n, d) => n + wordsOn(d), 0);
+  const delta = weekOverWeek(wordsOn);
   const savedHours = stats.minutesSaved >= 60;
-  const big = stats.words >= 1000;
   const polished = stats.dictations ? Math.round((stats.cleaned / stats.dictations) * 100) : 0;
   const active = settings.transforms.find((t) => t.id === settings.activeTransform);
 
@@ -251,72 +217,19 @@ export function InsightsPage({ go }: { go: (page: PageId) => void }) {
         description={`${stats.dictations.toLocaleString()} dictations since ${sinceFmt.format(Math.min(...entries.map((e) => e.at)))}. Kept on this computer only.`}
       />
 
-      <div className="grid gap-4 @xl:grid-cols-2 @5xl:grid-cols-4">
-        <Stat
-          label="Speed"
-          icon={<Gauge />}
-          value={stats.wpm}
-          valueSuffix=""
-          valueDecimals={0}
-          delta={weekOverWeek(wpmOn, avg)}
-          sparklinePoints={sparkline(days.map(wpmOn))}
-          description={`words per minute, ${(stats.wpm / TYPING_WPM).toFixed(1)}× your typing`}
-        />
-        <Stat
-          label="Words dictated"
-          icon={<Type />}
-          value={big ? stats.words / 1000 : stats.words}
-          valueSuffix={big ? "k" : ""}
-          valueDecimals={big ? 1 : 0}
-          delta={weekOverWeek(wordsOn)}
-          sparklinePoints={sparkline(days.map(wordsOn))}
-          description={`words in total, ${thisWeek.toLocaleString()} in the last 7 days`}
-        />
-        <Stat
-          label="Streak"
-          icon={<Flame />}
-          value={stats.dayStreak}
-          valueSuffix={stats.dayStreak === 1 ? " day" : " days"}
-          valueDecimals={0}
-          description={`Longest ${stats.longestDayStreak} days · ${stats.weekStreak} ${stats.weekStreak === 1 ? "week" : "weeks"} running`}
-        >
-          <div className="flex items-center justify-between gap-1" aria-label="Last 14 days">
-            {days.map((d) => (
-              <span
-                key={d}
-                title={`${dayFmt.format(d)}: ${wordsOn(d).toLocaleString()} words`}
-                className={cn("h-2 flex-1 rounded-full", wordsOn(d) ? "bg-primary" : "bg-muted", d === days[days.length - 1] && "ring-2 ring-primary/25")}
-              />
-            ))}
-          </div>
-        </Stat>
-        <Stat
-          label="Time saved"
-          icon={<Hourglass />}
-          value={savedHours ? stats.minutesSaved / 60 : stats.minutesSaved}
-          valueSuffix={savedHours ? "h" : "m"}
-          valueDecimals={savedHours ? 1 : 0}
-          description={`vs. typing it all at ${TYPING_WPM} wpm`}
-        >
-          <div className="space-y-1.5 text-xs text-muted-foreground">
-            {[
-              ["Speaking", Math.round(stats.speakingMs / 60_000)],
-              ["Typing", Math.round(stats.words / TYPING_WPM)],
-            ].map(([what, min]) => (
-              <div key={what} className="flex items-center gap-2">
-                <span className="w-14">{what}</span>
-                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                  <span
-                    className={cn("block h-full rounded-full", what === "Speaking" ? "bg-primary" : "bg-muted-foreground/40")}
-                    style={{ width: `${Math.max(2, ((min as number) / Math.max(1, Math.round(stats.words / TYPING_WPM))) * 100)}%` }}
-                  />
-                </span>
-                <span className="w-12 text-right tabular-nums">{(min as number).toLocaleString()} min</span>
-              </div>
-            ))}
-          </div>
-        </Stat>
-      </div>
+      <NigiriCard
+        label="All time"
+        value={stats.words}
+        caption="words said out loud"
+        badge={delta === undefined ? undefined : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(Math.round(delta))}% this week`}
+        bandLabel="Words, last 14 days"
+        band={<PixelBars values={days.map(wordsOn)} labels={days.map((d) => weekday.format(d))} titles={days.map((d) => `${dayFmt.format(d)}: ${wordsOn(d).toLocaleString()} words`)} stack={5} />}
+        stats={[
+          { value: stats.wpm, label: "words / min", hint: `${(stats.wpm / TYPING_WPM).toFixed(1)}× your typing` },
+          { value: stats.dayStreak, label: "day streak", hint: `longest ${stats.longestDayStreak}`, color: "nori", flame: true },
+        ]}
+        footer={`≈${savedHours ? `${(stats.minutesSaved / 60).toFixed(1)} h` : `${stats.minutesSaved} min`} of typing skipped, against ${TYPING_WPM} wpm.`}
+      />
 
       <div className="grid gap-4 @5xl:grid-cols-3">
         <Panel title="Activity" caption={`Words per day, last ${WEEKS} weeks`} aside={<RampLegend stops={ramp} />} className="@5xl:col-span-2">

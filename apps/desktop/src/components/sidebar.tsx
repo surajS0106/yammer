@@ -63,21 +63,12 @@ export function Sidebar({
 
   return (
     <nav className="relative isolate flex h-full w-56 flex-col overflow-y-auto border-r bg-sidebar p-3">
-      {/* A coral wash and a pixel grid in the top corner, fading out: the same pixels Sushi and the week panel are made of. */}
+      {/* A coral wash in the top corner, fading out. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-56"
         style={{
           background: "radial-gradient(120% 70% at 0% 0%, color-mix(in oklch, var(--brand) 13%, transparent), transparent 70%)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-56 opacity-70"
-        style={{
-          backgroundImage: "radial-gradient(var(--sidebar-border) 1px, transparent 1px)",
-          backgroundSize: "10px 10px",
-          maskImage: "linear-gradient(to bottom, black, transparent 85%)",
         }}
       />
 

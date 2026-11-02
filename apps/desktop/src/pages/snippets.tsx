@@ -3,8 +3,10 @@ import * as React from "react";
 
 import { PageHeader } from "@/App";
 import { Collapse } from "@/components/motion";
+import { NigiriCard, NigiriChips } from "@/components/nigiri-card";
 import { Button, Card, Input, Intro, Mapping, Textarea } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
+import { TYPING_WPM, wordCount } from "@/lib/stats";
 import type { Snippet } from "@/lib/tauri";
 
 function Editor({ initial, onSave, onCancel }: { initial: Snippet; onSave: (s: Snippet) => Promise<boolean>; onCancel: () => void }) {
@@ -58,6 +60,7 @@ export function SnippetsPage() {
     return ok;
   };
 
+  const words = list.reduce((n, s) => n + wordCount(s.text), 0);
   const q = query.trim().toLowerCase();
   const shown = list.map((s, i) => [s, i] as const).filter(([s]) => !q || s.trigger.toLowerCase().includes(q) || s.text.toLowerCase().includes(q));
 
@@ -82,6 +85,18 @@ export function SnippetsPage() {
         Save text you type often, like an email, intro or prompt, then say its trigger to drop it in. Say it on its own to paste just the snippet, or mid-sentence
         to expand it in place.
       </Intro>
+
+      <NigiriCard
+        label="Snippets"
+        value={list.length}
+        caption={list.length === 1 ? "snippet ready to say" : "snippets ready to say"}
+        bandLabel="Say"
+        band={<NigiriChips items={list.map((s) => `“${s.trigger}”`)} empty="Add a snippet and its trigger shows up here." />}
+        stats={[
+          { value: words, label: "words on tap", hint: "never typed again" },
+          { value: Math.round(words / TYPING_WPM), label: "min of typing", hint: "to write them all once", color: "nori" },
+        ]}
+      />
 
       <Collapse show={editing === "new"}>
         <Card>

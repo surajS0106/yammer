@@ -4,9 +4,11 @@ import * as React from "react";
 
 import { PageHeader } from "@/App";
 import { smooth } from "@/components/motion";
+import { NigiriCard, NigiriChips } from "@/components/nigiri-card";
 import { Button, Input, Intro, Mapping, Row, Section, Switch } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
-import type { Replacement } from "@/lib/tauri";
+import { useHistory } from "@/lib/stats";
+import type { HistoryEntry, Replacement } from "@/lib/tauri";
 
 /** The vocabulary setting is one comma- or newline-separated string. */
 export function parseWords(vocabulary: string): string[] {
@@ -146,6 +148,35 @@ function Corrections() {
   );
 }
 
+/** How often any of `words` turns up in the history, as whole words, ignoring capitals. */
+function timesHeard(entries: HistoryEntry[], words: string[]): number {
+  if (!words.length) return 0;
+  // Longest first, so "Wispr Flow" wins over "Wispr".
+  const alternatives = [...words].sort((a, b) => b.length - a.length).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives.join("|")})(?![\\p{L}\\p{N}])`, "giu");
+  return entries.reduce((n, e) => n + (e.text.match(re)?.length ?? 0), 0);
+}
+
+function DictionaryCard() {
+  const { settings } = useSettings();
+  const entries = useHistory();
+  const words = parseWords(settings.vocabulary);
+  const heard = React.useMemo(() => timesHeard(entries, words), [entries, settings.vocabulary]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <NigiriCard
+      label="Your Dictionary"
+      value={words.length}
+      caption={words.length === 1 ? "word it spells your way" : "words it spells your way"}
+      bandLabel="Newest"
+      band={<NigiriChips items={[...words].reverse()} empty="Add a name below and it shows up here." />}
+      stats={[
+        { value: heard, label: "times heard", hint: "in your dictations" },
+        { value: settings.replacements.length, label: "corrections", hint: "fixed every time", color: "nori" },
+      ]}
+    />
+  );
+}
+
 export function DictionaryPage() {
   return (
     <div className="space-y-6">
@@ -162,6 +193,7 @@ export function DictionaryPage() {
         Add the <span className="font-medium text-foreground">names, company jargon and uncommon terms</span> you use, so they come out right in every
         dictation. They’re also passed to AI cleanup.
       </Intro>
+      <DictionaryCard />
       <Words />
       <Corrections />
     </div>

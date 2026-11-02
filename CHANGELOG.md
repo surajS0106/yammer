@@ -15,6 +15,16 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
   stops if that heading is missing. The app never shows Unreleased.
 -->
 
+## Unreleased
+
+### New
+
+- Insights, History, Dictionary, Snippets, Transforms and Scratchpad now open with a pixel-art summary card, like the one on Home.
+
+### Improved
+
+- The "Get an API key" button opens your browser straight at the provider's API key page.
+
 ## 0.4.1 — 2026-10-31
 
 ### Improved

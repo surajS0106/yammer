@@ -2,14 +2,46 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Loader2, 
 import * as React from "react";
 
 import { PageHeader } from "@/App";
+import { NigiriCard } from "@/components/nigiri-card";
+import { PixelBars } from "@/components/pixel";
 import { Badge, Button, Card, Input, Select } from "@/components/ui";
 import { exportHistory, type ExportFormat } from "@/lib/export";
 import { useSettings } from "@/lib/settings";
-import { engineLabel, replaceEntry } from "@/lib/stats";
+import { dayKey, engineLabel, lastDays, replaceEntry, weekOverWeek, wordCount } from "@/lib/stats";
 import { api, errorMessage, on, type HistoryEntry } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 const time = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+const weekday = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
+const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" });
+
+/** Everything kept, as a nigiri: words in total, dictations per day for two weeks, and the averages. */
+function HistoryCard({ entries }: { entries: HistoryEntry[] }) {
+  const done = entries.filter((e) => !e.error);
+  const perDay = new Map<number, number>();
+  for (const e of done) perDay.set(dayKey(e.at), (perDay.get(dayKey(e.at)) ?? 0) + 1);
+  const count = (d: number) => perDay.get(d) ?? 0;
+  const days = lastDays(14);
+  const counts = days.map(count);
+  const delta = weekOverWeek(count);
+  const words = done.reduce((n, e) => n + wordCount(e.text), 0);
+  const failed = entries.length - done.length;
+  return (
+    <NigiriCard
+      label="In your history"
+      value={words}
+      caption="words, every one searchable"
+      badge={delta === undefined ? undefined : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(Math.round(delta))}% this week`}
+      bandLabel="Dictations, last 14 days"
+      band={<PixelBars values={counts} labels={days.map((d) => weekday.format(d))} titles={days.map((d, i) => `${dayFmt.format(d)}: ${counts[i]} dictations`)} stack={5} />}
+      stats={[
+        { value: done.length, label: "dictations", hint: "kept on this computer" },
+        { value: done.length ? Math.round(words / done.length) : 0, label: "words each", hint: "on average", color: "nori" },
+      ]}
+      footer={failed ? `${failed} failed ${failed === 1 ? "dictation is" : "dictations are"} below, ready to transcribe again.` : undefined}
+    />
+  );
+}
 
 function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }) {
   const { toast } = useSettings();
@@ -200,6 +232,7 @@ export function HistoryPage() {
         title="History"
         description={entries.length ? `${entries.length} dictations, ${words.toLocaleString()} words. Kept on this computer only.` : "Your dictations show up here."}
       />
+      {entries.length > 0 && <HistoryCard entries={entries} />}
       {entries.length > 0 && (
         <div className="flex gap-2">
           <Input

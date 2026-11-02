@@ -39,7 +39,7 @@ export const sttPresets: SttPreset[] = [
     model: "saaras:v4",
     api: "sarvam",
     needsKey: true,
-    keyUrl: "https://dashboard.sarvam.ai/",
+    keyUrl: "https://dashboard.sarvam.ai/key-management",
     models: ["saaras:v4", "saaras:v3"],
   },
   {
@@ -108,7 +108,7 @@ export const cleanupPresets: CleanupPreset[] = [
     model: "sarvam-105b",
     format: "openai-chat",
     needsKey: true,
-    keyUrl: "https://dashboard.sarvam.ai/",
+    keyUrl: "https://dashboard.sarvam.ai/key-management",
     models: ["sarvam-105b", "sarvam-105b-conversations"],
   },
   {

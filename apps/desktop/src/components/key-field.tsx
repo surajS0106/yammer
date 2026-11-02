@@ -1,6 +1,8 @@
 // An API key input. The key goes straight to Rust (and the OS keychain);
 // the UI only ever learns whether one is saved.
 
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { ExternalLink, KeyRound } from "lucide-react";
 import * as React from "react";
 
 import { Badge, Button, Input } from "@/components/ui";
@@ -40,9 +42,11 @@ export function KeyField({ name, keyUrl }: { name: SecretName; keyUrl?: string }
         {saved ? <Badge tone="brand">Key saved</Badge> : <Badge>No key</Badge>}
         <span>Stored in your system keychain, never in a file.</span>
         {keyUrl && (
-          <a href={keyUrl} target="_blank" rel="noreferrer" className="ml-auto text-primary hover:underline">
-            Get a key
-          </a>
+          <Button size="sm" variant="outline" className="ml-auto" title={keyUrl} onClick={() => void openUrl(keyUrl)}>
+            <KeyRound />
+            Get an API key
+            <ExternalLink className="text-muted-foreground" />
+          </Button>
         )}
       </div>
     </div>

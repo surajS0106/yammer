@@ -21,22 +21,11 @@ export function SettingsHero({
 }) {
   return (
     <Card className="relative overflow-hidden border-primary/20 bg-primary/[0.05] dark:bg-primary/[0.08]">
-      {/* A coral wash from the top left, and the pixel grid Sushi stands on fading in from the right.
-          Separate layers: WebKit drops animated children of a masked element. */}
+      {/* A coral wash from the top left. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{ background: "radial-gradient(90% 120% at 0% 0%, color-mix(in oklch, var(--brand) 12%, transparent), transparent 60%)" }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 w-1/2"
-        style={{
-          backgroundImage: "radial-gradient(color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1.5px)",
-          backgroundSize: "10px 10px",
-          maskImage: "linear-gradient(to right, transparent, black 60%)",
-          WebkitMaskImage: "linear-gradient(to right, transparent, black 60%)",
-        }}
       />
       <div className="relative flex items-stretch">
         <div className="min-w-0 flex-1 space-y-1.5 px-5 py-5 @md:px-6 @md:py-6">

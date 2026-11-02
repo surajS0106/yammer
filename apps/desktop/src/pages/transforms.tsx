@@ -4,6 +4,7 @@ import * as React from "react";
 import { PageHeader, type PageId } from "@/App";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
 import { AnimatedList, Collapse, ListRow } from "@/components/motion";
+import { NigiriCard, NigiriChips } from "@/components/nigiri-card";
 import { Badge, Button, Card, Hotkey, Input, Intro, Notice, Textarea } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import type { Transform } from "@/lib/tauri";
@@ -76,6 +77,7 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
   const remove = (id: string) =>
     void update((s) => ({ ...s, transforms: list.filter((x) => x.id !== id), activeTransform: s.activeTransform === id ? "" : s.activeTransform }));
   const setActive = (id: string) => void update({ activeTransform: id });
+  const current = list.find((t) => t.id === active);
 
   return (
     <div className="space-y-6">
@@ -90,6 +92,20 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
         A transform rewrites what you dictate before it’s pasted: into an email, bullet points, a formal note. Pick one to apply to every dictation, give one its
         own hotkey, or run any of them on a note in the Scratchpad.
       </Intro>
+
+      <NigiriCard
+        label="Transforms"
+        value={list.length}
+        caption={list.length === 1 ? "way to reshape a dictation" : "ways to reshape a dictation"}
+        bandLabel={current ? "The active one is lit" : "Yours"}
+        band={<NigiriChips items={list.map((t) => t.name)} highlight={current?.name} empty="Add a transform and it shows up here." />}
+        stats={[
+          { value: list.filter((t) => t.hotkey).length, label: "with a hotkey", hint: "run on demand" },
+          // The built-in ones have plain ids; ones made here are "custom-<time>".
+          { value: list.filter((t) => t.id.startsWith("custom-")).length, label: "made by you", hint: "beyond the starters", color: "nori" },
+        ]}
+        footer={current ? `${current.name} reshapes every dictation.` : "Dictations paste as you said them."}
+      />
 
       <Collapse show={!settings.cleanup.enabled}>
         <Notice tone="warn">
