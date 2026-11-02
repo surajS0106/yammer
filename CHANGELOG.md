@@ -15,7 +15,7 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
   stops if that heading is missing. The app never shows Unreleased.
 -->
 
-## Unreleased
+## 0.5.0 — 2026-11-02
 
 ### New
 
