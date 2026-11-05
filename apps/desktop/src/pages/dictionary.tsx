@@ -1,4 +1,4 @@
-import { ArrowRight, Plus, Trash2, X } from "lucide-react";
+import { ArrowRight, Plus, Trash as Trash2, X } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 
@@ -9,6 +9,8 @@ import { Button, Input, Intro, Mapping, Row, Section, Switch } from "@/component
 import { useSettings } from "@/lib/settings";
 import { useHistory } from "@/lib/stats";
 import type { HistoryEntry, Replacement } from "@/lib/tauri";
+import { useDockAction } from "@/lib/dock";
+import { cn, isAndroid } from "@/lib/utils";
 
 /** The vocabulary setting is one comma- or newline-separated string. */
 export function parseWords(vocabulary: string): string[] {
@@ -24,6 +26,15 @@ function Words() {
   const words = parseWords(settings.vocabulary);
   const [draft, setDraft] = React.useState("");
   const save = (list: string[]) => void update({ vocabulary: list.join(", ") });
+  const input = React.useRef<HTMLInputElement>(null);
+  useDockAction({
+    label: "Add a word",
+    icon: Plus,
+    run: () => {
+      input.current?.scrollIntoView({ block: "center" });
+      input.current?.focus();
+    },
+  });
 
   const add = () => {
     const added = parseWords(draft);
@@ -41,7 +52,7 @@ function Words() {
           add();
         }}
       >
-        <Input placeholder="Add a word, or several separated by commas" value={draft} onChange={(e) => setDraft(e.target.value)} />
+        <Input ref={input} placeholder={isAndroid ? "Add words, split by commas" : "Add a word, or several separated by commas"} value={draft} onChange={(e) => setDraft(e.target.value)} />
         <Button type="submit" disabled={!draft.trim()}>
           <Plus /> Add
         </Button>
@@ -65,10 +76,10 @@ function Words() {
                   type="button"
                   title={`Remove ${w}`}
                   aria-label={`Remove ${w}`}
-                  className="rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className={cn("rounded-full text-muted-foreground hover:bg-accent hover:text-foreground", isAndroid ? "p-2" : "p-0.5")}
                   onClick={() => save(words.filter((x) => x !== w))}
                 >
-                  <X className="size-3" />
+                  <X className={isAndroid ? "size-3.5" : "size-3"} />
                 </button>
               </motion.span>
             ))}
@@ -135,7 +146,7 @@ function Corrections() {
         </Button>
       </form>
       {list.map((r, i) => (
-        <div key={`${r.from}-${i}`} className="group grid grid-cols-[1fr_auto_1fr_2rem] items-center gap-2 px-4 py-2.5 text-sm @md:grid-cols-[1fr_auto_1fr_5rem]">
+        <div key={`${r.from}-${i}`} className="group grid grid-cols-[1fr_auto_1fr_2.5rem] items-center gap-2 px-4 py-2.5 text-sm @md:grid-cols-[1fr_auto_1fr_5rem]">
           <span className="truncate text-muted-foreground">{r.from}</span>
           <ArrowRight className="size-4 text-muted-foreground" />
           <span className="truncate font-medium">{r.to}</span>
@@ -178,10 +189,12 @@ function DictionaryCard() {
 }
 
 export function DictionaryPage() {
+  const { settings } = useSettings();
   return (
     <div className="space-y-6">
-      <PageHeader title="Dictionary" />
-      <Intro
+      {!isAndroid && <PageHeader title="Dictionary" />}
+      {/* A phone only explains this until there's something to show. */}
+      {(!isAndroid || !parseWords(settings.vocabulary).length) && <Intro
         title="Teach Yammer your words"
         example={
           <>
@@ -192,8 +205,8 @@ export function DictionaryPage() {
       >
         Add the <span className="font-medium text-foreground">names, company jargon and uncommon terms</span> you use, so they come out right in every
         dictation. They’re also passed to AI cleanup.
-      </Intro>
-      <DictionaryCard />
+      </Intro>}
+      {(!isAndroid || parseWords(settings.vocabulary).length > 0) && <DictionaryCard />}
       <Words />
       <Corrections />
     </div>

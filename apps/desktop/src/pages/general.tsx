@@ -1,12 +1,14 @@
+import { ArrowCounterClockwise, Question } from "@phosphor-icons/react";
 import * as React from "react";
 
-import { PlatformContext } from "@/App";
+import { PlatformContext, type PageId } from "@/App";
+import { AndroidPermissions } from "@/components/android-panel";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
 import { SettingsHero } from "@/components/settings-hero";
 import { Button, Row, Section, Segmented, Select, Switch } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import { api, errorMessage, type Theme } from "@/lib/tauri";
-import { isMac } from "@/lib/utils";
+import { isAndroid, isMac } from "@/lib/utils";
 
 // 0 means none for recordings and forever for days, so it goes first in one list and last in the other.
 const RECORDINGS = [0, 10, 20, 50, 100];
@@ -19,7 +21,7 @@ function withCurrent(choices: number[], current: number) {
   return at < 0 ? [...choices, current] : [...choices.slice(0, at), current, ...choices.slice(at)];
 }
 
-export function GeneralPage() {
+export function GeneralPage({ go }: { go: (page: PageId) => void }) {
   const { settings, update, toast } = useSettings();
   const platform = React.useContext(PlatformContext);
   const [devices, setDevices] = React.useState<string[]>([]);
@@ -38,6 +40,69 @@ export function GeneralPage() {
       toast(errorMessage(e));
     }
   };
+
+  if (isAndroid) {
+    const tile = "flex min-w-0 flex-col justify-between gap-3 rounded-3xl border bg-card p-4";
+    return (
+      <div className="space-y-6">
+        <AndroidPermissions />
+        <section className="grid grid-cols-2 gap-3">
+          <div className={tile}>
+            <span className="text-sm leading-snug font-semibold">Keep recordings</span>
+            <Select
+              label="Keep recordings"
+              value={settings.keepRecordings}
+              onChange={(keepRecordings) => void update({ keepRecordings })}
+              options={withCurrent(RECORDINGS, settings.keepRecordings).map((n) => ({ value: n, label: n ? `Latest ${n}` : "Don’t keep" }))}
+            />
+          </div>
+          <div className={tile}>
+            <span className="text-sm leading-snug font-semibold">Keep dictations</span>
+            <Select
+              label="Keep dictations"
+              value={settings.historyDays}
+              onChange={(historyDays) => void update({ historyDays })}
+              options={withCurrent(DAYS, settings.historyDays).map((n) => ({ value: n, label: n === 0 ? "Forever" : n === 365 ? "For a year" : `For ${n} days` }))}
+            />
+          </div>
+          <div className={`col-span-2 ${tile}`}>
+            <span className="text-sm font-semibold">Appearance</span>
+            <Segmented<Theme>
+              fill
+              value={settings.theme}
+              options={[
+                { value: "system", label: "System" },
+                { value: "light", label: "Light" },
+                { value: "dark", label: "Dark" },
+              ]}
+              onChange={(theme) => void update({ theme })}
+            />
+          </div>
+          <label className={`col-span-2 flex-row items-center ${tile}`}>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">Add a space after</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">So consecutive dictations don’t run into each other.</span>
+            </span>
+            <Switch checked={settings.trailingSpace} onChange={(trailingSpace) => void update({ trailingSpace })} label="Add a space after" />
+          </label>
+          <button type="button" onClick={() => go("help")} className={`text-left outline-none active:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 ${tile}`}>
+            <Question className="size-6.5 text-primary" />
+            <span>
+              <span className="block text-sm font-semibold">Help</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">And what’s new</span>
+            </span>
+          </button>
+          <button type="button" onClick={() => void update({ onboarded: false })} className={`text-left outline-none active:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 ${tile}`}>
+            <ArrowCounterClockwise className="size-6.5 text-primary" />
+            <span>
+              <span className="block text-sm font-semibold">Setup guide</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">Walk through it again</span>
+            </span>
+          </button>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

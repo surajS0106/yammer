@@ -7,6 +7,7 @@ use voice_core::Settings;
 
 use crate::error::AppResult;
 
+#[cfg_attr(not(desktop), allow(dead_code))]
 pub struct AppState {
     pub settings: Mutex<Settings>,
     pub settings_path: PathBuf,

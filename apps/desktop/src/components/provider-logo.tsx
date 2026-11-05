@@ -2,7 +2,7 @@
 // Single-colour and drawn in currentColor, so they follow the theme. OpenAI, Anthropic, Groq and
 // Ollama come from LobeHub's icon set; Sarvam's is its own brand mark from assets.sarvam.ai.
 
-import { Plug } from "lucide-react";
+import { Plug } from "@phosphor-icons/react";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";

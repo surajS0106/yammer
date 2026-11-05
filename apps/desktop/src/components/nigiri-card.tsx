@@ -4,6 +4,7 @@
 
 import * as React from "react";
 
+import { isAndroid } from "@/lib/utils";
 import { INK, NORI, PixelFlame, PixelNumber, RICE, RICE_SHADE, SALMON, STRIPE } from "@/components/pixel";
 
 export interface NigiriStat {
@@ -25,6 +26,7 @@ export function NigiriCard({
   band,
   stats,
   footer,
+  phoneBand,
 }: {
   label: string;
   value: number;
@@ -35,7 +37,48 @@ export function NigiriCard({
   band: React.ReactNode;
   stats: [NigiriStat, NigiriStat];
   footer?: React.ReactNode;
+  /** Keep the band on a phone. Chips repeat the list below them, so those leave it out. */
+  phoneBand?: boolean;
 }) {
+  if (isAndroid) {
+    const tile = "min-w-0 overflow-hidden rounded-3xl ring-1 ring-black/10";
+    return (
+      <section className="grid grid-cols-2 gap-3">
+        <div
+          className={`row-span-2 flex flex-col p-4 ${tile}`}
+          style={{ color: RICE, backgroundColor: SALMON, backgroundImage: `repeating-linear-gradient(135deg, transparent 0 18px, ${STRIPE}55 18px 26px)` }}
+        >
+          <span className="text-sm font-semibold">{label}</span>
+          {badge && (
+            <span className="mt-1.5 self-start rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums" style={{ backgroundColor: NORI }}>
+              {badge}
+            </span>
+          )}
+          <div className="mt-auto pt-3">
+            <PixelNumber value={value} height={38} color={RICE} spread={600} className="max-w-full drop-shadow-[0_3px_0_rgb(0_0_0/0.18)]" />
+          </div>
+          <div className="mt-2 text-sm leading-snug font-semibold">{caption}</div>
+        </div>
+        {stats.map((s) => (
+          <div key={s.label} className={`p-4 ${tile}`} style={{ backgroundColor: RICE, color: INK }}>
+            <div className="flex h-7 items-end gap-2">
+              {s.flame && <PixelFlame px={2.5} lit={s.value > 0} />}
+              <PixelNumber value={s.value} height={24} color={s.color === "nori" ? NORI : SALMON} spread={400} />
+            </div>
+            <div className="mt-2 text-xs font-bold">{s.label}</div>
+            {s.hint && <div className="truncate text-[11px] opacity-70">{s.hint}</div>}
+          </div>
+        ))}
+        {phoneBand && (
+          <div className={`col-span-2 flex flex-col gap-3 px-5 pt-4 pb-3 ${tile}`} style={{ backgroundColor: NORI, color: RICE }}>
+            {bandLabel && <span className="text-[11px] font-semibold opacity-70">{bandLabel}</span>}
+            {band}
+          </div>
+        )}
+        {footer && <p className="col-span-2 px-1 text-xs text-muted-foreground">{footer}</p>}
+      </section>
+    );
+  }
   return (
     <section
       className="grid overflow-hidden rounded-2xl ring-1 ring-black/10 @2xl:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,5fr)]"

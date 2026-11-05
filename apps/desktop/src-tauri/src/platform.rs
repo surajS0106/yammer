@@ -5,7 +5,7 @@ use serde::Serialize;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Platform {
-    /// "windows", "macos" or "linux".
+    /// "windows", "macos", "linux" or "android".
     os: &'static str,
     /// Linux on Wayland: no global hotkeys or synthetic keystrokes for apps.
     wayland: bool,
@@ -37,8 +37,14 @@ pub fn info() -> Platform {
     let linux = cfg!(target_os = "linux");
     Platform {
         os: std::env::consts::OS,
+        #[cfg(desktop)]
         wayland: crate::paste::is_wayland(),
+        #[cfg(desktop)]
         gnome_shortcut: crate::gnome::available(),
+        #[cfg(not(desktop))]
+        wayland: false,
+        #[cfg(not(desktop))]
+        gnome_shortcut: false,
         wtype: linux && on_path("wtype"),
         ydotool: linux && on_path("ydotool"),
         #[cfg(target_os = "macos")]

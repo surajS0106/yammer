@@ -1,11 +1,13 @@
-import { Check, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
+import { Check, PencilSimple as Pencil, Plus, Trash as Trash2, MagicWand as Wand2 } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { PageHeader, type PageId } from "@/App";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
+import { isAndroid } from "@/lib/utils";
 import { AnimatedList, Collapse, ListRow } from "@/components/motion";
 import { NigiriCard, NigiriChips } from "@/components/nigiri-card";
-import { Badge, Button, Card, Hotkey, Input, Intro, Notice, Textarea } from "@/components/ui";
+import { Badge, Button, Card, Hotkey, Input, Intro, Notice, Sheet, SheetAction, Textarea } from "@/components/ui";
+import { useDockAction } from "@/lib/dock";
 import { useSettings } from "@/lib/settings";
 import type { Transform } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -36,7 +38,7 @@ function Editor({ initial, onSave, onCancel }: { initial: Transform; onSave: (t:
           onChange={(e) => setInstructions(e.target.value)}
         />
       </label>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {!isAndroid && <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs">
           <span className="font-medium">Hotkey</span>
           <span className="text-muted-foreground"> · optional. Dictates with this transform, whichever one is active.</span>
@@ -50,7 +52,7 @@ function Editor({ initial, onSave, onCancel }: { initial: Transform; onSave: (t:
           }}
           onClear={() => setHotkey("")}
         />
-      </div>
+      </div>}
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>
           Cancel
@@ -78,20 +80,22 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
     void update((s) => ({ ...s, transforms: list.filter((x) => x.id !== id), activeTransform: s.activeTransform === id ? "" : s.activeTransform }));
   const setActive = (id: string) => void update({ activeTransform: id });
   const current = list.find((t) => t.id === active);
+  useDockAction({ label: "Add a transform", icon: Plus, run: () => setEditing("new") });
+  const editingTransform = list.find((t) => t.id === editing);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      {!isAndroid && <div className="flex items-start justify-between gap-4">
         <PageHeader title="Transforms" />
         <Button onClick={() => setEditing("new")}>
           <Plus /> Add new
         </Button>
-      </div>
+      </div>}
 
-      <Intro title="Say it once, get it in the right shape">
+      {!isAndroid && <Intro title="Say it once, get it in the right shape">
         A transform rewrites what you dictate before it’s pasted: into an email, bullet points, a formal note. Pick one to apply to every dictation, give one its
         own hotkey, or run any of them on a note in the Scratchpad.
-      </Intro>
+      </Intro>}
 
       <NigiriCard
         label="Transforms"
@@ -100,7 +104,9 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
         bandLabel={current ? "The active one is lit" : "Yours"}
         band={<NigiriChips items={list.map((t) => t.name)} highlight={current?.name} empty="Add a transform and it shows up here." />}
         stats={[
-          { value: list.filter((t) => t.hotkey).length, label: "with a hotkey", hint: "run on demand" },
+          isAndroid
+            ? { value: list.filter((t) => !t.id.startsWith("custom-")).length, label: "starters", hint: "ready to use" }
+            : { value: list.filter((t) => t.hotkey).length, label: "with a hotkey", hint: "run on demand" },
           // The built-in ones have plain ids; ones made here are "custom-<time>".
           { value: list.filter((t) => t.id.startsWith("custom-")).length, label: "made by you", hint: "beyond the starters", color: "nori" },
         ]}
@@ -116,7 +122,28 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
         </Notice>
       </Collapse>
 
-      <Collapse show={editing === "new"}>
+      {isAndroid && (
+        <Sheet open={editing !== null} onClose={() => setEditing(null)} title={editing === "new" ? "New transform" : "Edit transform"}>
+          {editing !== null && (
+            <>
+              <Editor key={editing} initial={editingTransform ?? { id: `custom-${Date.now()}`, name: "", instructions: "", hotkey: "" }} onSave={(t) => void save(t)} onCancel={() => setEditing(null)} />
+              {editingTransform && (
+                <SheetAction
+                  icon={Trash2}
+                  label="Delete transform"
+                  danger
+                  onClick={() => {
+                    setEditing(null);
+                    remove(editingTransform.id);
+                  }}
+                />
+              )}
+            </>
+          )}
+        </Sheet>
+      )}
+
+      <Collapse show={!isAndroid && editing === "new"}>
         <Card>
           <Editor initial={{ id: `custom-${Date.now()}`, name: "", instructions: "", hotkey: "" }} onSave={(t) => void save(t)} onCancel={() => setEditing(null)} />
         </Card>
@@ -127,12 +154,12 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
           <h2 className="text-sm font-semibold">Apply to dictations</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">One at a time. It stays on until you pick another or choose None.</p>
         </div>
-        <Card className="divide-y" role="radiogroup" aria-label="Active transform">
+        <Card className="divide-y overflow-hidden" role="radiogroup" aria-label="Active transform">
           <Option checked={!active} onSelect={() => setActive("")} name="None" description="Paste what you said, cleaned up but not restyled." />
           <AnimatedList>
             {list.map((t) => (
               <ListRow key={t.id}>
-                {editing === t.id ? (
+                {editing === t.id && !isAndroid ? (
                   <Editor initial={t} onSave={(next) => void save(next)} onCancel={() => setEditing(null)} />
                 ) : (
                   <Option
@@ -143,12 +170,14 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
                     description={t.instructions}
                     actions={
                       <>
-                        <Button size="icon" variant="ghost" title="Edit" onClick={() => setEditing(t.id)}>
+                        <Button size="icon" variant="ghost" title="Edit" aria-label={`Edit ${t.name}`} onClick={() => setEditing(t.id)}>
                           <Pencil />
                         </Button>
-                        <Button size="icon" variant="ghost" title="Delete" onClick={() => remove(t.id)}>
-                          <Trash2 />
-                        </Button>
+                        {!isAndroid && (
+                          <Button size="icon" variant="ghost" title="Delete" onClick={() => remove(t.id)}>
+                            <Trash2 />
+                          </Button>
+                        )}
                       </>
                     }
                   />

@@ -1,8 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronLeft, ChevronRight, Copy, Minus, PanelLeft, Square, X } from "lucide-react";
+import { CaretLeft as ChevronLeft, CaretRight as ChevronRight, Copy, Minus, SidebarSimple as PanelLeft, Square, X } from "@phosphor-icons/react";
 import { MotionConfig } from "motion/react";
 import * as React from "react";
 
+import { BottomNav } from "@/components/bottom-nav";
 import { navPageIds, Sidebar } from "@/components/sidebar";
 import { Segmented } from "@/components/ui";
 import { ChangelogPage } from "@/pages/changelog";
@@ -18,9 +19,11 @@ import { Onboarding } from "@/pages/onboarding";
 import { ScratchpadPage } from "@/pages/scratchpad";
 import { SnippetsPage } from "@/pages/snippets";
 import { TransformsPage } from "@/pages/transforms";
+import { useBackKey } from "@/lib/back";
+import { DockActionContext, type DockAction } from "@/lib/dock";
 import { useSettings } from "@/lib/settings";
 import { api, on, type Platform } from "@/lib/tauri";
-import { cn } from "@/lib/utils";
+import { cn, isAndroid } from "@/lib/utils";
 
 export type PageId =
   | "home"
@@ -37,16 +40,26 @@ export type PageId =
   | "changelog";
 
 /** The three settings pages share one nav entry and switch with tabs. */
-const settingsTabs: { value: "general" | "engine" | "cleanup"; label: string }[] = [
+const settingsTabs: { value: PageId; label: string }[] = [
   { value: "general", label: "General" },
   { value: "engine", label: "Speech engine" },
   { value: "cleanup", label: "AI cleanup" },
 ];
 const isSettings = (id: PageId) => settingsTabs.some((t) => t.value === id);
 
-/** Pages reached from inside another one: they get a back button and a breadcrumb trail up to it. */
-const pageParents: Partial<Record<PageId, PageId>> = { changelog: "help" };
-const pageLabels: Partial<Record<PageId, string>> = { help: "Help", changelog: "What's new" };
+/** The phone's bottom nav has one Teach tab, so these switch the same way. */
+const teachTabs: { value: PageId; label: string }[] = [
+  { value: "dictionary", label: "Dictionary" },
+  { value: "snippets", label: "Snippets" },
+  { value: "transforms", label: "Transforms" },
+];
+const pageTabs = (id: PageId) => [settingsTabs, ...(isAndroid ? [teachTabs] : [])].find((tabs) => tabs.some((t) => t.value === id));
+
+/** Pages reached from inside another one: they get a back button and a breadcrumb trail up to it. The phone has no tab for Insights or Help. */
+const pageParents: Partial<Record<PageId, PageId>> = isAndroid
+  ? { changelog: "help", help: "general", insights: "home", general: "home", engine: "home", cleanup: "home" }
+  : { changelog: "help" };
+const pageLabels: Partial<Record<PageId, string>> = { home: "Home", general: "Settings", help: "Help", insights: "Insights", changelog: "What's new" };
 
 /** The page and its ancestors, outermost first. */
 function trail(page: PageId): PageId[] {
@@ -72,6 +85,14 @@ export default function App() {
   const [platform, setPlatform] = React.useState<Platform | null>(null);
   const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem(COLLAPSED_KEY) === "1");
   const scroller = React.useRef<HTMLDivElement>(null);
+  const [dockAction, setDockAction] = React.useState<DockAction | null>(null);
+  const tabs = pageTabs(page);
+  // Home is one screen on a computer: the chain down to it takes the full height. A phone just scrolls.
+  const fillHeight = page === "home" && !isAndroid;
+
+  // Back climbs to the parent page, or from any tab to Home, and from Home leaves the app.
+  const path = trail(page);
+  useBackKey(settings.onboarded ? path.length - (path[0] === "home" ? 1 : 0) : 0, () => setPage((p) => pageParents[p] ?? "home"));
 
   // A newly opened page starts at the top, so its entrance plays where you can see it.
   // (Braces matter: Chromium's scrollTo returns a Promise, which React would take for a cleanup function.)
@@ -121,7 +142,7 @@ export default function App() {
       <PlatformContext.Provider value={platform}>
         <MotionConfig reducedMotion="user">
           <div className="flex h-svh flex-col">
-            <TitleBar className={cn(isMac && "pl-20")} />
+            {!isAndroid && <TitleBar className={cn(isMac && "pl-20")} />}
             <Onboarding onDone={(next) => setPage(next ?? "home")} />
           </div>
         </MotionConfig>
@@ -131,35 +152,34 @@ export default function App() {
 
   return (
     <PlatformContext.Provider value={platform}>
+      <DockActionContext.Provider value={setDockAction}>
       <MotionConfig reducedMotion="user">
-        <div className="flex h-svh">
+        <div className="relative flex h-svh overflow-hidden">
           {/* Ctrl+B slides the sidebar away. The wrapper animates its width while the nav keeps
               a fixed one, so labels clip instead of reflowing. `inert` keeps a hidden sidebar out of the tab order. */}
-          <div
-            inert={collapsed}
-            className={cn(
-              "shrink-0 overflow-hidden transition-[width] duration-300 ease-smooth motion-reduce:transition-none",
-              collapsed ? "w-0" : "w-56",
-            )}
-          >
-            <div
-              className={cn(
-                "h-full transition-[opacity,translate] duration-300 ease-smooth motion-reduce:transition-none",
-                collapsed && "-translate-x-4 opacity-0",
-              )}
-            >
-              <Sidebar page={trail(page)[0]} go={setPage} settingsActive={isSettings(page)} dragStrip={isMac} />
+          {!isAndroid && (
+            <div inert={collapsed} className={cn("shrink-0 overflow-hidden transition-[width] duration-300 ease-smooth motion-reduce:transition-none", collapsed ? "w-0" : "w-56")}>
+              <div
+                className={cn(
+                  "h-full transition-[opacity,translate] duration-300 ease-smooth motion-reduce:transition-none",
+                  collapsed && "-translate-x-4 opacity-0",
+                )}
+              >
+                <Sidebar page={trail(page)[0]} go={setPage} settingsActive={isSettings(page)} dragStrip={isMac} />
+              </div>
             </div>
-          </div>
-          <main className="flex min-w-0 flex-1 flex-col">
+          )}
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
             {/* With the sidebar hidden, the macOS traffic lights sit at the left of this bar. */}
-            <TitleBar
-              className={cn("transition-[padding] duration-300 ease-smooth motion-reduce:transition-none", isMac && collapsed && "pl-20")}
-              onToggleSidebar={() => setCollapsed((c) => !c)}
-            />
+            {!isAndroid && (
+              <TitleBar
+                className={cn("transition-[padding] duration-300 ease-smooth motion-reduce:transition-none", isMac && collapsed && "pl-20")}
+                onToggleSidebar={() => setCollapsed((c) => !c)}
+              />
+            )}
             <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-              {/* Home is one screen: the chain down to it takes the full height, and its Recent list scrolls inside. */}
-              <div className={cn("relative px-4 pt-2 pb-6 sm:px-6 sm:pt-4 sm:pb-8 lg:px-10", page === "home" && "h-full")}>
+              {/* Home's Recent list scrolls inside this height. On a phone the bottom padding clears the dock. */}
+              <div className={cn("relative px-4 pt-2 pb-6 sm:px-6 sm:pt-4 sm:pb-8 lg:px-10", isAndroid && "pt-4 pb-24 sm:pb-24", fillHeight && "h-full")}>
                 {/* Ambient backdrop behind every page: a soft coral glow at the top, so the canvas
                     isn't flat. Scrolls with the page. */}
                 <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] overflow-hidden">
@@ -174,17 +194,17 @@ export default function App() {
                 <div
                   className={cn(
                     "@container relative mx-auto w-full",
-                    widePages.has(page) ? "max-w-6xl" : page === "home" ? "h-full max-w-4xl" : "max-w-3xl",
+                    widePages.has(page) ? "max-w-6xl" : page === "home" ? cn("max-w-4xl", fillHeight && "h-full") : "max-w-3xl",
                   )}
                 >
                   {pageParents[page] && <Breadcrumbs trail={trail(page)} go={setPage} />}
-                  {isSettings(page) && (
+                  {tabs && (
                     <div className="mb-6">
-                      <Segmented value={page as (typeof settingsTabs)[number]["value"]} options={settingsTabs} onChange={setPage} />
+                      <Segmented value={page} options={tabs} onChange={setPage} fill={isAndroid} />
                     </div>
                   )}
                   {/* Keyed so each page mounts fresh and its blocks rise in (.page-enter in index.css). */}
-                  <div key={page} className={cn("page-enter", page === "home" && "h-full")}>
+                  <div key={page} className={cn("page-enter", fillHeight && "h-full")}>
                     {page === "home" && <HomePage go={setPage} />}
                     {page === "insights" && <InsightsPage go={setPage} />}
                     {page === "dictionary" && <DictionaryPage />}
@@ -192,7 +212,7 @@ export default function App() {
                     {page === "transforms" && <TransformsPage go={setPage} />}
                     {page === "scratchpad" && <ScratchpadPage go={setPage} />}
                     {page === "history" && <HistoryPage />}
-                    {page === "general" && <GeneralPage />}
+                    {page === "general" && <GeneralPage go={setPage} />}
                     {page === "engine" && <EnginePage go={setPage} />}
                     {page === "cleanup" && <CleanupPage />}
                     {page === "help" && <HelpPage go={setPage} />}
@@ -202,14 +222,23 @@ export default function App() {
               </div>
             </div>
           </main>
+          {isAndroid && <BottomNav page={page} go={setPage} action={dockAction} />}
         </div>
       </MotionConfig>
+      </DockActionContext.Provider>
     </PlatformContext.Provider>
   );
 }
 
 function Breadcrumbs({ trail, go }: { trail: PageId[]; go: (page: PageId) => void }) {
   const parent = trail[trail.length - 2];
+  if (isAndroid) {
+    return (
+      <button type="button" onClick={() => go(parent)} className="mb-2 -ml-2 flex h-11 items-center gap-1 pr-3 text-sm font-medium text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+        <ChevronLeft className="size-5" /> {pageLabels[parent]}
+      </button>
+    );
+  }
   return (
     <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1 text-sm">
       <button
@@ -250,7 +279,7 @@ function TitleBar({ className, onToggleSidebar }: { className?: string; onToggle
   const [maximized, setMaximized] = React.useState(false);
 
   React.useEffect(() => {
-    if (isMac) return;
+    if (isMac || isAndroid) return;
     const win = getCurrentWindow();
     const sync = () => void win.isMaximized().then(setMaximized, () => {});
     sync();
@@ -272,7 +301,7 @@ function TitleBar({ className, onToggleSidebar }: { className?: string; onToggle
           <PanelLeft className="size-4" />
         </button>
       )}
-      {!isMac && (
+      {!isMac && !isAndroid && (
         <div className="ml-auto flex h-full">
           <WindowButton label="Minimize" onClick={() => void win().minimize()}>
             <Minus className="size-4" />

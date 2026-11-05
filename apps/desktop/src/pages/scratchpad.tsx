@@ -1,14 +1,17 @@
-import { ArrowLeft, Copy, Loader2, Plus, Search, Trash2, Undo2, Wand2 } from "lucide-react";
+import { ArrowLeft, Copy, CircleNotch as Loader2, Plus, MagnifyingGlass as Search, Trash as Trash2, ArrowUUpLeft as Undo2, MagicWand as Wand2 } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { PageHeader, type PageId } from "@/App";
 import { AnimatedList, ListRow } from "@/components/motion";
 import { NigiriCard } from "@/components/nigiri-card";
 import { PixelBars } from "@/components/pixel";
-import { Button, Card, Hotkey, Input, Intro, Select, Textarea } from "@/components/ui";
+import { Button, Card, EmptyState, Hotkey, Input, Intro, Select, Textarea } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import { dayKey, lastDays, wordCount } from "@/lib/stats";
 import { api, errorMessage, type Note } from "@/lib/tauri";
+import { useBackKey } from "@/lib/back";
+import { useDockAction } from "@/lib/dock";
+import { deviceName, isAndroid } from "@/lib/utils";
 
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const weekday = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
@@ -39,6 +42,13 @@ async function loadNotes(): Promise<Note[]> {
     localStorage.removeItem(LEGACY_KEY);
   } catch {}
   return merged;
+}
+
+let newNoteWanted = false;
+
+/** Opens a new note the next time this page loads: Home's "+" lands in one. */
+export function requestNewNote() {
+  newNoteWanted = true;
 }
 
 function titleOf(note: Note): string {
@@ -83,10 +93,11 @@ function NoteEditor({ note, onChange, onDelete, onBack }: { note: Note; onChange
         </Button>
       </div>
       <Textarea
-        autoFocus
+        // On a phone focus brings up the keyboard, which would cover a note you only opened to read.
+        autoFocus={!isAndroid || !note.text}
         rows={16}
         className="bg-card text-[15px]"
-        placeholder="Click here, then hold the hotkey and talk. Or type, or paste something to transform."
+        placeholder={isAndroid ? "Tap Sushi and talk. Or type, or paste something to transform." : "Click here, then hold the hotkey and talk. Or type, or paste something to transform."}
         value={note.text}
         onChange={(e) => {
           setUndo(null);
@@ -97,7 +108,7 @@ function NoteEditor({ note, onChange, onDelete, onBack }: { note: Note; onChange
         <Wand2 className="ml-1 size-4 text-muted-foreground" />
         <span className="text-sm font-medium">Transform</span>
         <Select
-          className="w-44 min-w-0 flex-1 @md:flex-none"
+          className="w-44 min-w-0 flex-[1_1_8rem] @md:flex-none"
           label="Transform"
           align="start"
           value={transform}
@@ -136,7 +147,7 @@ function NotesCard({ notes }: { notes: Note[] }) {
     <NigiriCard
       label="Scratchpad"
       value={notes.length}
-      caption={notes.length === 1 ? "note, only on this computer" : "notes, only on this computer"}
+      caption={`${notes.length === 1 ? "note" : "notes"}, only on this ${deviceName}`}
       bandLabel="Last edited, this week"
       band={<PixelBars values={edited} labels={days.map((d) => weekday.format(d))} titles={edited.map((n) => `${n} ${n === 1 ? "note" : "notes"}`)} stack={5} />}
       stats={[
@@ -177,20 +188,30 @@ export function ScratchpadPage({ go }: { go: (page: PageId) => void }) {
     pending.current = { notes: next, timer: setTimeout(flush, SAVE_DELAY_MS) };
   };
 
-  // Nothing to show until the saved notes load (a moment), so a new note can't race them.
-  if (!notes) return <PageHeader title="Scratchpad" />;
   const create = () => {
     const note = { id: crypto.randomUUID(), text: "", updatedAt: Date.now() };
-    commit([note, ...notes]);
+    commit([note, ...(notes ?? [])]);
     setOpen(note.id);
   };
+  const current = notes?.find((n) => n.id === open);
+  useDockAction(notes && !current ? { label: "New note", icon: Plus, run: create } : null);
+  const loaded = !!notes;
+  React.useEffect(() => {
+    if (loaded && newNoteWanted) {
+      newNoteWanted = false;
+      create();
+    }
+  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
   // Leaving an empty note discards it.
   const close = () => {
-    commit(notes.filter((n) => n.id !== open || n.text.trim()));
+    commit((notes ?? []).filter((n) => n.id !== open || n.text.trim()));
     setOpen(null);
   };
+  useBackKey(current ? 1 : 0, close);
 
-  const current = notes.find((n) => n.id === open);
+  // Nothing to show until the saved notes load (a moment), so a new note can't race them.
+  if (!notes) return <PageHeader title="Scratchpad" />;
+
   if (current) {
     return (
       <NoteEditor
@@ -207,6 +228,51 @@ export function ScratchpadPage({ go }: { go: (page: PageId) => void }) {
 
   const q = query.trim().toLowerCase();
   const shown = q ? notes.filter((n) => n.text.toLowerCase().includes(q)) : notes;
+
+  if (isAndroid) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Scratchpad" />
+        {notes.length === 0 ? (
+          <EmptyState
+            icon={Plus}
+            title="For quick thoughts you want to come back to"
+            action={
+              <Button onClick={create}>
+                <Plus /> Start a new note
+              </Button>
+            }
+          >
+            Drop a to-do list, polish a message, brain-dump an idea. Tap Sushi to dictate into a note, then reshape it with a transform.
+          </EmptyState>
+        ) : (
+          <>
+            <NotesCard notes={notes} />
+            {notes.length > 3 && (
+              <div className="relative">
+                <Search className="absolute top-3 left-4 size-5 text-muted-foreground" />
+                <Input className="rounded-full pl-11" placeholder="Search notes" value={query} onChange={(e) => setQuery(e.target.value)} />
+              </div>
+            )}
+            {shown.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {shown.map((n, i) => (
+                  // The newest gets the whole row, and the rest pair up beneath it.
+                  <button key={n.id} type="button" onClick={() => setOpen(n.id)} className={`min-w-0 rounded-3xl border bg-card p-4 text-left outline-none active:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 ${i === 0 ? "col-span-2" : ""}`}>
+                    <div className="truncate text-sm font-semibold">{titleOf(n)}</div>
+                    <p className="mt-1 line-clamp-3 min-h-[3.75em] text-xs leading-relaxed text-muted-foreground">{n.text.trim().split("\n").slice(1).join(" ")}</p>
+                    <div className="mt-2 truncate text-[11px] text-muted-foreground">{when.format(n.updatedAt)}</div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <EmptyState icon={Search} title={`Nothing matches “${query}”`} action={<Button variant="outline" onClick={() => setQuery("")}>Clear search</Button>} />
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

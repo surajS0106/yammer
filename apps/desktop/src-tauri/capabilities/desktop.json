@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop",
+  "description": "Plugins that aren't built for mobile: app updates",
+  "platforms": ["linux", "macOS", "windows"],
+  "windows": ["main", "overlay"],
+  "permissions": [
+    "updater:default",
+    "process:allow-restart"
+  ]
+}

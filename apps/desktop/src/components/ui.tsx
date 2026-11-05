@@ -1,11 +1,13 @@
 // Small, dependency-free UI primitives in the Sush look (tokens from index.css).
 
-import { Check, ChevronDown } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Check, CaretDown as ChevronDown } from "@phosphor-icons/react";
+import { AnimatePresence, motion, useDragControls, useReducedMotion } from "motion/react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { ease, spring } from "@/components/motion";
-import { cn, hotkeyParts } from "@/lib/utils";
+import { useBackKey } from "@/lib/back";
+import { cn, hotkeyParts, isAndroid } from "@/lib/utils";
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "default" | "outline" | "ghost" | "destructive";
@@ -22,9 +24,10 @@ export function Button({ variant = "default", size = "md", className, ...props }
         variant === "outline" && "border bg-background hover:bg-accent hover:text-accent-foreground",
         variant === "ghost" && "hover:bg-accent hover:text-accent-foreground",
         variant === "destructive" && "bg-destructive/10 text-destructive hover:bg-destructive/20",
-        size === "sm" && "h-7 px-2.5 text-xs",
-        size === "md" && "h-8 px-3",
-        size === "icon" && "size-8",
+        // Fingers need more room than a pointer.
+        size === "sm" && (isAndroid ? "h-10 px-3.5 text-[13px]" : "h-7 px-2.5 text-xs"),
+        size === "md" && (isAndroid ? "h-11 px-4" : "h-8 px-3"),
+        size === "icon" && (isAndroid ? "size-10" : "size-8"),
         className,
       )}
       {...props}
@@ -54,6 +57,7 @@ export function Switch({
       className={cn(
         "relative inline-flex h-[20px] w-[36px] shrink-0 items-center rounded-full transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
         checked ? "bg-primary" : "bg-input dark:bg-input/80",
+        isAndroid && "after:absolute after:-inset-3",
       )}
     >
       <span
@@ -69,12 +73,113 @@ export function Switch({
 const field =
   "w-full max-w-full rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-50 dark:bg-input/30";
 
-export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(field, "h-8", className)} {...props} />;
+export function Input({ className, ...props }: React.ComponentProps<"input">) {
+  return <input className={cn(field, isAndroid ? "h-11 text-base" : "h-8", className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cn(field, "min-h-20 resize-y py-2 leading-relaxed", className)} {...props} />;
+  return <textarea className={cn(field, "min-h-20 resize-y py-2 leading-relaxed", isAndroid && "text-base", className)} {...props} />;
+}
+
+/**
+ * The phone's stand-in for dropdowns and menus: rises from the bottom over a dimmed page, so you keep your place.
+ * Tap outside, press Back or drag the handle down to close it.
+ */
+export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: React.ReactNode; children: React.ReactNode }) {
+  const reduce = useReducedMotion();
+  const drag = useDragControls();
+  useBackKey(open ? 1 : 0, onClose);
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        // React events bubble out of a portal to the page behind; a tap in here isn't a tap on the row that opened it.
+        <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+          <motion.div aria-hidden initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={onClose} className="absolute inset-0 bg-black/50" />
+          <motion.div
+            role="dialog"
+            aria-modal
+            drag={reduce ? false : "y"}
+            dragControls={drag}
+            dragListener={false}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 0.8 }}
+            onDragEnd={(_, info) => {
+              if (info.offset.y > 80 || info.velocity.y > 500) onClose();
+            }}
+            initial={reduce ? { opacity: 0 } : { y: "100%" }}
+            animate={reduce ? { opacity: 1 } : { y: 0 }}
+            exit={reduce ? { opacity: 0 } : { y: "100%" }}
+            transition={{ duration: 0.28, ease }}
+            className="relative flex max-h-[85svh] flex-col rounded-t-3xl border-t bg-popover text-popover-foreground"
+          >
+            <div onPointerDown={(e) => drag.start(e)} className="flex shrink-0 touch-none flex-col items-center px-5 pt-2.5 pb-2">
+              <span aria-hidden className="h-1 w-10 rounded-full bg-muted-foreground/40" />
+              {title && <h2 className="mt-3 w-full text-base font-semibold tracking-tight">{title}</h2>}
+            </div>
+            <div className="min-h-0 overflow-y-auto overscroll-contain px-2 pb-5">{children}</div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
+/** A row in a Sheet. */
+export function SheetAction({ icon: Icon, label, danger, disabled, onClick }: { icon: React.ElementType; label: string; danger?: boolean; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn("flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-base outline-none active:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50", danger && "text-destructive")}
+    >
+      <Icon className="size-5.5 shrink-0" />
+      {label}
+    </button>
+  );
+}
+
+/** Pointer handlers that call `onLongPress` after a held press: the phone's right-click. Moving (scrolling) cancels it. */
+export function useLongPress(onLongPress: () => void) {
+  const timer = React.useRef(0);
+  const start = React.useRef({ x: 0, y: 0 });
+  const fired = React.useRef(false);
+  const cancel = () => window.clearTimeout(timer.current);
+  React.useEffect(() => cancel, []);
+  return {
+    onPointerDown: (e: React.PointerEvent) => {
+      start.current = { x: e.clientX, y: e.clientY };
+      fired.current = false;
+      timer.current = window.setTimeout(() => {
+        fired.current = true;
+        navigator.vibrate?.(10);
+        onLongPress();
+      }, 450);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 10) cancel();
+    },
+    onPointerUp: cancel,
+    onPointerCancel: cancel,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+    /** Whether the tap that's ending was really a long press, so it shouldn't count as a tap too. */
+    wasLong: () => fired.current,
+  };
+}
+
+/** What a screen shows with nothing on it: what goes here, and how to start. */
+export function EmptyState({ icon: Icon, title, children, action }: { icon: React.ElementType; title: string; children?: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <Card className="flex flex-col items-center gap-2 border-dashed bg-transparent px-6 py-10 text-center">
+      <span className="flex size-14 items-center justify-center rounded-full bg-primary/12 text-primary">
+        <Icon className="size-7" />
+      </span>
+      <p className="mt-1 text-base font-semibold text-balance">{title}</p>
+      {children && <p className="max-w-xs text-sm leading-relaxed text-pretty text-muted-foreground">{children}</p>}
+      {action && <div className="mt-2">{action}</div>}
+    </Card>
+  );
 }
 
 export interface SelectOption<T> {
@@ -102,6 +207,9 @@ function visibleBand(el: HTMLElement) {
     top = Math.max(top, r.top);
     bottom = Math.min(bottom, r.bottom);
   }
+  // The phone's dock floats over the page, so a list can't open behind it.
+  const dock = document.querySelector("[data-dock]");
+  if (dock) bottom = Math.min(bottom, dock.getBoundingClientRect().top);
   return { top, bottom };
 }
 
@@ -191,7 +299,8 @@ export function Select<T extends string | number>({
   }, [open, highlighted]);
 
   React.useEffect(() => {
-    if (!open) return;
+    // A phone's sheet has its own backdrop to tap.
+    if (!open || isAndroid) return;
     const onDown = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -246,7 +355,8 @@ export function Select<T extends string | number>({
         onKeyDown={onKeyDown}
         className={cn(
           field,
-          "flex h-8 cursor-pointer items-center gap-2 pr-2 text-left hover:bg-accent/60 disabled:cursor-default disabled:hover:bg-transparent",
+          "flex cursor-pointer items-center gap-2 pr-2 text-left hover:bg-accent/60 disabled:cursor-default disabled:hover:bg-transparent",
+          isAndroid ? "h-11" : "h-8",
           open && "border-ring ring-3 ring-ring/30",
         )}
       >
@@ -261,8 +371,31 @@ export function Select<T extends string | number>({
         </motion.span>
       </button>
 
+      {isAndroid && (
+        <Sheet open={open} onClose={() => setOpen(false)} title={label}>
+          <ul ref={listRef} id={`${uid}-list`} role="listbox" aria-label={label}>
+            {options.map((o, i) => (
+              <li
+                key={String(o.value)}
+                id={`${uid}-${i}`}
+                data-index={i}
+                role="option"
+                aria-selected={i === selected}
+                aria-disabled={o.disabled || undefined}
+                onClick={() => choose(i)}
+                className={cn("flex min-h-12 items-center gap-3 rounded-2xl px-3 py-2 text-base active:bg-accent", i === selected && "font-medium", o.disabled && "opacity-50")}
+              >
+                {o.icon && <span className="flex shrink-0">{o.icon}</span>}
+                <span className="min-w-0 flex-1">{o.label}</span>
+                {i === selected && <Check className="size-5 shrink-0 text-primary" weight="bold" />}
+              </li>
+            ))}
+          </ul>
+        </Sheet>
+      )}
+
       <AnimatePresence>
-        {open && (
+        {open && !isAndroid && (
           <motion.div
             initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -297,7 +430,7 @@ export function Select<T extends string | number>({
                   transition={{ delay: reduce ? 0 : Math.min(i, 10) * 0.015, duration: 0.15 }}
                   onMouseEnter={() => !o.disabled && setHighlighted(i)}
                   onClick={() => choose(i)}
-                  className={cn("relative flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm", o.disabled && "cursor-default opacity-50")}
+                  className={cn("relative flex cursor-pointer items-center gap-2 rounded-md px-2 text-sm", isAndroid ? "py-3" : "py-1.5", o.disabled && "cursor-default opacity-50")}
                 >
                   {/* The highlight slides in from the row it left, so it sits under every row's content (z-0 vs z-10),
                       not just its own; otherwise moving down, a later row's highlight covers the earlier row's text. */}
@@ -362,7 +495,7 @@ export function CommitInput({
 }
 
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-xl border bg-card text-card-foreground", className)} {...props} />;
+  return <div className={cn("rounded-xl border bg-card text-card-foreground", isAndroid && "rounded-3xl", className)} {...props} />;
 }
 
 /** A settings row: label and description on the left, the control on the right (or below, when stacked or out of room). */
@@ -445,22 +578,27 @@ export function Segmented<T extends string>({
   value,
   options,
   onChange,
+  fill,
 }: {
   value: T;
   options: { value: T; label: string; icon?: React.ReactNode }[];
   onChange: (value: T) => void;
+  /** Span the full width, with the options sharing it. */
+  fill?: boolean;
 }) {
   // The selected thumb slides between options; the id keeps two Segmented controls from sharing it.
   const id = React.useId();
   return (
-    <div className="inline-flex max-w-full overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none]">
+    <div className={cn("max-w-full overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none]", fill ? "flex" : "inline-flex")}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "relative shrink-0 rounded-md px-3 py-1 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+            "relative shrink-0 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+            isAndroid ? "py-2" : "py-1",
+            fill && "flex-1",
             value === o.value ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >

@@ -11,24 +11,7 @@
 // no mouse moves; hover comes from the cursor position Rust polls instead.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import {
-  AlertCircle,
-  ArrowDownToLine,
-  Check,
-  Copy,
-  EyeOff,
-  History,
-  Loader2,
-  type LucideIcon,
-  Mic,
-  Plus,
-  Power,
-  RotateCcw,
-  Settings2,
-  Square,
-  Wand2,
-  X,
-} from "lucide-react";
+import { WarningCircle as AlertCircle, DownloadSimple as ArrowDownToLine, Check, Copy, EyeSlash as EyeOff, ClockCounterClockwise as History, CircleNotch as Loader2, type Icon as LucideIcon, Microphone as Mic, Plus, Power, ArrowCounterClockwise as RotateCcw, SlidersHorizontal as Settings2, Square, MagicWand as Wand2, X } from "@phosphor-icons/react";
 import { motion, type MotionValue, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import * as React from "react";
 
@@ -155,7 +138,7 @@ function IslandButtons({ cursor }: { cursor: Point | null }) {
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => void run().catch(() => {})}
         >
-          <Icon className="size-4" strokeWidth={2.25} />
+          <Icon className="size-4" weight="bold" />
           {tip === id && (
             <span
               className="pointer-events-none absolute bottom-full left-1/2 mb-2.5 flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/10 bg-neutral-900/92 px-2.5 py-1 text-xs font-medium text-white shadow-[0_4px_12px_rgba(0,0,0,0.35)]"
@@ -271,7 +254,7 @@ const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point 
                   void run().catch(() => {});
                 }}
               >
-                <Icon className={cn("size-4 shrink-0", !danger && (hot === id ? "text-white" : "text-white/55"))} strokeWidth={2} />
+                <Icon className={cn("size-4 shrink-0", !danger && (hot === id ? "text-white" : "text-white/55"))} weight="bold" />
                 <span className="flex-1 truncate">{label}</span>
                 {hint && <span className="shrink-0 text-[11px] text-white/40">{hint}</span>}
               </button>
@@ -336,7 +319,7 @@ function CloseRing({ ms, paused, hot, onClose, buttonRef }: { ms: number; paused
           onAnimationEnd={onClose}
         />
       </svg>
-      <X className="size-3.5" strokeWidth={2.5} />
+      <X className="size-3.5" weight="bold" />
     </button>
   );
 }
@@ -403,7 +386,7 @@ function NewWords({
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => toggle(w)}
                 >
-                  {on ? <Check className="size-3 shrink-0 text-emerald-400" strokeWidth={2.5} /> : <Plus className="size-3 shrink-0" strokeWidth={2.5} />}
+                  {on ? <Check className="size-3 shrink-0 text-emerald-400" weight="bold" /> : <Plus className="size-3 shrink-0" weight="bold" />}
                   <span className={cn("truncate", !on && "line-through decoration-white/30")}>{w}</span>
                 </button>
               );
@@ -412,7 +395,7 @@ function NewWords({
         </div>
       ) : (
         <p className="flex items-center gap-1.5 text-xs text-white/75">
-          <Check className="size-3.5 shrink-0 text-emerald-400" strokeWidth={2.5} />
+          <Check className="size-3.5 shrink-0 text-emerald-400" weight="bold" />
           {added ? `Added ${added === 1 ? "1 word" : `${added} words`} to your Dictionary` : "Got it. I won't ask about those again."}
         </p>
       )}
@@ -441,7 +424,7 @@ function NewWords({
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => save(words.filter((w) => picked.has(w)))}
               >
-                <Plus className="size-3.5" strokeWidth={2.25} />
+                <Plus className="size-3.5" weight="bold" />
                 Add
               </button>
             </>
@@ -495,7 +478,7 @@ function TranscriptCard({
       onMouseDown={(e) => e.stopPropagation()}
       onClick={() => void api.copyText(text).then(() => setCopied(true), () => {})}
     >
-      {copied ? <Check className="size-3.5 text-emerald-400" strokeWidth={2.5} /> : <Copy className="size-3.5" strokeWidth={2.25} />}
+      {copied ? <Check className="size-3.5 text-emerald-400" weight="bold" /> : <Copy className="size-3.5" weight="bold" />}
       {copied ? "Copied" : "Copy"}
     </button>
   );
@@ -580,7 +563,7 @@ function FailedCard({ text, id, cursor, held, cardRef }: { text: string; id: num
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => void api.overlayRetry(id).catch(() => {})}
         >
-          <RotateCcw className="size-3.5" strokeWidth={2.25} />
+          <RotateCcw className="size-3.5" weight="bold" />
           Try again
         </button>
       </div>

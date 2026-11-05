@@ -145,6 +145,18 @@ export interface Platform {
 
 export type SecretName = "stt" | "cleanup";
 
+export interface AndroidStatus {
+  mic: boolean;
+  overlay: boolean;
+  accessibility: boolean;
+  notifications: boolean;
+  /** The foreground service is up, so Sushi can start a recording. */
+  running: boolean;
+  recording: boolean;
+}
+
+export type AndroidAction = "requestMic" | "requestNotifications" | "openOverlaySettings" | "openAccessibilitySettings" | "openAppSettings" | "startBubble" | "stopBubble" | "toggle" | "barsLight" | "barsDark";
+
 export type OverlayState =
   | { phase: "listening"; hint: string | null }
   | { phase: "transcribing"; engine: string }
@@ -196,6 +208,10 @@ export const api = {
   /** Rewrite text by a transform's instructions, using the AI cleanup model. */
   textRewrite: (text: string, instructions: string) => invoke<string>("text_rewrite", { text, instructions }),
   platformInfo: () => invoke<Platform>("platform_info"),
+  androidStatus: () => invoke<AndroidStatus>("android_status"),
+  androidAction: (action: AndroidAction) => invoke<void>("android_action", { action }),
+  /** Opens Android's share sheet with a new file holding `contents`. */
+  androidShare: (name: string, contents: string) => invoke<void>("android_share", { name, contents }),
   autostartGet: () => invoke<boolean>("autostart_get"),
   autostartSet: (enabled: boolean) => invoke<void>("autostart_set", { enabled }),
   openPermissionSettings: (pane: "microphone" | "accessibility") => invoke<void>("open_permission_settings", { pane }),

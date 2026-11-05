@@ -2,21 +2,29 @@
 
 use std::collections::BTreeMap;
 
+#[cfg(desktop)]
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
+#[cfg(desktop)]
 use tauri_plugin_autostart::ManagerExt;
 use voice_core::history::Entry;
 use voice_core::scratchpad::{self, Note};
+#[cfg(desktop)]
 use voice_core::settings::Engine;
 use voice_core::Settings;
 
-use crate::dictation::{self, Dictation, Input, Mode};
+#[cfg(desktop)]
+use crate::dictation::{Dictation, Input, Mode};
 use crate::error::{AppError, AppResult};
+#[cfg(desktop)]
 use crate::hotkey::{self, Hotkey};
 use crate::overlay::{self, OverlayState};
 use crate::state::AppState;
+#[cfg(desktop)]
 use crate::whisper::{self, Whisper};
-use crate::{paste, platform, recorder, secrets, tray};
+#[cfg(desktop)]
+use crate::{paste, recorder, tray};
+use crate::{pipeline, platform, secrets};
 
 #[tauri::command]
 pub fn settings_get(state: State<'_, AppState>) -> Settings {
@@ -29,18 +37,21 @@ pub fn overlay_state() -> OverlayState {
     overlay::current()
 }
 
+#[cfg(desktop)]
 /// Sushi and the pill, which take the mouse so the overlay can be dragged.
 #[tauri::command]
 pub fn overlay_hit_areas(app: AppHandle, areas: Vec<overlay::HitArea>) {
     overlay::set_hit_areas(&app, areas);
 }
 
+#[cfg(desktop)]
 /// Put the dragged pill back at the bottom centre of the screen.
 #[tauri::command]
 pub fn overlay_reset_position(app: AppHandle) {
     overlay::reset_position(&app);
 }
 
+#[cfg(desktop)]
 /// The hovered island's buttons: start or stop dictating, without taking focus
 /// from the app the text goes into.
 #[tauri::command]
@@ -48,12 +59,14 @@ pub fn overlay_toggle_dictation(app: AppHandle) {
     app.state::<Dictation>().send(Input::Toggle(Mode::Dictate));
 }
 
+#[cfg(desktop)]
 /// The failed card's Retry: transcribe history entry `id` again and paste it.
 #[tauri::command]
 pub fn overlay_retry(app: AppHandle, id: u64) {
     app.state::<Dictation>().send(Input::Retry(id));
 }
 
+#[cfg(desktop)]
 /// Open the settings window at `page` ("home", "history", …).
 #[tauri::command]
 pub fn overlay_open(app: AppHandle, page: String) {
@@ -61,12 +74,14 @@ pub fn overlay_open(app: AppHandle, page: String) {
     let _ = app.emit_to("main", "navigate", page);
 }
 
+#[cfg(desktop)]
 /// The overlay's right-click menu: "Hide the pill".
 #[tauri::command]
 pub fn overlay_hide(app: AppHandle) {
     overlay::hide_pill(&app);
 }
 
+#[cfg(desktop)]
 /// The transcript card closed: its timer ran out, or its close or Copy button was clicked.
 #[tauri::command]
 pub fn overlay_dismiss(app: AppHandle) {
@@ -87,12 +102,14 @@ pub fn dictionary_add(app: AppHandle, state: State<'_, AppState>, add: Vec<Strin
     Ok(())
 }
 
+#[cfg(desktop)]
 /// The overlay's right-click menu: "Quit Yammer".
 #[tauri::command]
 pub fn quit(app: AppHandle) {
     app.exit(0);
 }
 
+#[cfg(desktop)]
 /// The dictation hotkey as the island's tooltip shows it, e.g. "⌘⇧Space".
 #[tauri::command]
 pub fn hotkey_label(state: State<'_, AppState>) -> String {
@@ -110,6 +127,7 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
 pub fn apply(app: &AppHandle, settings: Settings) -> AppResult<Settings> {
     let state = app.state::<AppState>();
     let old = state.settings();
+    #[cfg(desktop)]
     if !hotkey::same(&settings, &old) {
         if let Err(e) = hotkey::register(app, &settings) {
             let _ = hotkey::register(app, &old);
@@ -118,14 +136,17 @@ pub fn apply(app: &AppHandle, settings: Settings) -> AppResult<Settings> {
     }
     settings.save(&state.settings_path)?;
     *state.settings.lock().unwrap() = settings.clone();
-    if settings.overlay_always_visible != old.overlay_always_visible {
-        overlay::set_always_visible(app, settings.overlay_always_visible);
-    }
-    if settings.overlay_position != old.overlay_position {
-        overlay::place(app);
-    }
-    if settings.engine == Engine::Local && (old.engine != Engine::Local || old.local_model != settings.local_model) {
-        preload(app);
+    #[cfg(desktop)]
+    {
+        if settings.overlay_always_visible != old.overlay_always_visible {
+            overlay::set_always_visible(app, settings.overlay_always_visible);
+        }
+        if settings.overlay_position != old.overlay_position {
+            overlay::place(app);
+        }
+        if settings.engine == Engine::Local && (old.engine != Engine::Local || old.local_model != settings.local_model) {
+            preload(app);
+        }
     }
     if (settings.history_days, settings.keep_recordings) != (old.history_days, old.keep_recordings) {
         let pruned = state.history.lock().unwrap().prune(crate::state::now_ms(), settings.history_days, settings.keep_recordings as usize);
@@ -133,11 +154,13 @@ pub fn apply(app: &AppHandle, settings: Settings) -> AppResult<Settings> {
             eprintln!("couldn't drop old history: {e}");
         }
     }
+    #[cfg(desktop)]
     tray::refresh(app);
     let _ = app.emit("settings-changed", &settings);
     Ok(settings)
 }
 
+#[cfg(desktop)]
 /// Load the local model in the background, so the first dictation doesn't wait for it.
 pub fn preload(app: &AppHandle) {
     let state = app.state::<AppState>();
@@ -154,17 +177,20 @@ pub fn preload(app: &AppHandle) {
     });
 }
 
+#[cfg(desktop)]
 /// Release the global hotkeys while the UI listens for a new one.
 #[tauri::command]
 pub fn hotkey_suspend(app: AppHandle, state: State<'_, AppState>, suspended: bool) -> AppResult<()> {
     hotkey::suspend(&app, suspended, &state.settings())
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub fn hotkey_error(hotkey: State<'_, Hotkey>) -> Option<String> {
     hotkey.error.lock().unwrap().clone()
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn mic_devices() -> Vec<String> {
     tauri::async_runtime::spawn_blocking(recorder::input_devices).await.unwrap_or_default()
@@ -199,7 +225,7 @@ pub fn history_clear(state: State<'_, AppState>) -> AppResult<()> {
 /// History's "Transcribe again": redo a kept recording with the current settings. Emits `history-updated` too.
 #[tauri::command]
 pub async fn history_retry(app: AppHandle, id: u64) -> AppResult<Entry> {
-    dictation::retry(&app, id).await
+    pipeline::retry(&app, id).await
 }
 
 /// Write `contents` to `name` in Downloads (a number added if it's taken), show
@@ -224,6 +250,7 @@ pub fn export_file(app: AppHandle, name: String, contents: String) -> AppResult<
     }
     std::fs::create_dir_all(&dir)?;
     std::fs::write(&path, contents)?;
+    #[cfg(desktop)]
     if let Err(e) = tauri_plugin_opener::reveal_item_in_dir(&path) {
         eprintln!("couldn't show the export: {e}");
     }
@@ -249,6 +276,7 @@ pub async fn text_rewrite(state: State<'_, AppState>, text: String, instructions
     Ok(voice_core::text::apply(&out, &settings.replacements, &[]))
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub fn copy_text(text: String) -> AppResult<()> {
     paste::copy(&text)
@@ -259,17 +287,20 @@ pub fn platform_info() -> platform::Platform {
     platform::info()
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub fn autostart_get(app: AppHandle) -> AppResult<bool> {
     app.autolaunch().is_enabled().map_err(AppError::invalid)
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub fn autostart_set(app: AppHandle, enabled: bool) -> AppResult<()> {
     let launcher = app.autolaunch();
     if enabled { launcher.enable() } else { launcher.disable() }.map_err(AppError::invalid)
 }
 
+#[cfg(desktop)]
 #[derive(Clone, Copy, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PermissionPane {
@@ -277,6 +308,7 @@ pub enum PermissionPane {
     Accessibility,
 }
 
+#[cfg(desktop)]
 /// Open the OS settings page where the user grants a permission (macOS).
 #[tauri::command]
 pub fn open_permission_settings(pane: PermissionPane) -> AppResult<()> {
@@ -290,12 +322,14 @@ pub fn open_permission_settings(pane: PermissionPane) -> AppResult<()> {
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(AppError::invalid)
 }
 
+#[cfg(desktop)]
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelsDir {
     path: String,
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub fn models_dir(state: State<'_, AppState>) -> ModelsDir {
     ModelsDir { path: state.models_dir.display().to_string() }

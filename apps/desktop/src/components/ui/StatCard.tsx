@@ -87,7 +87,7 @@ export function StatCard({
   sparklinePoints?: string;
   /** One line under the number that says what it counts. */
   description?: ReactNode;
-  /** A lucide icon: it is drawn in a disc beside the value. */
+  /** An icon: it is drawn in a disc beside the value. */
   icon?: ReactNode;
   variant?: "ambient" | "light" | "dark";
   /** Merged onto the card, so a host page can repaint the surface in its own palette. */

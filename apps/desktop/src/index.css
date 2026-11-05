@@ -142,6 +142,13 @@
     --sidebar-ring: var(--brand);
 }
 
+/* A phone's body text is larger than a computer's. Tailwind's text utilities read these. */
+html[data-android] {
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

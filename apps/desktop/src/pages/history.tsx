@@ -1,15 +1,16 @@
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { CaretLeft as ChevronLeft, CaretRight as ChevronRight, CaretDoubleLeft as ChevronsLeft, CaretDoubleRight as ChevronsRight, Copy, CircleNotch as Loader2, ArrowCounterClockwise as RotateCcw, Trash as Trash2 } from "@phosphor-icons/react";
+import { ClockCounterClockwise, DotsThree, MagnifyingGlass } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { PageHeader } from "@/App";
 import { NigiriCard } from "@/components/nigiri-card";
 import { PixelBars } from "@/components/pixel";
-import { Badge, Button, Card, Input, Select } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Input, Select, Sheet, SheetAction, useLongPress } from "@/components/ui";
 import { exportHistory, type ExportFormat } from "@/lib/export";
 import { useSettings } from "@/lib/settings";
 import { dayKey, engineLabel, lastDays, replaceEntry, weekOverWeek, wordCount } from "@/lib/stats";
 import { api, errorMessage, on, type HistoryEntry } from "@/lib/tauri";
-import { cn } from "@/lib/utils";
+import { cn, deviceName, isAndroid } from "@/lib/utils";
 
 const time = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const weekday = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
@@ -35,9 +36,10 @@ function HistoryCard({ entries }: { entries: HistoryEntry[] }) {
       bandLabel="Dictations, last 14 days"
       band={<PixelBars values={counts} labels={days.map((d) => weekday.format(d))} titles={days.map((d, i) => `${dayFmt.format(d)}: ${counts[i]} dictations`)} stack={5} />}
       stats={[
-        { value: done.length, label: "dictations", hint: "kept on this computer" },
+        { value: done.length, label: "dictations", hint: `kept on this ${deviceName}` },
         { value: done.length ? Math.round(words / done.length) : 0, label: "words each", hint: "on average", color: "nori" },
       ]}
+      phoneBand
       footer={failed ? `${failed} failed ${failed === 1 ? "dictation is" : "dictations are"} below, ready to transcribe again.` : undefined}
     />
   );
@@ -49,6 +51,9 @@ function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }
   const [retrying, setRetrying] = React.useState(false);
   // For an edit by voice the original is the selected text, and `raw` is what was said.
   const original = entry.selection ?? entry.raw;
+  const [menu, setMenu] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(false);
+  const press = useLongPress(() => setMenu(true));
 
   const retry = async () => {
     setRetrying(true);
@@ -62,6 +67,97 @@ function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }
       setRetrying(false);
     }
   };
+
+  if (isAndroid) {
+    const { wasLong, ...handlers } = press;
+    return (
+      <Card
+        {...handlers}
+        onClick={() => {
+          if (!wasLong()) setExpanded((v) => !v);
+        }}
+        className="space-y-2 p-4 select-none active:bg-accent/50"
+      >
+        <div className="-mt-1 -mr-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="min-w-0 truncate">{time.format(entry.at)}</span>
+          {entry.error ? <Badge tone="error">Failed</Badge> : entry.selection ? <Badge tone="brand">Edited</Badge> : entry.cleanup && <Badge tone="brand">Cleaned</Badge>}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="ml-auto size-11 rounded-full"
+            aria-label="More"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenu(true);
+            }}
+          >
+            <DotsThree weight="bold" />
+          </Button>
+        </div>
+        <p className={cn("text-sm leading-relaxed break-words whitespace-pre-wrap", !expanded && "line-clamp-4", entry.error && "text-destructive")}>{entry.error ?? entry.text}</p>
+        {entry.error && !entry.audio && <p className="text-xs text-muted-foreground">Its recording wasn’t kept, so it can’t be retried.</p>}
+        {entry.error && entry.audio && (
+          <Button
+            variant="outline"
+            disabled={retrying}
+            onClick={(e) => {
+              e.stopPropagation();
+              void retry();
+            }}
+          >
+            {retrying ? <Loader2 className="animate-spin" /> : <RotateCcw />} Try again
+          </Button>
+        )}
+        {showRaw && original && <p className="border-l-2 pl-3 text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">{original}</p>}
+        <Sheet open={menu} onClose={() => setMenu(false)} title="Dictation">
+          <p className="px-3 pb-2 text-xs text-muted-foreground">
+            {(entry.durationMs / 1000).toFixed(1)}s · {engineLabel(entry)}
+            {entry.cleanup ? ` · Cleaned by ${entry.cleanup}` : ""}
+          </p>
+          {!entry.error && (
+            <SheetAction
+              icon={Copy}
+              label="Copy"
+              onClick={() => {
+                setMenu(false);
+                void api.copyText(entry.text).then(() => toast("Copied.", "info"), (e) => toast(errorMessage(e)));
+              }}
+            />
+          )}
+          {original && !entry.error && (
+            <SheetAction
+              icon={ClockCounterClockwise}
+              label={showRaw ? "Hide original" : "Show original"}
+              onClick={() => {
+                setMenu(false);
+                setShowRaw((v) => !v);
+              }}
+            />
+          )}
+          {entry.audio && !entry.error && (
+            <SheetAction
+              icon={RotateCcw}
+              label="Transcribe again"
+              disabled={retrying}
+              onClick={() => {
+                setMenu(false);
+                void retry();
+              }}
+            />
+          )}
+          <SheetAction
+            icon={Trash2}
+            label="Delete"
+            danger
+            onClick={() => {
+              setMenu(false);
+              onDelete();
+            }}
+          />
+        </Sheet>
+      </Card>
+    );
+  }
 
   return (
     <div className="group space-y-1.5 px-4 py-3">
@@ -214,13 +310,15 @@ export function HistoryPage() {
   // Clamp rather than reset, so deleting the last row on a page steps back one page.
   const current = Math.min(page, pages);
   const start = (current - 1) * pageSize;
-  const shown = matches.slice(start, start + pageSize);
+  // A phone keeps one long list that grows, rather than pages of it.
+  const shown = isAndroid ? matches.slice(0, current * pageSize) : matches.slice(start, start + pageSize);
 
   // What the search shows, or everything.
   const exportAs = async (format: ExportFormat) => {
     const { name, contents } = exportHistory(matches, format);
     try {
-      toast(`Saved to ${await api.exportFile(name, contents)}`, "info");
+      if (isAndroid) await api.androidShare(name, contents);
+      else toast(`Saved to ${await api.exportFile(name, contents)}`, "info");
     } catch (e) {
       toast(errorMessage(e));
     }
@@ -230,12 +328,18 @@ export function HistoryPage() {
     <div ref={top} className="space-y-6">
       <PageHeader
         title="History"
-        description={entries.length ? `${entries.length} dictations, ${words.toLocaleString()} words. Kept on this computer only.` : "Your dictations show up here."}
+        description={entries.length ? `${entries.length} dictations, ${words.toLocaleString()} words. Kept on this ${deviceName} only.` : "Your dictations show up here."}
       />
       {entries.length > 0 && <HistoryCard entries={entries} />}
+      {entries.length === 0 && isAndroid && (
+        <EmptyState icon={ClockCounterClockwise} title="Nothing here yet">
+          Tap the microphone below and say something. Everything you dictate lands here, so you can copy it again later.
+        </EmptyState>
+      )}
       {entries.length > 0 && (
-        <div className="flex gap-2">
+        <div className={cn("flex gap-2", isAndroid && "flex-wrap")}>
           <Input
+            className={cn(isAndroid && "basis-full rounded-full px-4")}
             placeholder="Search"
             value={query}
             onChange={(e) => {
@@ -244,11 +348,12 @@ export function HistoryPage() {
             }}
           />
           <Select<ExportFormat>
-            className="w-auto shrink-0"
+            className={isAndroid ? "min-w-0 flex-1" : "w-auto shrink-0"}
+            align="start"
             label="Export"
             title={q ? "Export the dictations that match your search to Downloads" : "Export every dictation to Downloads"}
             value={null}
-            placeholder="Export…"
+            placeholder={isAndroid ? "Share as…" : "Export…"}
             onChange={(format) => void exportAs(format)}
             options={[
               { value: "md", label: "Markdown" },
@@ -265,14 +370,26 @@ export function HistoryPage() {
           </Button>
         </div>
       )}
-      {shown.length > 0 && (
-        <Card className="divide-y">
-          {shown.map((e) => (
-            <Item key={e.id} entry={e} onDelete={() => void api.historyDelete(e.id).then(() => setEntries((l) => l.filter((x) => x.id !== e.id)))} />
-          ))}
-        </Card>
+      {shown.length > 0 &&
+        (isAndroid ? (
+          <div className="space-y-3">
+            {shown.map((e) => (
+              <Item key={e.id} entry={e} onDelete={() => void api.historyDelete(e.id).then(() => setEntries((l) => l.filter((x) => x.id !== e.id)))} />
+            ))}
+          </div>
+        ) : (
+          <Card className="divide-y">
+            {shown.map((e) => (
+              <Item key={e.id} entry={e} onDelete={() => void api.historyDelete(e.id).then(() => setEntries((l) => l.filter((x) => x.id !== e.id)))} />
+            ))}
+          </Card>
+        ))}
+      {isAndroid && current < pages && (
+        <Button variant="outline" className="w-full" onClick={() => setPage(current + 1)}>
+          Show more
+        </Button>
       )}
-      {matches.length > 0 && (
+      {!isAndroid && matches.length > 0 && (
         <Pagination
           page={current}
           pages={pages}
@@ -294,7 +411,13 @@ export function HistoryPage() {
           }}
         />
       )}
-      {entries.length > 0 && matches.length === 0 && <p className="text-sm text-muted-foreground">Nothing matches “{query}”.</p>}
+      {entries.length > 0 && matches.length === 0 && (isAndroid ? (
+        <EmptyState icon={MagnifyingGlass} title={`Nothing matches “${query}”`} action={<Button variant="outline" onClick={() => setQuery("")}>Clear search</Button>}>
+          Try a different word from what you said.
+        </EmptyState>
+      ) : (
+        <p className="text-sm text-muted-foreground">Nothing matches “{query}”.</p>
+      ))}
     </div>
   );
 }

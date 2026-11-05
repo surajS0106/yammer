@@ -2,12 +2,13 @@
 // the UI only ever learns whether one is saved.
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, KeyRound } from "lucide-react";
+import { ArrowSquareOut as ExternalLink, Key as KeyRound } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { Badge, Button, Input } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import type { SecretName } from "@/lib/tauri";
+import { isAndroid } from "@/lib/utils";
 
 export function KeyField({ name, keyUrl }: { name: SecretName; keyUrl?: string }) {
   const { secrets, setSecret } = useSettings();
@@ -40,7 +41,7 @@ export function KeyField({ name, keyUrl }: { name: SecretName; keyUrl?: string }
       </div>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         {saved ? <Badge tone="brand">Key saved</Badge> : <Badge>No key</Badge>}
-        <span>Stored in your system keychain, never in a file.</span>
+        <span>{isAndroid ? "Stored in Yammer’s private storage on this phone." : "Stored in your system keychain, never in a file."}</span>
         {keyUrl && (
           <Button size="sm" variant="outline" className="ml-auto" title={keyUrl} onClick={() => void openUrl(keyUrl)}>
             <KeyRound />
