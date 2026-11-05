@@ -7,6 +7,7 @@ import * as React from "react";
 import { smooth } from "@/components/motion";
 import { api, errorMessage, on, type SecretName, type Settings } from "./tauri";
 import { setTheme } from "./theme";
+import { isAndroid } from "./utils";
 
 interface Ctx {
   settings: Settings;
@@ -73,7 +74,7 @@ export function SettingsProvider({ initial, children }: { initial: Settings; chi
       try {
         await api.secretSet(name, value);
         setSecrets(await api.secretStatus());
-        toast(value.trim() ? "Key saved to your system keychain." : "Key removed.", "info");
+        toast(value.trim() ? (isAndroid ? "Key saved." : "Key saved to your system keychain.") : "Key removed.", "info");
       } catch (e) {
         toast(errorMessage(e));
       }
@@ -94,7 +95,8 @@ export function SettingsProvider({ initial, children }: { initial: Settings; chi
             exit={{ opacity: 0, y: 4, scale: 0.98 }}
             transition={smooth}
             className={
-              "fixed right-4 bottom-4 z-50 max-w-sm rounded-lg border px-3.5 py-2.5 text-sm shadow-lg " +
+              // On a phone, above the dock.
+              `fixed right-4 ${isAndroid ? "bottom-24" : "bottom-4"} z-50 max-w-sm rounded-lg border px-3.5 py-2.5 text-sm wrap-anywhere shadow-lg ` +
               (toastState.tone === "error" ? "border-destructive/30 bg-card text-destructive" : "bg-card")
             }
           >

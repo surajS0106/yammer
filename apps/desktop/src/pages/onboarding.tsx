@@ -4,11 +4,12 @@
 // Each step fits the default 880×640 window without scrolling; keep it that way.
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowLeft, ArrowRight, Check, Cloud, Cpu, Download, ExternalLink, Keyboard, Mic, MousePointerClick, PlugZap, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Cloud, Cpu, DownloadSimple as Download, ArrowSquareOut as ExternalLink, Keyboard, Microphone as Mic, CursorClick as MousePointerClick, PlugsConnected as PlugZap, ShieldCheck, Sparkle as Sparkles } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 
 import { PlatformContext, type PageId } from "@/App";
+import { AndroidPermissions, AndroidTry } from "@/components/android-panel";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
 import { KeyField } from "@/components/key-field";
 import { smooth } from "@/components/motion";
@@ -19,7 +20,8 @@ import { downloadModel, useModels } from "@/lib/models";
 import { languages, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import { api, on, type Engine, type OverlayState } from "@/lib/tauri";
-import { cn, formatBytes, isMac } from "@/lib/utils";
+import { useBackKey } from "@/lib/back";
+import { cn, formatBytes, isAndroid, isMac } from "@/lib/utils";
 
 type StepId = "welcome" | "engine" | "connect" | "permissions" | "hotkey" | "try";
 
@@ -59,7 +61,8 @@ export function Onboarding({ onDone }: { onDone: (page?: PageId) => void }) {
   const [index, setIndex] = React.useState(0);
   const [dir, setDir] = React.useState(1);
 
-  const steps: StepId[] = [
+  // A phone has no hotkey or on-device engine to choose.
+  const steps: StepId[] = isAndroid ? ["welcome", "connect", "permissions", "try"] : [
     "welcome",
     "engine",
     "connect",
@@ -77,6 +80,7 @@ export function Onboarding({ onDone }: { onDone: (page?: PageId) => void }) {
     setDir(by);
     setIndex((i) => Math.max(0, Math.min(steps.length - 1, i + by)));
   };
+  useBackKey(index, () => move(-1));
 
   // Each step decides what moving on means.
   const next: { label: string; disabled?: boolean } = (() => {
@@ -88,7 +92,7 @@ export function Onboarding({ onDone }: { onDone: (page?: PageId) => void }) {
         if (progress !== undefined) return { label: "Continue while it downloads" };
         return { label: "Continue", disabled: true };
       case "permissions":
-        return { label: platform?.accessibility === false ? "Skip for now" : "Continue" };
+        return { label: !isAndroid && platform?.accessibility === false ? "Skip for now" : "Continue" };
       case "try":
         return { label: "Finish" };
       default:
@@ -166,7 +170,7 @@ function StepHeader({ title, description }: { title: string; description?: React
 function WelcomeStep({ steps }: { steps: StepId[] }) {
   const coming: Record<Exclude<StepId, "welcome">, [React.ElementType, string]> = {
     engine: [Cpu, "Choose how your speech becomes text"],
-    connect: [PlugZap, "Download a model or add an API key"],
+    connect: [PlugZap, isAndroid ? "Add your speech service’s API key" : "Download a model or add an API key"],
     permissions: [ShieldCheck, "Let Yammer hear you and paste for you"],
     hotkey: [Keyboard, "Learn your hotkey"],
     try: [Mic, "Try your first dictation"],
@@ -312,7 +316,7 @@ function LocalSetup() {
               </div>
               {m.downloaded ? (
                 <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  <Check className="size-3.5" strokeWidth={3} /> Downloaded
+                  <Check className="size-3.5" weight="bold" /> Downloaded
                 </span>
               ) : (
                 progress === undefined && (
@@ -347,7 +351,9 @@ function CloudSetup() {
   const cloud = settings.cloud;
   const preset = sttPresets.find((p) => p.id === cloud.preset) ?? sttPresets[sttPresets.length - 1];
   const name = shortLabel(preset.label);
-  const recommended = indianLanguages.has(settings.language) ? "sarvam" : "groq";
+  const recommended = isAndroid ? "sarvam" : indianLanguages.has(settings.language) ? "sarvam" : "groq";
+  // A phone can't reach a local server, and four tabs is the most that fit; Custom is in Settings.
+  const offered = isAndroid ? sttPresets.filter((p) => p.id !== "ollama" && p.id !== "custom") : sttPresets;
 
   const choose = (id: string) => {
     const p = sttPresets.find((x) => x.id === id)!;
@@ -360,7 +366,7 @@ function CloudSetup() {
 
       <Segmented
         value={preset.id}
-        options={sttPresets.map((p) => ({ value: p.id, label: shortLabel(p.label), icon: <ProviderLogo id={p.id} tile={false} className="size-3.5" /> }))}
+        options={offered.map((p) => ({ value: p.id, label: shortLabel(p.label), icon: <ProviderLogo id={p.id} tile={false} className="size-3.5" /> }))}
         onChange={choose}
       />
       <p className="mt-2 flex items-center gap-2 px-1 text-xs text-muted-foreground">
@@ -410,7 +416,7 @@ function KeyStep({ n, done, title, detail, stacked, children }: { n: number; don
           done ? "bg-primary text-primary-foreground" : "bg-primary/12 text-primary",
         )}
       >
-        {done ? <Check className="size-3.5" strokeWidth={3} /> : n}
+        {done ? <Check className="size-3.5" weight="bold" /> : n}
       </span>
       <div className="min-w-0 flex-1 space-y-0.5 pt-0.5">
         <div className="text-sm font-medium">{title}</div>
@@ -424,6 +430,15 @@ function KeyStep({ n, done, title, detail, stacked, children }: { n: number; don
 
 function PermissionsStep() {
   const platform = React.useContext(PlatformContext);
+
+  if (isAndroid) {
+    return (
+      <div>
+        <StepHeader title="A few permissions" description="Android asks before any app can use the microphone or show over other apps." />
+        <AndroidPermissions />
+      </div>
+    );
+  }
 
   if (platform?.wayland) {
     return (
@@ -576,6 +591,8 @@ function TryStep({ onCleanup }: { onCleanup: () => void }) {
         <p className="mt-1 flex flex-wrap items-center justify-center gap-1.5 text-sm text-muted-foreground">
           {heard ? (
             "That’s all there is to it. It works the same in any app."
+          ) : isAndroid ? (
+            "Tap Dictate, say something, then tap Finish."
           ) : (
             <>
               Click the box below, hold <Hotkey accelerator={settings.hotkey} /> and say something.
@@ -592,7 +609,10 @@ function TryStep({ onCleanup }: { onCleanup: () => void }) {
         </Notice>
       )}
 
-      <div>
+      {isAndroid && <AndroidTry />}
+      {isAndroid && heard && <Card className="p-4 text-sm leading-relaxed">{heard}</Card>}
+
+      {!isAndroid && <div>
         <div className="flex items-start gap-2.5 rounded-lg bg-card px-3 py-2 ring-1 ring-primary/30 transition-shadow focus-within:ring-2 focus-within:ring-primary/60 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--brand)_12%,transparent)]">
           <Mic className="mt-1.5 size-4 shrink-0 text-primary" />
           <Textarea
@@ -606,16 +626,17 @@ function TryStep({ onCleanup }: { onCleanup: () => void }) {
         <p aria-live="polite" className={cn("mt-1.5 min-h-4 text-center text-xs", status.phase === "message" && status.error ? "text-destructive" : "text-muted-foreground")}>
           {live}
         </p>
-      </div>
+      </div>}
+      {isAndroid && live && <p aria-live="polite" className="text-center text-xs text-muted-foreground">{live}</p>}
 
       <Card className="divide-y">
-        <div className="flex items-center gap-3 px-4 py-3">
+        {!isAndroid && <div className="flex items-center gap-3 px-4 py-3">
           <Keyboard className="size-4 shrink-0 text-muted-foreground" />
           <p className="text-xs leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">Yammer keeps running in the {isMac ? "menu bar" : "tray"}</span> when you close this window, so the
             hotkey always works.
           </p>
-        </div>
+        </div>}
         <div className="flex items-center gap-3 px-4 py-3">
           <Sparkles className="size-4 shrink-0 text-muted-foreground" />
           <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">

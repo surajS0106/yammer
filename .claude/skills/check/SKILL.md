@@ -40,6 +40,8 @@ Clippy on yammer is blocking too: the crate is warning-free, so keep it that way
 - Use the default profile, so it reuses the opt-level 3 whisper build. A cold build compiles whisper.cpp and takes several minutes, so say so before you start.
 - `transcribes_real_audio` is `#[ignore]`d. Don't try to run it.
 
+This doesn't compile Android code. If `src-tauri/src/android/`, `src-tauri/gen/android/`, `pipeline.rs`, `commands.rs` or anything branching on `isAndroid` changed, also run `/android-check`.
+
 ## 3. Lints (advisory: report, don't block)
 
 - **Rust ↔ TS drift:** if a `#[tauri::command]` or a serde type changed, check that `apps/desktop/src/lib/tauri.ts` matches it: names, argument names, camelCase fields, kebab-case enum values.

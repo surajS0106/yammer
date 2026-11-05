@@ -6,27 +6,32 @@
 //! signed afresh, so each launch would ask for the login password once per
 //! secret. There, secrets go to `dev-secrets.json` (owner-only) in the app
 //! config dir instead.
+//!
+//! Android has no keyring backend yet, so it uses that file too, in the app's
+//! private storage. Other apps can't read it, and `allowBackup` is off so it
+//! isn't copied off the phone, but it isn't encrypted: move it to the Android
+//! Keystore before a public release.
 
 use crate::error::{AppError, AppResult};
 
 /// The keys the app keeps: one for cloud transcription, one for cleanup.
 pub const NAMES: &[&str] = &["stt", "cleanup"];
 
-#[cfg(not(debug_assertions))]
+#[cfg(all(desktop, not(debug_assertions)))]
 const SERVICE: &str = "com.sush.yammer";
 /// The keyring service from before the rename to Yammer; read once, then moved to `SERVICE`.
-#[cfg(not(debug_assertions))]
+#[cfg(all(desktop, not(debug_assertions)))]
 const LEGACY_SERVICE: &str = "com.sush.larp";
 
 /// Called once at startup with the app config dir; only debug builds use it.
 pub fn init(config_dir: &std::path::Path) {
-    #[cfg(debug_assertions)]
+    #[cfg(any(debug_assertions, not(desktop)))]
     let _ = dev::PATH.set(config_dir.join("dev-secrets.json"));
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(desktop, not(debug_assertions)))]
     let _ = config_dir;
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(all(desktop, not(debug_assertions)))]
 mod backend {
     use super::{LEGACY_SERVICE, SERVICE};
     use crate::error::AppResult;
@@ -62,7 +67,7 @@ mod backend {
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, not(desktop)))]
 mod dev {
     use crate::error::{AppError, AppResult};
     use std::collections::BTreeMap;
@@ -120,7 +125,7 @@ mod dev {
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, not(desktop)))]
 use dev as backend;
 
 fn entry_name(name: &str) -> AppResult<String> {

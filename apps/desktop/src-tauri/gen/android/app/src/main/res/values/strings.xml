@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">"Yammer"</string>
+    <string name="main_activity_title">"Yammer"</string>
+    <string name="accessibility_description">Lets Yammer paste what you dictated into the text box you\'re in. Yammer looks for that text box when a dictation finishes. It doesn\'t record or send anything on your screen.</string>
+</resources>

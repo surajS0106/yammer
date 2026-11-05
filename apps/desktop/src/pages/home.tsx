@@ -1,18 +1,22 @@
-import { BarChart3, Check, Cloud, Copy, Cpu, Download, Mic, NotebookPen, Scissors, Sparkles } from "lucide-react";
+import { ChartBar as BarChart3, Check, Cloud, Copy, Cpu, DownloadSimple as Download, GearSix, Microphone as Mic, NotePencil as NotebookPen, Plus, Scissors, Sparkle as Sparkles } from "@phosphor-icons/react";
 import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion, type AnimationPlaybackControlsWithThen } from "motion/react";
 import * as React from "react";
 
 import { PlatformContext, type PageId } from "@/App";
+import { AndroidHero } from "@/components/android-panel";
 import { AnimatedList, Collapse, ListRow } from "@/components/motion";
+import { WhatsNewCard } from "@/components/sidebar";
 import { moodOf, Sushi } from "@/components/sushi";
-import { WeekStats } from "@/components/week-stats";
+import { WeekBento, WeekStats } from "@/components/week-stats";
 import { Button, Card, Hotkey, Kbd, Notice, Progress, Textarea } from "@/components/ui";
+import { useDockAction } from "@/lib/dock";
 import { downloadModel, useModels } from "@/lib/models";
+import { requestNewNote } from "@/pages/scratchpad";
 import { providerLabel, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import { api, on, type HistoryEntry, type OverlayState } from "@/lib/tauri";
 import { computeStats, dayKey, lastDays, useHistory } from "@/lib/stats";
-import { cn, formatBytes } from "@/lib/utils";
+import { cn, formatBytes, isAndroid } from "@/lib/utils";
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "long" });
@@ -49,7 +53,7 @@ function Step({ done, title, children }: { done: boolean; title: string; childre
           done ? "border-primary bg-primary text-primary-foreground" : "border-input",
         )}
       >
-        {done && <Check className="size-3" strokeWidth={3} />}
+        {done && <Check className="size-3" weight="bold" />}
       </span>
       <div className="min-w-0 flex-1 space-y-2">
         <div className={done ? "text-sm text-muted-foreground line-through decoration-muted-foreground/40" : "text-sm font-medium"}>{title}</div>
@@ -170,7 +174,7 @@ function CopyButton({ text }: { text: string }) {
           transition={{ type: "spring", stiffness: 500, damping: 22 }}
           className="flex"
         >
-          {copied ? <Check strokeWidth={2.75} /> : <Copy />}
+          {copied ? <Check weight="bold" /> : <Copy />}
         </motion.span>
       </AnimatePresence>
     </Button>
@@ -215,6 +219,40 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
   const steps = [engineReady, ...(platform?.os === "macos" ? [accessibilityOk] : [])];
   const stepsDone = steps.filter(Boolean).length;
 
+  // The status pill, on both layouts.
+  const pill = (
+    <div
+      aria-live="polite"
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+        busy ? "bg-primary text-primary-foreground" : "bg-background/70 text-muted-foreground ring-1 ring-border",
+      )}
+    >
+      <span
+        className={cn("size-1.5 rounded-full", busy ? "bg-primary-foreground" : ready ? "bg-emerald-500" : "bg-amber-500")}
+        style={busy ? { animation: "dot-pulse 1.2s ease-in-out infinite" } : undefined}
+      />
+      {live ?? (ready ? "Ready when you are" : "Finish setup to start")}
+    </div>
+  );
+
+  if (isAndroid) {
+    return (
+      <PhoneHome
+        go={go}
+        pill={pill}
+        mood={moodOf(status)}
+        heading={greeting(new Date().getHours())}
+        weekWords={weekWords}
+        stats={stats}
+        engineLabel={providerLabel(settings.cloud.preset, settings.cloud.model)}
+        cleanupLabel={settings.cleanup.enabled ? providerLabel(settings.cleanup.preset, settings.cleanup.model) : "Off"}
+        keyMissing={engineReady ? null : (preset?.label ?? "speech service")}
+        recent={history.slice(0, 5)}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 @3xl:h-full @3xl:gap-5">
       <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pt-2">
@@ -243,19 +281,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
         <div className="relative grid items-center @2xl:grid-cols-[auto_1fr]">
           <div className="relative max-w-xl space-y-4 px-5 pt-5 pb-4 @md:px-7 @md:pt-6">
             <div className="flex flex-wrap items-center gap-1.5">
-            <div
-              aria-live="polite"
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-                busy ? "bg-primary text-primary-foreground" : "bg-background/70 text-muted-foreground ring-1 ring-border",
-              )}
-            >
-              <span
-                className={cn("size-1.5 rounded-full", busy ? "bg-primary-foreground" : ready ? "bg-emerald-500" : "bg-amber-500")}
-                style={busy ? { animation: "dot-pulse 1.2s ease-in-out infinite" } : undefined}
-              />
-              {live ?? (ready ? "Ready when you are" : "Finish setup to start")}
-            </div>
+            {pill}
               {/* How dictation runs, one click from changing it. */}
               <SetupChip icon={settings.engine === "local" ? Cpu : Cloud} onClick={() => go("engine")} title="Change speech engine">
                 {settings.engine === "local" ? `${model?.label ?? settings.localModel} · on device` : providerLabel(settings.cloud.preset, settings.cloud.model)}
@@ -430,6 +456,134 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
           <WeekStats stats={stats} onOpen={() => go("insights")} />
         </aside>
       </div>
+    </div>
+  );
+}
+
+/** A tile that opens a settings tab: what's set, at a glance. */
+function SetupTile({ icon: Icon, label, value, onClick }: { icon: React.ElementType; label: string; value: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="min-w-0 rounded-3xl border bg-card p-4 text-left outline-none active:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50">
+      <Icon className="size-5.5 text-primary" />
+      <div className="mt-2 text-xs text-muted-foreground">{label}</div>
+      <div className="truncate text-sm font-semibold">{value}</div>
+    </button>
+  );
+}
+
+/** Home on a phone: a bento grid of tiles rather than the computer's one-screen dashboard. */
+function PhoneHome({
+  go,
+  pill,
+  mood,
+  heading,
+  weekWords,
+  stats,
+  engineLabel,
+  cleanupLabel,
+  keyMissing,
+  recent,
+}: {
+  go: (page: PageId) => void;
+  pill: React.ReactNode;
+  mood: ReturnType<typeof moodOf>;
+  heading: string;
+  weekWords: number;
+  stats: ReturnType<typeof computeStats>;
+  engineLabel: string;
+  cleanupLabel: string;
+  keyMissing: string | null;
+  recent: HistoryEntry[];
+}) {
+  useDockAction({
+    label: "New note",
+    icon: Plus,
+    run: () => {
+      requestNewNote();
+      go("scratchpad");
+    },
+  });
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <header className="col-span-2 flex items-end justify-between gap-3 px-1 pb-1">
+        <div className="min-w-0">
+          <h1 className="text-3xl font-semibold tracking-tight text-balance">{heading}</h1>
+          {weekWords > 0 && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground tabular-nums">{weekWords.toLocaleString()}</span> words this week
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button size="icon" variant="outline" className="size-11 rounded-full" aria-label="Insights" onClick={() => go("insights")}>
+            <BarChart3 />
+          </Button>
+          <Button size="icon" variant="outline" className="size-11 rounded-full" aria-label="Settings" onClick={() => go("general")}>
+            <GearSix />
+          </Button>
+        </div>
+      </header>
+
+      <div className="col-span-2 empty:hidden">
+        <WhatsNewCard onOpen={() => go("changelog")} />
+      </div>
+
+      {keyMissing && (
+        <div className="col-span-2">
+          <Notice tone="warn">
+            <span className="font-medium">Add your {keyMissing} API key to start.</span>{" "}
+            <button type="button" className="font-medium underline" onClick={() => go("engine")}>
+              Open speech engine
+            </button>
+          </Notice>
+        </div>
+      )}
+
+      <AndroidHero
+        pill={pill}
+        sushi={<Sushi mood={mood} px={3} interactive className="text-muted-foreground" />}
+        side={
+          <>
+            <SetupTile icon={Cloud} label="Speech" value={engineLabel} onClick={() => go("engine")} />
+            <SetupTile icon={Sparkles} label="AI cleanup" value={cleanupLabel} onClick={() => go("cleanup")} />
+          </>
+        }
+      />
+
+      <Card className="col-span-2 flex items-start gap-2.5 rounded-3xl px-4 py-3 transition-shadow focus-within:ring-2 focus-within:ring-primary/60">
+        <Mic className="mt-2 size-5 shrink-0 text-primary" />
+        <Textarea
+          rows={1}
+          aria-label="Try dictating here"
+          placeholder="Try it here: tap this box, then Sushi…"
+          className="min-h-9 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
+        />
+      </Card>
+
+      <WeekBento stats={stats} onOpen={() => go("insights")} />
+
+      <Card className="col-span-2 overflow-hidden rounded-3xl">
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <h2 className="text-sm font-semibold">Recent</h2>
+          {recent.length > 0 && (
+            <Button size="sm" variant="ghost" className="-mr-2" onClick={() => go("history")}>
+              See all
+            </Button>
+          )}
+        </div>
+        {recent.length > 0 ? (
+          <div className="divide-y">
+            {recent.map((e) => (
+              <div key={e.id} className="flex items-start gap-3 px-4 py-2.5">
+                <p className="line-clamp-2 min-w-0 flex-1 text-sm leading-relaxed">{e.error ?? e.text}</p>
+                <CopyButton text={e.text} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="px-4 pt-1 pb-4 text-xs leading-relaxed text-muted-foreground">Everything you dictate lands here, so you can copy it again later.</p>
+        )}
+      </Card>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { BarChart3, BookA, CircleArrowUp, CircleHelp, Flame, History, Home, LoaderCircle, NotebookPen, Scissors, Settings, Sparkles, Wand2, X } from "lucide-react";
+import { ChartBar as BarChart3, BookOpenText as BookA, ArrowCircleUp as CircleArrowUp, Question as CircleHelp, Fire as Flame, ClockCounterClockwise as History, House as Home, CircleNotch as LoaderCircle, NotePencil as NotebookPen, Scissors, GearSix as Settings, Sparkle as Sparkles, MagicWand as Wand2, X } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import * as React from "react";
 
@@ -167,7 +167,7 @@ function NavButton({
             : "group-hover:-rotate-8 group-hover:scale-110 group-hover:text-primary",
         )}
       >
-        <Icon className="size-4" strokeWidth={active ? 2.25 : 2} />
+        <Icon className="size-4" weight={active ? "fill" : "regular"} />
       </span>
       <span className="relative truncate">{label}</span>
       {badge !== undefined && (
@@ -238,7 +238,7 @@ function MicCard({ streak, todayWords, onClick }: { streak: number; todayWords: 
       </span>
       <span className="relative mt-3 flex items-center justify-between border-t border-dashed pt-2 text-[11px] text-muted-foreground">
         <span className={cn("flex items-center gap-1", streak > 0 && "text-foreground")}>
-          <Flame className={cn("size-3.5", streak > 0 ? "fill-primary/25 text-primary" : "")} />
+          <Flame className={cn("size-3.5", streak > 0 && "text-primary")} weight={streak > 0 ? "fill" : "regular"} />
           {streak > 0 ? `${streak}-day streak` : "No streak yet"}
         </span>
         <span className="tabular-nums">{formatCompact(todayWords)} today</span>
@@ -297,7 +297,7 @@ function UpdateCard({ onNotes }: { onNotes: () => void }) {
 }
 
 /** After an update, until the user opens "What's new" or dismisses this: what changed in the version they now have. */
-function WhatsNewCard({ onOpen }: { onOpen: () => void }) {
+export function WhatsNewCard({ onOpen }: { onOpen: () => void }) {
   const { settings, update } = useSettings();
   const version = React.useContext(PlatformContext)?.version;
   const pending = useUpdate();

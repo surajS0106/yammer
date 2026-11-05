@@ -7,7 +7,8 @@ license.workspace = true
 
 [lib]
 name = "yammer_lib"
-crate-type = ["rlib"]
+# cdylib: Android loads the app as a shared library.
+crate-type = ["rlib", "cdylib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -23,10 +24,12 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util"] }
 # macos-private-api: transparent windows (the overlay) on macOS.
 tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-opener = "2"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
-tauri-plugin-opener = "2"
 # "Upgrade now" in the sidebar: fetches latest.json from the GitHub release, then relaunches.
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
@@ -36,6 +39,10 @@ arboard = { version = "3", features = ["wayland-data-control"] }
 enigo = "0.6"
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 sha2 = "0.10"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# The Kotlin side calls into Rust directly (android/mod.rs), so it works with the app's activity gone.
+jni = "0.21"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Mutes the sound output while recording (mute.rs). The version cpal already pulls in.

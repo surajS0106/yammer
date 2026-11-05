@@ -3,7 +3,7 @@
 
 import type { PageId } from "@/App";
 import { ContentCard } from "@/components/ui/ContentCard";
-import { cn } from "@/lib/utils";
+import { cn, isAndroid } from "@/lib/utils";
 
 export interface NavCard {
   to: PageId;
@@ -20,13 +20,16 @@ const retheme =
   "[&_p]:text-muted-foreground dark:[&_p]:text-muted-foreground " +
   "[&>a>span:first-child]:bg-primary [&>a>span:last-child]:text-primary dark:[&>a>span:last-child]:text-primary";
 
+// A phone's cards are tiles.
+const phone = isAndroid ? "[&>a]:rounded-3xl dark:[&>a]:rounded-3xl " : "";
+
 export function NavCards({ cards, go, className }: { cards: NavCard[]; go: (page: PageId) => void; className?: string }) {
   return (
     <div className={cn("grid gap-3 @2xl:grid-cols-3", className)}>
       {cards.map((c) => (
         <div
           key={c.to + c.title}
-          className={cn("flex", retheme)}
+          className={cn("flex", phone, retheme)}
           onClickCapture={(e) => {
             e.preventDefault();
             go(c.to);

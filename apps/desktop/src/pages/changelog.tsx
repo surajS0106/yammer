@@ -1,4 +1,4 @@
-import { CircleArrowUp, LoaderCircle } from "lucide-react";
+import { ArrowCircleUp as CircleArrowUp, CircleNotch as LoaderCircle } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { PageHeader, PlatformContext } from "@/App";

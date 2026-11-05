@@ -3,7 +3,8 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import type { Theme } from "./tauri";
+import { api, type Theme } from "./tauri";
+import { isAndroid } from "./utils";
 
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -14,6 +15,7 @@ let started = false;
 function apply(animate: boolean) {
   const root = document.documentElement;
   const dark = current === "dark" || (current === "system" && systemDark.matches);
+  if (isAndroid) void api.androidAction(dark ? "barsDark" : "barsLight").catch(() => {});
   if (root.classList.contains("dark") === dark) return;
   const flip = () => root.classList.toggle("dark", dark);
   // Crossfade a switch in the open window; engines without view transitions flip at once.

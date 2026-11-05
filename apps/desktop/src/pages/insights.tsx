@@ -24,7 +24,7 @@ import {
   type Stats,
 } from "@/lib/stats";
 import { useDark } from "@/lib/use-dark";
-import { cn } from "@/lib/utils";
+import { cn, deviceName } from "@/lib/utils";
 
 const WEEKS = 26;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -190,7 +190,7 @@ export function InsightsPage({ go }: { go: (page: PageId) => void }) {
   if (entries.length === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Insights" description="How you use your voice, from your dictation history on this computer." />
+        <PageHeader title="Insights" description={`How you use your voice, from your dictation history on this ${deviceName}.`} />
         <Card className="flex flex-col items-center gap-3 px-6 py-16 text-center">
           <p className="text-sm font-medium">Nothing to show yet</p>
           <p className="max-w-sm text-xs text-muted-foreground">Dictate a few times and your speed, streaks and habits show up here.</p>
@@ -214,7 +214,7 @@ export function InsightsPage({ go }: { go: (page: PageId) => void }) {
     <div className="space-y-6">
       <PageHeader
         title="Insights"
-        description={`${stats.dictations.toLocaleString()} dictations since ${sinceFmt.format(Math.min(...entries.map((e) => e.at)))}. Kept on this computer only.`}
+        description={`${stats.dictations.toLocaleString()} dictations since ${sinceFmt.format(Math.min(...entries.map((e) => e.at)))}. Kept on this ${deviceName} only.`}
       />
 
       <NigiriCard
@@ -222,6 +222,7 @@ export function InsightsPage({ go }: { go: (page: PageId) => void }) {
         value={stats.words}
         caption="words said out loud"
         badge={delta === undefined ? undefined : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(Math.round(delta))}% this week`}
+        phoneBand
         bandLabel="Words, last 14 days"
         band={<PixelBars values={days.map(wordsOn)} labels={days.map((d) => weekday.format(d))} titles={days.map((d) => `${dayFmt.format(d)}: ${wordsOn(d).toLocaleString()} words`)} stack={5} />}
         stats={[

@@ -11,8 +11,6 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "core:window:allow-set-theme",
-    "opener:default",
-    "updater:default",
-    "process:allow-restart"
+    "opener:default"
   ]
 }

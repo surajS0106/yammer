@@ -6,6 +6,9 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const isMac = navigator.userAgent.includes("Mac");
+export const isAndroid = navigator.userAgent.includes("Android");
+/** What copy calls the device: "Kept on this computer." */
+export const deviceName = isAndroid ? "phone" : "computer";
 
 /** "CommandOrControl+Shift+Space" → ["Ctrl", "Shift", "Space"] (⌘ ⇧ on macOS). */
 export function hotkeyParts(accelerator: string): string[] {

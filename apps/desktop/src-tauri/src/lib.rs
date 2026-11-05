@@ -1,35 +1,63 @@
 //! Yammer: hold a hotkey anywhere, speak, and the transcript is pasted
 //! where your cursor is. This crate is the OS shell (hotkey, microphone,
 //! tray, overlay, paste); `voice-core` holds the platform-free logic.
+//! Android has its own shell in `android`, and shares `pipeline` and `commands`.
 
+#[cfg(target_os = "android")]
+mod android;
 mod commands;
+#[cfg(desktop)]
 mod dictation;
 #[cfg(target_os = "macos")]
 mod dock;
 mod error;
+#[cfg(desktop)]
 mod focus;
+#[cfg(desktop)]
 mod gnome;
+#[cfg(desktop)]
 mod hotkey;
+#[cfg(desktop)]
 mod mute;
+#[cfg(desktop)]
 mod overlay;
+mod overlay_state;
 #[cfg(target_os = "macos")]
 mod panel;
+#[cfg(desktop)]
 mod paste;
+mod pipeline;
 mod platform;
 #[cfg(target_os = "linux")]
 mod portal;
+#[cfg(desktop)]
 mod recorder;
 mod secrets;
+#[cfg(desktop)]
 mod sounds;
 mod state;
+#[cfg(desktop)]
 mod tray;
+#[cfg(desktop)]
 mod whisper;
 
+#[cfg(target_os = "android")]
+use android::overlay;
+#[cfg(desktop)]
 use tauri::{Manager, WindowEvent};
+#[cfg(desktop)]
 use tauri_plugin_autostart::MacosLauncher;
 
+#[cfg(desktop)]
 use crate::dictation::{Dictation, Input, Mode};
 
+#[cfg(target_os = "android")]
+#[tauri::mobile_entry_point]
+pub fn run() {
+    android::run();
+}
+
+#[cfg(desktop)]
 pub fn run() {
     // Wayland has no keep-above, so GNOME lets other apps cover the overlay and ignores
     // where it's placed. Under XWayland both work. Must be set before GTK starts.
@@ -193,6 +221,7 @@ pub fn run() {
 /// On the first launch after the rename, move Larp's folder into place so settings, history and the
 /// downloaded whisper models carry over. On macOS and Windows config and data share one folder, so the
 /// second call finds nothing left to move.
+#[cfg(desktop)]
 fn adopt_larp_dir(dir: &std::path::Path) {
     let old = dir.with_file_name("com.sush.larp");
     if dir.exists() || !old.is_dir() {
