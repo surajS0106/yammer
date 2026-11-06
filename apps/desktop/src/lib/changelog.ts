@@ -1,8 +1,13 @@
-// The user-facing changelog: CHANGELOG.md at the repo root, bundled at build
-// time. The release workflow publishes each version's section as the release
-// notes, so an update's `body` parses with the same `parseNotes`.
+// The user-facing changelog, bundled at build time: CHANGELOG.md at the repo
+// root, or CHANGELOG-android.md on Android, which has its own versions. The
+// release workflows publish each version's section as the release notes, so an
+// update's `body` parses with the same `parseNotes`.
 
-import raw from "../../../../CHANGELOG.md?raw";
+import androidRaw from "../../../../CHANGELOG-android.md?raw";
+import desktopRaw from "../../../../CHANGELOG.md?raw";
+import { isAndroid } from "./utils";
+
+const raw = isAndroid ? androidRaw : desktopRaw;
 
 export type ChangeKind = "new" | "improved" | "fixed";
 

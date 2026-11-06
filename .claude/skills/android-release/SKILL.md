@@ -34,7 +34,7 @@ Check each one against the code and report ✅ or ❌. Items ❌ at the time of 
 - **Privacy disclosure:** the app must tell people plainly that audio goes to their speech provider, and what Accessibility is used for. A privacy policy is needed for Play.
 - **Desktop text left on Android:** parts of the Help page, History export to Downloads, and anything else reached from the sidebar.
 - **Updates:** how people get a new version, since the sidebar's updater doesn't apply. Play handles this for Play installs.
-- **`versionCode`:** Android compares this to allow an update. It comes from `version` in `tauri.conf.json`, so bump the version per release.
+- **`versionCode`:** Android compares this to allow an update. It comes from `version` in `tauri.android.conf.json` (Android's version is separate from desktop's), so bump that per release.
 
 Report the list. If `$ARGUMENTS` is `audit` or empty, stop and offer to fix what's ❌.
 

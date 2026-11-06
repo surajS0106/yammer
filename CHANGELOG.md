@@ -15,16 +15,11 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
   stops if that heading is missing. The app never shows Unreleased.
 -->
 
-## 0.6.0 — 2026-11-06
+## Unreleased
 
 ### Improved
 
 - Yammer has a new set of icons throughout the app.
-- On Android, the start-up screen shows Yammer's logo.
-- On Android, the back swipe now goes back a step instead of leaving the app.
-- On Android, Sushi over other apps is animated again: it breathes and blinks, bounces with your voice while you speak, types on a laptop while it transcribes, and reacts when it's done or something fails.
-- On Android, while Sushi is listening, Yammer shows a live update in the status bar (the island on phones that have one) with a running timer.
-- On Android, Sushi is no longer cut off at the top and bottom while you're speaking.
 
 ## 0.5.0 — 2026-11-02
 

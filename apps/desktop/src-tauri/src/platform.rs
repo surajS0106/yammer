@@ -16,7 +16,8 @@ pub struct Platform {
     ydotool: bool,
     /// macOS: whether the app may send keystrokes (Accessibility). `None` elsewhere.
     accessibility: Option<bool>,
-    version: &'static str,
+    /// The app's version from tauri.conf.json, which tauri.android.conf.json overrides, so Android versions on its own.
+    version: String,
 }
 
 pub fn on_path(program: &str) -> bool {
@@ -33,7 +34,7 @@ pub fn accessibility_trusted() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
 
-pub fn info() -> Platform {
+pub fn info(version: String) -> Platform {
     let linux = cfg!(target_os = "linux");
     Platform {
         os: std::env::consts::OS,
@@ -51,6 +52,6 @@ pub fn info() -> Platform {
         accessibility: Some(accessibility_trusted()),
         #[cfg(not(target_os = "macos"))]
         accessibility: None,
-        version: env!("CARGO_PKG_VERSION"),
+        version,
     }
 }

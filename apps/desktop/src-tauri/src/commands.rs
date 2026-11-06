@@ -283,8 +283,8 @@ pub fn copy_text(text: String) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn platform_info() -> platform::Platform {
-    platform::info()
+pub fn platform_info(app: tauri::AppHandle) -> platform::Platform {
+    platform::info(app.package_info().version.to_string())
 }
 
 #[cfg(desktop)]

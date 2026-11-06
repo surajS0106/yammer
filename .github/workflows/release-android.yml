@@ -1,12 +1,14 @@
 name: Release Android
 
-# Manual only: builds the signed arm64 APK and attaches it to the GitHub release for the version in
-# tauri.conf.json, creating that release if the desktop pipeline (release.yml) hasn't yet. Nothing for
-# Windows, macOS or Linux is built, so this is cheap enough to run for every phone-only change.
+# Manual only: builds the signed arm64 APK and publishes it as the Android app's own GitHub release,
+# `android-v<version>`, with the version from tauri.android.conf.json and the notes from
+# CHANGELOG-android.md. Android is versioned separately from the desktop app (release.yml, `v<version>`),
+# and nothing for Windows, macOS or Linux is built here, so this is cheap enough to run for every
+# phone-only change.
 #
-# A release this workflow creates is marked a pre-release. The desktop app's "Upgrade now" reads
-# latest.json from the *latest* release, and an APK-only release has none, so it must not become the
-# latest. When release.yml later publishes the desktop builds for the same version, it takes over the tag.
+# The release is created with --latest=false. The desktop app's "Upgrade now" reads latest.json from the
+# *latest* release, and an Android release has none, so it must never become the latest. (Anything
+# that downloads the APK has to look for the newest `android-v*` release, not `releases/latest`.)
 on:
   workflow_dispatch:
 
@@ -42,14 +44,14 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
 
-      # This version's section of CHANGELOG.md becomes the release notes. A release with no entry stops here.
+      # This version's section of CHANGELOG-android.md becomes the release notes. A release with no entry stops here.
       - name: Read release notes
         shell: bash
         run: |
-          version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)
-          notes=$(awk -v v="$version" '/^## /{on = index($0, "## " v " ") == 1; next} on' CHANGELOG.md)
+          version=$(jq -r .version apps/desktop/src-tauri/tauri.android.conf.json)
+          notes=$(awk -v v="$version" '/^## /{on = index($0, "## " v " ") == 1; next} on' CHANGELOG-android.md)
           if [ -z "$(echo "$notes" | tr -d '[:space:]')" ]; then
-            echo "::error::CHANGELOG.md has no '## $version — <date>' section. Rename Unreleased before releasing."
+            echo "::error::CHANGELOG-android.md has no '## $version — <date>' section. Rename Unreleased before releasing."
             exit 1
           fi
           echo "$notes" > "$RUNNER_TEMP/notes.md"
@@ -93,17 +95,17 @@ jobs:
           cp "$apk" "Yammer_${VERSION}_android.apk"
           echo "APK_FILE=Yammer_${VERSION}_android.apk" >> "$GITHUB_ENV"
 
-      # Upload to the version's release, or create it (as a pre-release, see the top of this file).
+      # Upload to this version's release, or create it (never as the latest, see the top of this file).
       # --clobber lets a re-run replace the file.
       - name: Publish the APK
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="v$VERSION"
+          tag="android-v$VERSION"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "$APK_FILE" --clobber --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$tag" "$APK_FILE" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "Yammer $tag (Android)" --notes-file "$RUNNER_TEMP/notes.md" --prerelease
+              --title "Yammer for Android v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest=false
           fi
