@@ -1,6 +1,6 @@
-//! Android's stand-in for `overlay.rs`. There's no overlay window: the Kotlin
-//! service draws Sushi over other apps, and this only keeps the webview's
-//! status up to date.
+//! The phones' stand-in for `overlay.rs`. There's no overlay window, and on
+//! Android the Kotlin service draws Sushi over other apps. This only keeps the
+//! webview's status up to date.
 
 use std::sync::Mutex;
 

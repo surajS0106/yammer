@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { PageHeader, type PageId } from "@/App";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
-import { isAndroid } from "@/lib/utils";
+import { isPhone } from "@/lib/utils";
 import { AnimatedList, Collapse, ListRow } from "@/components/motion";
 import { NigiriCard, NigiriChips } from "@/components/nigiri-card";
 import { Badge, Button, Card, Hotkey, Input, Intro, Notice, Sheet, SheetAction, Textarea } from "@/components/ui";
@@ -38,7 +38,7 @@ function Editor({ initial, onSave, onCancel }: { initial: Transform; onSave: (t:
           onChange={(e) => setInstructions(e.target.value)}
         />
       </label>
-      {!isAndroid && <div className="flex flex-wrap items-center justify-between gap-2">
+      {!isPhone && <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs">
           <span className="font-medium">Hotkey</span>
           <span className="text-muted-foreground"> · optional. Dictates with this transform, whichever one is active.</span>
@@ -85,14 +85,14 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
 
   return (
     <div className="space-y-6">
-      {!isAndroid && <div className="flex items-start justify-between gap-4">
+      {!isPhone && <div className="flex items-start justify-between gap-4">
         <PageHeader title="Transforms" />
         <Button onClick={() => setEditing("new")}>
           <Plus /> Add new
         </Button>
       </div>}
 
-      {!isAndroid && <Intro title="Say it once, get it in the right shape">
+      {!isPhone && <Intro title="Say it once, get it in the right shape">
         A transform rewrites what you dictate before it’s pasted: into an email, bullet points, a formal note. Pick one to apply to every dictation, give one its
         own hotkey, or run any of them on a note in the Scratchpad.
       </Intro>}
@@ -104,7 +104,7 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
         bandLabel={current ? "The active one is lit" : "Yours"}
         band={<NigiriChips items={list.map((t) => t.name)} highlight={current?.name} empty="Add a transform and it shows up here." />}
         stats={[
-          isAndroid
+          isPhone
             ? { value: list.filter((t) => !t.id.startsWith("custom-")).length, label: "starters", hint: "ready to use" }
             : { value: list.filter((t) => t.hotkey).length, label: "with a hotkey", hint: "run on demand" },
           // The built-in ones have plain ids; ones made here are "custom-<time>".
@@ -122,7 +122,7 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
         </Notice>
       </Collapse>
 
-      {isAndroid && (
+      {isPhone && (
         <Sheet open={editing !== null} onClose={() => setEditing(null)} title={editing === "new" ? "New transform" : "Edit transform"}>
           {editing !== null && (
             <>
@@ -143,7 +143,7 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
         </Sheet>
       )}
 
-      <Collapse show={!isAndroid && editing === "new"}>
+      <Collapse show={!isPhone && editing === "new"}>
         <Card>
           <Editor initial={{ id: `custom-${Date.now()}`, name: "", instructions: "", hotkey: "" }} onSave={(t) => void save(t)} onCancel={() => setEditing(null)} />
         </Card>
@@ -159,7 +159,7 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
           <AnimatedList>
             {list.map((t) => (
               <ListRow key={t.id}>
-                {editing === t.id && !isAndroid ? (
+                {editing === t.id && !isPhone ? (
                   <Editor initial={t} onSave={(next) => void save(next)} onCancel={() => setEditing(null)} />
                 ) : (
                   <Option
@@ -173,7 +173,7 @@ export function TransformsPage({ go }: { go: (page: PageId) => void }) {
                         <Button size="icon" variant="ghost" title="Edit" aria-label={`Edit ${t.name}`} onClick={() => setEditing(t.id)}>
                           <Pencil />
                         </Button>
-                        {!isAndroid && (
+                        {!isPhone && (
                           <Button size="icon" variant="ghost" title="Delete" onClick={() => remove(t.id)}>
                             <Trash2 />
                           </Button>

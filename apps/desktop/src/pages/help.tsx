@@ -4,7 +4,7 @@ import { PageHeader, PlatformContext, type PageId } from "@/App";
 import { NavCards } from "@/components/nav-cards";
 import { Button, Hotkey, Kbd, Row, Section } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
-import { hotkeyParts, isAndroid } from "@/lib/utils";
+import { hotkeyParts, isIOS, isPhone } from "@/lib/utils";
 
 function Item({ q, children }: { q: string; children: React.ReactNode }) {
   return (
@@ -37,9 +37,9 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
 
       <NavCards
         go={go}
-        className={isAndroid ? "grid-cols-2" : "@2xl:grid-cols-2 @5xl:grid-cols-4"}
+        className={isPhone ? "grid-cols-2" : "@2xl:grid-cols-2 @5xl:grid-cols-4"}
         cards={[
-          { to: "home", title: "Dictate", description: isAndroid ? "Tap Sushi, talk, and tap again. Your words go into the text box you’re in." : `Hold ${hotkeyParts(settings.hotkey).join(" ")}, talk, let go. Tap it instead to keep talking hands-free.` },
+          { to: "home", title: "Dictate", description: isIOS ? "Tap Dictate, talk, and tap again. Your words are copied, ready to paste." : isPhone ? "Tap Sushi, talk, and tap again. Your words go into the text box you’re in." : `Hold ${hotkeyParts(settings.hotkey).join(" ")}, talk, let go. Tap it instead to keep talking hands-free.` },
           { to: "dictionary", title: "Dictionary", description: "Get names, jargon and acronyms spelled right every time." },
           { to: "snippets", title: "Snippets", description: "Say a short trigger, paste a whole block of text." },
           { to: "transforms", title: "Transforms", description: "Turn what you say into an email, a list, or a tighter note." },
@@ -60,7 +60,7 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
         ))}
       </Section>
 
-      {!isAndroid && <Section title="Shortcuts">
+      {!isPhone && <Section title="Shortcuts">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 py-2.5 text-sm">
           Hold to talk, or tap to start and tap again to finish <Hotkey accelerator={settings.hotkey} />
         </div>
@@ -81,7 +81,7 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
       </Section>
 
       <Section title="Setup">
-        <Row label="Setup guide" description={isAndroid ? "Walk through the speech service and permissions again, step by step." : "Walk through the speech engine, permissions and hotkey again, step by step."}>
+        <Row label="Setup guide" description={isPhone ? "Walk through the speech service and permissions again, step by step." : "Walk through the speech engine, permissions and hotkey again, step by step."}>
           <Button size="sm" variant="outline" onClick={() => void update({ onboarded: false })}>
             Run setup again
           </Button>
@@ -90,7 +90,9 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
 
       <Section title="Troubleshooting">
         <Item q="Nothing gets pasted">
-          {isAndroid ? (
+          {isIOS ? (
+            <>iOS doesn’t let apps type into other apps, so Yammer copies your words and you paste them yourself. </>
+          ) : isPhone ? (
             <>Turn on “Paste for you” in <Link to="general" go={go}>Settings → General</Link>. Without it your words are copied, and you paste them yourself. </>
           ) : platform?.os === "macos" ? (
             <>
@@ -106,14 +108,16 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
         <Item q="It mishears a name or word">
           Add it to the <Link to="dictionary" go={go}>Dictionary</Link>. If it still comes out wrong, add a correction there.
         </Item>
-        {!isAndroid && <Item q="The hotkey doesn’t do anything">
+        {!isPhone && <Item q="The hotkey doesn’t do anything">
           Another app may have claimed it. Pick a different one in <Link to="general" go={go}>Settings → General</Link>.
         </Item>}
         <Item q="Transcription is slow">
-          {isAndroid ? "Try another service or model" : "Try a smaller on-device model, or a cloud engine,"} in <Link to="engine" go={go}>Settings → Speech engine</Link>. AI cleanup and transforms add a moment too.
+          {isPhone ? "Try another service or model" : "Try a smaller on-device model, or a cloud engine,"} in <Link to="engine" go={go}>Settings → Speech engine</Link>. AI cleanup and transforms add a moment too.
         </Item>
         <Item q="Where is my data?">
-          {isAndroid
+          {isIOS
+            ? "History, settings and Scratchpad notes stay in Yammer’s private storage on this phone, and API keys are in the iOS Keychain. Your audio goes to your speech service for each dictation, and text only with AI cleanup."
+            : isPhone
             ? "History, settings, Scratchpad notes and API keys stay in Yammer’s private storage on this phone. Your audio goes to your speech service for each dictation, and text only with AI cleanup."
             : "History, settings and Scratchpad notes stay on this computer. API keys are in your system keychain. Audio leaves the computer only with a cloud speech engine, and text only with AI cleanup."}
         </Item>

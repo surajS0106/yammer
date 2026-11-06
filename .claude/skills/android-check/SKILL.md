@@ -33,11 +33,11 @@ Don't pipe it into `tail`, which hides the exit code. `/build-apk` covers failur
 These only fail at runtime on a device.
 
 - **JNI names:** each `external fun` in `YammerNative.kt` needs a Rust function called `Java_com_sush_yammer_YammerNative_<name>` in `src/android/mod.rs`, with matching parameters. A mismatch is an `UnsatisfiedLinkError` when it's first called.
-- **The JSON from `process`:** the `Dictated` enum in `src/android/mod.rs` (`kind`: `text`, `nothing`, `failed`) must match `YammerService.finished`.
-- **The bridge to Kotlin:** each name in `ACTIONS` in `src/android/mod.rs` needs a `@Command` method in `YammerPlugin.kt` and an entry in `AndroidAction` in `lib/tauri.ts`. `Status` must match what `YammerPlugin.status` returns and `AndroidStatus`.
+- **The JSON from `process`:** the `Dictated` enum in `src/mobile/mod.rs` (`kind`: `text`, `nothing`, `failed`) must match `YammerService.finished`.
+- **The bridge to Kotlin:** each name in `ACTIONS` in `src/android/mod.rs` needs a `@Command` method in `YammerPlugin.kt` and an entry in `PhoneAction` in `lib/tauri.ts`. `Status` must match what `YammerPlugin.status` returns and `PhoneStatus`.
 - **Commands the UI calls:** `android::run` has its own `generate_handler!` list. A new `#[tauri::command]` the Android UI uses must be added there too, or the call fails at runtime. Desktop-only commands rejecting on Android is fine only where the UI catches it.
-- **Settings the phone can't honour:** new engine, hotkey or pill settings need hiding behind `isAndroid` in the pages, and `android::cloud_only` must keep settings off on-device speech. Its Sarvam values must match the preset in `lib/presets.ts`.
-- **New Tauri plugins:** a desktop-only plugin goes under the `not(target_os = "android")` dependencies in `src-tauri/Cargo.toml`, with its permissions in `capabilities/desktop.json`.
+- **Settings the phone can't honour:** new engine, hotkey or pill settings need hiding behind `isPhone` in the pages, and `mobile::cloud_only` must keep settings off on-device speech. Its Sarvam values must match the preset in `lib/presets.ts`.
+- **New Tauri plugins:** a desktop-only plugin goes under the `not(any(target_os = "android", target_os = "ios"))` dependencies in `src-tauri/Cargo.toml`, with its permissions in `capabilities/desktop.json`.
 - **TLS:** `reqwest` features are set per target in `crates/voice-core/Cargo.toml`. Don't add `native-tls` to the workspace dependency: it needs OpenSSL on Android.
 
 ## 3. Manifest and leftovers (blocking)

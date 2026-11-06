@@ -1,14 +1,15 @@
-// Android's stand-ins for the hotkey: the Dictate button, the Sushi bubble that
-// floats over other apps, and the permissions they need. The Kotlin side is in
-// src-tauri/gen/android/app/src/main/java/com/sush/yammer.
+// The phones' stand-ins for the hotkey: the Dictate button, the permissions it needs
+// and, on Android, the Sushi bubble that floats over other apps. iOS has no bubble or
+// paste, so its words are copied. The native sides are in
+// src-tauri/gen/android/app/src/main/java/com/sush/yammer and src-tauri/gen/apple/Sources/yammer.
 
-import { Bell, Check, Microphone as Mic, CursorClick as MousePointerClick, PictureInPicture as PictureInPicture2, Square } from "@phosphor-icons/react";
+import { Bell, Check, ClipboardText, Microphone as Mic, CursorClick as MousePointerClick, PictureInPicture as PictureInPicture2, Square } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { Badge, Button, Card, Notice, Sheet, Switch } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
-import { api, errorMessage, type AndroidAction, type AndroidStatus } from "@/lib/tauri";
-import { cn } from "@/lib/utils";
+import { api, errorMessage, type PhoneAction, type PhoneStatus } from "@/lib/tauri";
+import { cn, isIOS } from "@/lib/utils";
 
 const BUBBLE_KEY = "android-bubble";
 
@@ -29,10 +30,10 @@ function rememberBubble(on: boolean) {
 }
 
 /** Permissions are granted in Android's settings, so keep checking while this is on screen. */
-export function useAndroidStatus(): AndroidStatus | null {
-  const [status, setStatus] = React.useState<AndroidStatus | null>(null);
+export function usePhoneStatus(): PhoneStatus | null {
+  const [status, setStatus] = React.useState<PhoneStatus | null>(null);
   React.useEffect(() => {
-    const load = () => api.androidStatus().then(setStatus, () => {});
+    const load = () => api.phoneStatus().then(setStatus, () => {});
     load();
     const timer = window.setInterval(load, 1000);
     return () => window.clearInterval(timer);
@@ -40,9 +41,9 @@ export function useAndroidStatus(): AndroidStatus | null {
   return status;
 }
 
-export function useAndroidAction() {
+export function usePhoneAction() {
   const { toast } = useSettings();
-  return React.useCallback((action: AndroidAction) => void api.androidAction(action).catch((e) => toast(errorMessage(e))), [toast]);
+  return React.useCallback((action: PhoneAction) => void api.phoneAction(action).catch((e) => toast(errorMessage(e))), [toast]);
 }
 
 function Permission({
@@ -66,7 +67,7 @@ function Permission({
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className="flex min-w-0 flex-col gap-3 rounded-3xl border bg-card p-4 text-left outline-none active:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50">
-        <span className="flex items-center justify-between">
+        <span className="flex w-full items-center justify-between">
           <Icon className="size-6.5 text-primary" weight={granted ? "fill" : "regular"} />
           {granted ? <Check className="size-5 text-emerald-500" weight="bold" /> : optional ? <Badge>Optional</Badge> : <Badge tone="warn">Not yet</Badge>}
         </span>
@@ -96,10 +97,27 @@ function Permission({
   );
 }
 
-/** What Yammer needs from Android, in the order that matters. */
-export function AndroidPermissions() {
-  const status = useAndroidStatus();
-  const act = useAndroidAction();
+/** iOS only asks for the microphone. Once it's refused, only the Settings app can change that. */
+function IOSPermissions() {
+  const status = usePhoneStatus();
+  const act = usePhoneAction();
+  return (
+    <div className="grid gap-3">
+      <Permission icon={Mic} title="Microphone" granted={!!status?.mic} action="Allow microphone" onAllow={() => act("requestMic")}>
+        So Yammer can hear you. It only listens after you tap. If you said no before, this opens Settings, where you can switch it on.
+      </Permission>
+    </div>
+  );
+}
+
+/** What Yammer needs from the phone, in the order that matters. */
+export function PhonePermissions() {
+  return isIOS ? <IOSPermissions /> : <AndroidPermissions />;
+}
+
+function AndroidPermissions() {
+  const status = usePhoneStatus();
+  const act = usePhoneAction();
   return (
     <div className="grid grid-cols-2 gap-3">
       <Permission icon={Mic} title="Microphone" granted={!!status?.mic} action="Allow microphone" onAllow={() => act("requestMic")}>
@@ -127,10 +145,63 @@ export function AndroidPermissions() {
   );
 }
 
-/** Home's first tiles on a phone: the Dictate button with Sushi and the status, then the switch for Sushi over other apps beside `side`. */
-export function AndroidHero({ pill, sushi, side }: { pill: React.ReactNode; sushi: React.ReactNode; side: React.ReactNode }) {
-  const status = useAndroidStatus();
-  const act = useAndroidAction();
+interface HeroProps {
+  pill: React.ReactNode;
+  sushi: React.ReactNode;
+  side: React.ReactNode;
+}
+
+/** iOS's Home: dictation starts here, because no app can float over others, and the words are copied. */
+function IOSHero({ pill, sushi, side }: HeroProps) {
+  const status = usePhoneStatus();
+  const act = usePhoneAction();
+  return (
+    <>
+      <Card className="col-span-2 space-y-4 rounded-3xl border-primary/20 bg-primary/[0.06] p-5 dark:bg-primary/[0.08]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-3">
+            {pill}
+            <h2 className="text-2xl font-semibold tracking-tight text-balance">Tap Dictate and talk.</h2>
+          </div>
+          <div className="shrink-0">{sushi}</div>
+        </div>
+        <p className="text-sm leading-relaxed text-pretty text-muted-foreground">Tap again to finish, and your words are copied, ready to paste into any app.</p>
+        <Button className={cn("h-14 w-full rounded-2xl text-base [&_svg]:size-5", status?.recording && "animate-pulse")} disabled={!status?.mic} onClick={() => act("toggle")}>
+          {status?.recording ? <Square weight="fill" /> : <Mic weight="fill" />} {status?.recording ? "Finish" : "Dictate"}
+        </Button>
+      </Card>
+      <div className="row-span-2 flex min-w-0 flex-col justify-between gap-6 rounded-3xl border bg-card p-4">
+        <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+          <ClipboardText className="size-5.5" />
+        </span>
+        <span>
+          <span className="block text-sm font-semibold">Paste anywhere</span>
+          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">Long-press any text box and choose Paste. Every dictation is in History too.</span>
+        </span>
+      </div>
+      {side}
+      {status && !status.mic && (
+        <div className="col-span-2">
+          <Notice tone="warn">
+            Allow the microphone to start dictating.{" "}
+            <button type="button" className="font-medium underline" onClick={() => act("requestMic")}>
+              Allow
+            </button>
+          </Notice>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Home's first tiles on a phone: the Dictate button with Sushi and the status, then on Android the switch for Sushi over other apps, beside `side`. */
+export function PhoneHero(props: HeroProps) {
+  return isIOS ? <IOSHero {...props} /> : <AndroidHero {...props} />;
+}
+
+function AndroidHero({ pill, sushi, side }: HeroProps) {
+  const status = usePhoneStatus();
+  const act = usePhoneAction();
   const running = !!status?.running;
   const restored = React.useRef(false);
 
@@ -195,9 +266,9 @@ export function AndroidHero({ pill, sushi, side }: { pill: React.ReactNode; sush
 }
 
 /** Onboarding's last step: a real dictation from inside the app. */
-export function AndroidTry() {
-  const status = useAndroidStatus();
-  const act = useAndroidAction();
+export function PhoneTry() {
+  const status = usePhoneStatus();
+  const act = usePhoneAction();
   return (
     <Button className={cn("h-12 w-full text-base", status?.recording && "animate-pulse")} disabled={!status?.mic} onClick={() => act("toggle")}>
       {status?.recording ? <Square /> : <Mic />} {status?.recording ? "Finish" : "Dictate"}

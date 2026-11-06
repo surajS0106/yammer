@@ -10,7 +10,7 @@ import { exportHistory, type ExportFormat } from "@/lib/export";
 import { useSettings } from "@/lib/settings";
 import { dayKey, engineLabel, lastDays, replaceEntry, weekOverWeek, wordCount } from "@/lib/stats";
 import { api, errorMessage, on, type HistoryEntry } from "@/lib/tauri";
-import { cn, deviceName, isAndroid } from "@/lib/utils";
+import { cn, deviceName, isPhone } from "@/lib/utils";
 
 const time = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const weekday = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
@@ -68,7 +68,7 @@ function Item({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }
     }
   };
 
-  if (isAndroid) {
+  if (isPhone) {
     const { wasLong, ...handlers } = press;
     return (
       <Card
@@ -311,13 +311,13 @@ export function HistoryPage() {
   const current = Math.min(page, pages);
   const start = (current - 1) * pageSize;
   // A phone keeps one long list that grows, rather than pages of it.
-  const shown = isAndroid ? matches.slice(0, current * pageSize) : matches.slice(start, start + pageSize);
+  const shown = isPhone ? matches.slice(0, current * pageSize) : matches.slice(start, start + pageSize);
 
   // What the search shows, or everything.
   const exportAs = async (format: ExportFormat) => {
     const { name, contents } = exportHistory(matches, format);
     try {
-      if (isAndroid) await api.androidShare(name, contents);
+      if (isPhone) await api.phoneShare(name, contents);
       else toast(`Saved to ${await api.exportFile(name, contents)}`, "info");
     } catch (e) {
       toast(errorMessage(e));
@@ -331,15 +331,15 @@ export function HistoryPage() {
         description={entries.length ? `${entries.length} dictations, ${words.toLocaleString()} words. Kept on this ${deviceName} only.` : "Your dictations show up here."}
       />
       {entries.length > 0 && <HistoryCard entries={entries} />}
-      {entries.length === 0 && isAndroid && (
+      {entries.length === 0 && isPhone && (
         <EmptyState icon={ClockCounterClockwise} title="Nothing here yet">
           Tap the microphone below and say something. Everything you dictate lands here, so you can copy it again later.
         </EmptyState>
       )}
       {entries.length > 0 && (
-        <div className={cn("flex gap-2", isAndroid && "flex-wrap")}>
+        <div className={cn("flex gap-2", isPhone && "flex-wrap")}>
           <Input
-            className={cn(isAndroid && "basis-full rounded-full px-4")}
+            className={cn(isPhone && "basis-full rounded-full px-4")}
             placeholder="Search"
             value={query}
             onChange={(e) => {
@@ -348,12 +348,12 @@ export function HistoryPage() {
             }}
           />
           <Select<ExportFormat>
-            className={isAndroid ? "min-w-0 flex-1" : "w-auto shrink-0"}
+            className={isPhone ? "min-w-0 flex-1" : "w-auto shrink-0"}
             align="start"
             label="Export"
             title={q ? "Export the dictations that match your search to Downloads" : "Export every dictation to Downloads"}
             value={null}
-            placeholder={isAndroid ? "Share as…" : "Export…"}
+            placeholder={isPhone ? "Share as…" : "Export…"}
             onChange={(format) => void exportAs(format)}
             options={[
               { value: "md", label: "Markdown" },
@@ -371,7 +371,7 @@ export function HistoryPage() {
         </div>
       )}
       {shown.length > 0 &&
-        (isAndroid ? (
+        (isPhone ? (
           <div className="space-y-3">
             {shown.map((e) => (
               <Item key={e.id} entry={e} onDelete={() => void api.historyDelete(e.id).then(() => setEntries((l) => l.filter((x) => x.id !== e.id)))} />
@@ -384,12 +384,12 @@ export function HistoryPage() {
             ))}
           </Card>
         ))}
-      {isAndroid && current < pages && (
+      {isPhone && current < pages && (
         <Button variant="outline" className="w-full" onClick={() => setPage(current + 1)}>
           Show more
         </Button>
       )}
-      {!isAndroid && matches.length > 0 && (
+      {!isPhone && matches.length > 0 && (
         <Pagination
           page={current}
           pages={pages}
@@ -411,7 +411,7 @@ export function HistoryPage() {
           }}
         />
       )}
-      {entries.length > 0 && matches.length === 0 && (isAndroid ? (
+      {entries.length > 0 && matches.length === 0 && (isPhone ? (
         <EmptyState icon={MagnifyingGlass} title={`Nothing matches “${query}”`} action={<Button variant="outline" onClick={() => setQuery("")}>Clear search</Button>}>
           Try a different word from what you said.
         </EmptyState>

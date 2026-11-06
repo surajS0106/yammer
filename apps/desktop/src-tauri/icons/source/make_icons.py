@@ -2,6 +2,7 @@
 
 macOS: light/dark rounded-square icons on Apple's 1024 grid (824px body, continuous-corner squircle),
 plus full-bleed light/dark squares in AppIcon.icon for the macOS 26 adaptive icon (../build-mac-icon.sh).
+iOS: a full-bleed light square, which iOS masks itself.
 Windows/Linux: the transparent ribbon Y.
 
 The light and dark sources are full-bleed squares on a flat background, and the Y is a different size in
@@ -116,6 +117,9 @@ assets = ICONS / "AppIcon.icon/Assets"
 assets.mkdir(parents=True, exist_ok=True)
 full_bleed(LIGHT).save(assets / "light.png")
 full_bleed(DARK).save(assets / "dark.png")
+
+# iOS: one opaque square, which iOS masks itself and scales for every size.
+full_bleed(LIGHT).save(ROOT / "src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png")
 
 # Windows / Linux
 mark.save(ICONS / "icon.png")

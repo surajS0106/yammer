@@ -7,6 +7,8 @@
     "build": "bun --filter desktop tauri build --config src-tauri/tauri.local.conf.json",
     "build:mac": "export PATH=\"$HOME/.cargo/bin:$PATH\" MACOSX_DEPLOYMENT_TARGET=11.0 && bun --filter desktop tauri build --bundles dmg --config src-tauri/tauri.local.conf.json",
     "build:android": "bun --filter desktop tauri android build --debug --apk --target aarch64 --target x86_64",
+    "dev:ios": "bun --filter desktop tauri ios dev",
+    "build:ios": "bun --filter desktop tauri ios build",
     "typecheck": "bun --filter '*' typecheck"
   }
 }

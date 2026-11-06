@@ -1,0 +1,86 @@
+# Based on Tauri's iOS template, hand-maintained like gen/android: Sources/yammer holds hand-written
+# Swift, so don't regenerate this folder with `tauri ios init`. After changing this file, run
+# `xcodegen generate` here and commit yammer.xcodeproj.
+name: yammer
+options:
+  bundleIdPrefix: com.sush.yammer
+  deploymentTarget:
+    iOS: "15.0"
+fileGroups: [../../src]
+configs:
+  debug: debug
+  release: release
+settingGroups:
+  app:
+    base:
+      PRODUCT_NAME: Yammer
+      PRODUCT_BUNDLE_IDENTIFIER: com.sush.yammer
+targets:
+  yammer_iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Assets.xcassets
+      # Tauri builds the Rust library into here. It doesn't exist on a clean checkout.
+      - path: Externals
+        optional: true
+        excludes: ["**/*.a"]
+      - path: yammer_iOS
+      - path: assets
+        buildPhase: resources
+        type: folder
+      - path: LaunchScreen.storyboard
+    info:
+      path: yammer_iOS/Info.plist
+      properties:
+        LSRequiresIPhoneOS: true
+        UILaunchStoryboardName: LaunchScreen
+        UIRequiredDeviceCapabilities: [arm64, metal]
+        # The UI is laid out for a phone held upright.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        CFBundleDisplayName: Yammer
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "0.1.0"
+        NSMicrophoneUsageDescription: Yammer listens while you dictate, and only then.
+        # A dictation keeps going if you switch apps mid-sentence.
+        UIBackgroundModes: [audio]
+    entitlements:
+      path: yammer_iOS/yammer_iOS.entitlements
+    scheme:
+      environmentVariables:
+        RUST_BACKTRACE: full
+        RUST_LOG: info
+    settings:
+      base:
+        ENABLE_BITCODE: false
+        SWIFT_VERSION: "5.0"
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/yammer/bridge.h
+        # iPhone only: the phone layout isn't made for an iPad's screen, which runs it scaled up.
+        TARGETED_DEVICE_FAMILY: "1"
+        ARCHS: [arm64]
+        VALID_ARCHS: arm64
+        LIBRARY_SEARCH_PATHS[arch=arm64]: $(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)
+        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
+      groups: [app]
+    dependencies:
+      - framework: libapp.a
+        embed: false
+      - sdk: AVFoundation.framework
+      - sdk: CoreGraphics.framework
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: QuartzCore.framework
+      - sdk: Security.framework
+      - sdk: UIKit.framework
+      - sdk: WebKit.framework
+    preBuildScripts:
+      - script: |
+          # Xcode's PATH leaves out bun and cargo.
+          export PATH="$HOME/.bun/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+          bun tauri ios xcode-script -v --platform "${PLATFORM_DISPLAY_NAME:?}" --sdk-root "${SDKROOT:?}" --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration "${CONFIGURATION:?}" ${FORCE_COLOR} ${ARCHS:?}
+        name: Build Rust Code
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a

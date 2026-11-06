@@ -3,7 +3,7 @@ import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion, typ
 import * as React from "react";
 
 import { PlatformContext, type PageId } from "@/App";
-import { AndroidHero } from "@/components/android-panel";
+import { PhoneHero } from "@/components/phone-panel";
 import { AnimatedList, Collapse, ListRow } from "@/components/motion";
 import { WhatsNewCard } from "@/components/sidebar";
 import { moodOf, Sushi } from "@/components/sushi";
@@ -16,7 +16,7 @@ import { providerLabel, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import { api, on, type HistoryEntry, type OverlayState } from "@/lib/tauri";
 import { computeStats, dayKey, lastDays, useHistory } from "@/lib/stats";
-import { cn, formatBytes, isAndroid } from "@/lib/utils";
+import { cn, formatBytes, isIOS, isPhone } from "@/lib/utils";
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "long" });
@@ -236,7 +236,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
     </div>
   );
 
-  if (isAndroid) {
+  if (isPhone) {
     return (
       <PhoneHome
         go={go}
@@ -539,7 +539,7 @@ function PhoneHome({
         </div>
       )}
 
-      <AndroidHero
+      <PhoneHero
         pill={pill}
         sushi={<Sushi mood={mood} px={3} interactive className="text-muted-foreground" />}
         side={
@@ -550,15 +550,18 @@ function PhoneHome({
         }
       />
 
-      <Card className="col-span-2 flex items-start gap-2.5 rounded-3xl px-4 py-3 transition-shadow focus-within:ring-2 focus-within:ring-primary/60">
-        <Mic className="mt-2 size-5 shrink-0 text-primary" />
-        <Textarea
-          rows={1}
-          aria-label="Try dictating here"
-          placeholder="Try it here: tap this box, then Sushi…"
-          className="min-h-9 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
-        />
-      </Card>
+      {/* iOS can't put the words in a box, so there's nothing to try here. */}
+      {!isIOS && (
+        <Card className="col-span-2 flex items-start gap-2.5 rounded-3xl px-4 py-3 transition-shadow focus-within:ring-2 focus-within:ring-primary/60">
+          <Mic className="mt-2 size-5 shrink-0 text-primary" />
+          <Textarea
+            rows={1}
+            aria-label="Try dictating here"
+            placeholder="Try it here: tap this box, then Sushi…"
+            className="min-h-9 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
+          />
+        </Card>
+      )}
 
       <WeekBento stats={stats} onOpen={() => go("insights")} />
 

@@ -7,8 +7,8 @@ license.workspace = true
 
 [lib]
 name = "yammer_lib"
-# cdylib: Android loads the app as a shared library.
-crate-type = ["rlib", "cdylib"]
+# cdylib: Android loads the app as a shared library. staticlib: Xcode links it into the iOS app.
+crate-type = ["rlib", "cdylib", "staticlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -26,7 +26,7 @@ tokio = { workspace = true, features = ["fs", "io-util"] }
 tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-opener = "2"
 
-[target.'cfg(not(target_os = "android"))'.dependencies]
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
@@ -43,6 +43,10 @@ sha2 = "0.10"
 [target.'cfg(target_os = "android")'.dependencies]
 # The Kotlin side calls into Rust directly (android/mod.rs), so it works with the app's activity gone.
 jni = "0.21"
+
+[target.'cfg(target_os = "ios")'.dependencies]
+# API keys go in the iOS Keychain (secrets.rs).
+keyring = { version = "3", features = ["apple-native"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Mutes the sound output while recording (mute.rs). The version cpal already pulls in.

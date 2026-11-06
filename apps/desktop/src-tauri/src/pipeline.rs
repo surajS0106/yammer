@@ -1,7 +1,7 @@
 //! From a recording to finished text, on every platform: speech to text, then
 //! cleanup, corrections and the history entry. What starts a recording and
-//! where the text goes differ, so `dictation.rs` (desktop) and `android`
-//! each drive this themselves.
+//! where the text goes differ, so `dictation.rs` (desktop) and `mobile`
+//! (Android, iOS) each drive this themselves.
 
 use std::sync::Arc;
 
@@ -93,7 +93,7 @@ pub struct Made {
 async fn transcribe(app: &AppHandle, settings: &Settings, samples: Arc<[f32]>) -> AppResult<(String, String, Option<String>)> {
     let state = app.state::<AppState>();
     match settings.engine {
-        // Whisper isn't built for Android; `android::cloud_only` keeps settings off this.
+        // Whisper isn't built for phones; `mobile::cloud_only` keeps settings off this.
         #[cfg(not(desktop))]
         Engine::Local => {
             let _ = samples;

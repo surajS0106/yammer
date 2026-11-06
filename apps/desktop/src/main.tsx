@@ -8,7 +8,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { api, errorMessage } from "./lib/tauri";
 import { SettingsProvider } from "./lib/settings";
-import { isAndroid } from "./lib/utils";
+import { isPhone } from "./lib/utils";
 import "./lib/theme";
 import { Overlay } from "./overlay";
 
@@ -24,7 +24,7 @@ document.addEventListener("click", (e) => {
 });
 
 // A phone reads at arm's length: index.css steps the text sizes up.
-if (isAndroid) document.documentElement.dataset.android = "";
+if (isPhone) document.documentElement.dataset.android = "";
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 

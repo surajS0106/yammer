@@ -6,7 +6,7 @@ use serde::{Serialize, Serializer};
 pub enum AppError {
     #[error(transparent)]
     Voice(#[from] voice_core::Error),
-    #[cfg(desktop)]
+    #[cfg(any(desktop, target_os = "ios"))]
     #[error("secure storage: {0}")]
     Keyring(#[from] keyring::Error),
     #[error(transparent)]

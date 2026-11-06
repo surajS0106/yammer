@@ -4,7 +4,7 @@
 
 import * as React from "react";
 
-import { isAndroid } from "@/lib/utils";
+import { isPhone } from "@/lib/utils";
 import { INK, NORI, PixelFlame, PixelNumber, RICE, RICE_SHADE, SALMON, STRIPE } from "@/components/pixel";
 
 export interface NigiriStat {
@@ -40,7 +40,7 @@ export function NigiriCard({
   /** Keep the band on a phone. Chips repeat the list below them, so those leave it out. */
   phoneBand?: boolean;
 }) {
-  if (isAndroid) {
+  if (isPhone) {
     const tile = "min-w-0 overflow-hidden rounded-3xl ring-1 ring-black/10";
     return (
       <section className="grid grid-cols-2 gap-3">

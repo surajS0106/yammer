@@ -5,6 +5,8 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+import { isIOS } from "./utils";
+
 export type Engine = "local" | "cloud";
 export type Theme = "system" | "light" | "dark";
 export type SttApi = "transcriptions" | "ollama-chat" | "sarvam";
@@ -145,17 +147,21 @@ export interface Platform {
 
 export type SecretName = "stt" | "cleanup";
 
-export interface AndroidStatus {
+export interface PhoneStatus {
   mic: boolean;
   overlay: boolean;
   accessibility: boolean;
   notifications: boolean;
-  /** The foreground service is up, so Sushi can start a recording. */
+  /** The foreground service is up, so Sushi can start a recording. Always true on iOS, which has neither. */
   running: boolean;
   recording: boolean;
 }
 
-export type AndroidAction = "requestMic" | "requestNotifications" | "openOverlaySettings" | "openAccessibilitySettings" | "openAppSettings" | "startBubble" | "stopBubble" | "toggle" | "barsLight" | "barsDark";
+/** The Rust commands behind `phoneStatus`, `phoneAction` and `phoneShare`: `android_*` or `ios_*`. */
+const phoneShell = isIOS ? "ios" : "android";
+
+/** iOS takes only requestMic, openAppSettings, toggle and the bars. */
+export type PhoneAction = "requestMic" | "requestNotifications" | "openOverlaySettings" | "openAccessibilitySettings" | "openAppSettings" | "startBubble" | "stopBubble" | "toggle" | "barsLight" | "barsDark";
 
 export type OverlayState =
   | { phase: "listening"; hint: string | null }
@@ -208,10 +214,10 @@ export const api = {
   /** Rewrite text by a transform's instructions, using the AI cleanup model. */
   textRewrite: (text: string, instructions: string) => invoke<string>("text_rewrite", { text, instructions }),
   platformInfo: () => invoke<Platform>("platform_info"),
-  androidStatus: () => invoke<AndroidStatus>("android_status"),
-  androidAction: (action: AndroidAction) => invoke<void>("android_action", { action }),
-  /** Opens Android's share sheet with a new file holding `contents`. */
-  androidShare: (name: string, contents: string) => invoke<void>("android_share", { name, contents }),
+  phoneStatus: () => invoke<PhoneStatus>(`${phoneShell}_status`),
+  phoneAction: (action: PhoneAction) => invoke<void>(`${phoneShell}_action`, { action }),
+  /** Opens the phone's share sheet with a new file holding `contents`. */
+  phoneShare: (name: string, contents: string) => invoke<void>(`${phoneShell}_share`, { name, contents }),
   autostartGet: () => invoke<boolean>("autostart_get"),
   autostartSet: (enabled: boolean) => invoke<void>("autostart_set", { enabled }),
   openPermissionSettings: (pane: "microphone" | "accessibility") => invoke<void>("open_permission_settings", { pane }),

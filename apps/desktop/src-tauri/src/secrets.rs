@@ -7,6 +7,8 @@
 //! secret. There, secrets go to `dev-secrets.json` (owner-only) in the app
 //! config dir instead.
 //!
+//! iOS uses the Keychain in every build: rebuilds don't re-prompt there.
+//!
 //! Android has no keyring backend yet, so it uses that file too, in the app's
 //! private storage. Other apps can't read it, and `allowBackup` is off so it
 //! isn't copied off the phone, but it isn't encrypted: move it to the Android
@@ -17,21 +19,21 @@ use crate::error::{AppError, AppResult};
 /// The keys the app keeps: one for cloud transcription, one for cleanup.
 pub const NAMES: &[&str] = &["stt", "cleanup"];
 
-#[cfg(all(desktop, not(debug_assertions)))]
+#[cfg(any(target_os = "ios", all(desktop, not(debug_assertions))))]
 const SERVICE: &str = "com.sush.yammer";
 /// The keyring service from before the rename to Yammer; read once, then moved to `SERVICE`.
-#[cfg(all(desktop, not(debug_assertions)))]
+#[cfg(any(target_os = "ios", all(desktop, not(debug_assertions))))]
 const LEGACY_SERVICE: &str = "com.sush.larp";
 
 /// Called once at startup with the app config dir; only debug builds use it.
 pub fn init(config_dir: &std::path::Path) {
-    #[cfg(any(debug_assertions, not(desktop)))]
+    #[cfg(not(any(target_os = "ios", all(desktop, not(debug_assertions)))))]
     let _ = dev::PATH.set(config_dir.join("dev-secrets.json"));
-    #[cfg(all(desktop, not(debug_assertions)))]
+    #[cfg(any(target_os = "ios", all(desktop, not(debug_assertions))))]
     let _ = config_dir;
 }
 
-#[cfg(all(desktop, not(debug_assertions)))]
+#[cfg(any(target_os = "ios", all(desktop, not(debug_assertions))))]
 mod backend {
     use super::{LEGACY_SERVICE, SERVICE};
     use crate::error::AppResult;
@@ -67,7 +69,7 @@ mod backend {
     }
 }
 
-#[cfg(any(debug_assertions, not(desktop)))]
+#[cfg(not(any(target_os = "ios", all(desktop, not(debug_assertions)))))]
 mod dev {
     use crate::error::{AppError, AppResult};
     use std::collections::BTreeMap;
@@ -125,7 +127,7 @@ mod dev {
     }
 }
 
-#[cfg(any(debug_assertions, not(desktop)))]
+#[cfg(not(any(target_os = "ios", all(desktop, not(debug_assertions)))))]
 use dev as backend;
 
 fn entry_name(name: &str) -> AppResult<String> {

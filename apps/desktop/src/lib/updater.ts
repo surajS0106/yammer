@@ -7,7 +7,7 @@ import * as React from "react";
 
 import { parseNotes, type Release } from "./changelog";
 import { errorMessage } from "./tauri";
-import { isAndroid } from "./utils";
+import { isPhone } from "./utils";
 
 /** `notes` are the release's changelog section, from the GitHub release body; empty when it has none. */
 type Pending = { version: string; notes: Release["changes"] };
@@ -67,7 +67,7 @@ export async function installUpdate() {
 export function useUpdate(): UpdateState {
   React.useEffect(() => {
     // A dev build would "upgrade" itself into the release build. Android has no updater yet.
-    if (started || import.meta.env.DEV || isAndroid) return;
+    if (started || import.meta.env.DEV || isPhone) return;
     started = true;
     void checkForUpdate();
     setInterval(() => void checkForUpdate(), RECHECK_MS);

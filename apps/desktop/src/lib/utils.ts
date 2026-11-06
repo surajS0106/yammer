@@ -5,10 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const isMac = navigator.userAgent.includes("Mac");
+export const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+// An iPhone's user agent says "like Mac OS X".
+export const isMac = navigator.userAgent.includes("Mac") && !isIOS;
 export const isAndroid = navigator.userAgent.includes("Android");
+/** Android or iOS: the touch layout, cloud engines only, no hotkeys. */
+export const isPhone = isAndroid || isIOS;
 /** What copy calls the device: "Kept on this computer." */
-export const deviceName = isAndroid ? "phone" : "computer";
+export const deviceName = isPhone ? "phone" : "computer";
 
 /** "CommandOrControl+Shift+Space" → ["Ctrl", "Shift", "Space"] (⌘ ⇧ on macOS). */
 export function hotkeyParts(accelerator: string): string[] {

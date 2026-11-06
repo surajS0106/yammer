@@ -7,7 +7,7 @@ import { motion } from "motion/react";
 import * as React from "react";
 
 import type { PageId } from "@/App";
-import { useAndroidAction, useAndroidStatus } from "@/components/android-panel";
+import { usePhoneAction, usePhoneStatus } from "@/components/phone-panel";
 import { spring } from "@/components/motion";
 import type { DockAction } from "@/lib/dock";
 import { dayKey, useHistory } from "@/lib/stats";
@@ -44,8 +44,8 @@ function useKeyboardOpen() {
 }
 
 function ActionButton({ action }: { action: DockAction | null }) {
-  const status = useAndroidStatus();
-  const act = useAndroidAction();
+  const status = usePhoneStatus();
+  const act = usePhoneAction();
   const recording = !!status?.recording;
   // Mid-dictation it always finishes the dictation, whatever the page offers.
   const Icon = recording ? Square : (action?.icon ?? Microphone);

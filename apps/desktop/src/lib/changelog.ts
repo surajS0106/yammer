@@ -1,13 +1,14 @@
 // The user-facing changelog, bundled at build time: CHANGELOG.md at the repo
-// root, or CHANGELOG-android.md on Android, which has its own versions. The
+// root, or CHANGELOG-android.md or CHANGELOG-ios.md on a phone, which have their own versions. The
 // release workflows publish each version's section as the release notes, so an
 // update's `body` parses with the same `parseNotes`.
 
 import androidRaw from "../../../../CHANGELOG-android.md?raw";
 import desktopRaw from "../../../../CHANGELOG.md?raw";
-import { isAndroid } from "./utils";
+import iosRaw from "../../../../CHANGELOG-ios.md?raw";
+import { isAndroid, isIOS } from "./utils";
 
-const raw = isAndroid ? androidRaw : desktopRaw;
+const raw = isAndroid ? androidRaw : isIOS ? iosRaw : desktopRaw;
 
 export type ChangeKind = "new" | "improved" | "fixed";
 

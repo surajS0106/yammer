@@ -9,7 +9,7 @@ import { useSettings } from "@/lib/settings";
 import { TYPING_WPM, wordCount } from "@/lib/stats";
 import type { Snippet } from "@/lib/tauri";
 import { useDockAction } from "@/lib/dock";
-import { isAndroid } from "@/lib/utils";
+import { isPhone } from "@/lib/utils";
 
 function Editor({ initial, onSave, onCancel }: { initial: Snippet; onSave: (s: Snippet) => Promise<boolean>; onCancel: () => void }) {
   const [trigger, setTrigger] = React.useState(initial.trigger);
@@ -67,7 +67,7 @@ export function SnippetsPage() {
   const q = query.trim().toLowerCase();
   const shown = list.map((s, i) => [s, i] as const).filter(([s]) => !q || s.trigger.toLowerCase().includes(q) || s.text.toLowerCase().includes(q));
 
-  if (isAndroid) {
+  if (isPhone) {
     const remove = (at: number) => {
       setEditing(null);
       void update((st) => ({ ...st, snippets: list.filter((_, j) => j !== at) }));

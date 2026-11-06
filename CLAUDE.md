@@ -14,6 +14,8 @@ bun --filter desktop build   # tsc + vite build; also needed before `cargo test`
 bun run build                # release installers for this platform
 bun run build:mac            # macOS DMG only (sets MACOSX_DEPLOYMENT_TARGET=11.0 for whisper.cpp); see /build-dmg
 bun run build:android        # debug APK for phones and x86_64 emulators; needs JAVA_HOME, ANDROID_HOME and NDK_HOME
+bun run dev:ios              # iOS Simulator or a connected iPhone; needs Xcode, xcodegen and the aarch64-apple-ios(-sim) Rust targets
+bun run build:ios            # needs a signing team: APPLE_DEVELOPMENT_TEAM or bundle.iOS.developmentTeam
 
 cargo test --workspace
 cargo test -p voice-core <name_substring>
@@ -75,6 +77,11 @@ Yammer (formerly Larp), a product of Sush: a dictation app modelled on Sush (`..
   - The service must start with the app on screen: a foreground service started from the background can't use the microphone on Android 14+. It keeps access while it runs, so tapping Sushi works from any app. It doesn't survive a reboot; Home turns it back on the next time the app opens.
   - The process has to outlive the activity for Sushi to keep working, so `android::run` prevents Tauri's exit when the window goes and Back only backgrounds the app. Tauri can't build a second webview in one process, so reopening after a swipe from Recents restarts the process (`MainActivity.restartWhenIdle`).
   - API keys are in `dev-secrets.json` in the app's private storage, with `allowBackup` off. It isn't encrypted; move it to the Android Keystore before a public release.
+- **iOS** (`src-tauri/src/ios/`, `src-tauri/gen/apple`): the same crate and phone UI, also without the desktop modules. `src/mobile/` is what Android and iOS share (`dictate`, `cloud_only`, the status stand-in for `overlay.rs`). Cloud engines only.
+  - iOS has no equivalent of Sushi over other apps or Accessibility paste, so dictation starts in the app and the text goes to the clipboard and History. `isPhone` in `lib/utils.ts` is the touch layout; `isIOS` and `isAndroid` are for what really differs (`IOSHero` and `IOSPermissions` in `components/phone-panel.tsx`).
+  - `gen/apple/Sources/yammer/Dictation.swift` owns the microphone (`AVAudioEngine`), clipboard and share sheet. Rust and Swift call each other over a plain C interface rather than a Tauri plugin: the `extern` block and `yammer_ios_*` functions in `src/ios/mod.rs`, `@_cdecl` functions in Swift and `bridge.h`. A name mismatch is a link error. `ios_action`'s `ACTIONS` must match the Swift `switch`.
+  - `gen/apple` holds hand-written Swift, so it's committed and must not be regenerated with `tauri ios init`. After editing `project.yml`, run `xcodegen generate` there and commit `yammer.xcodeproj`. The iOS version is in `tauri.ios.conf.json` and `project.yml`, and its notes are `CHANGELOG-ios.md`.
+  - API keys are in the iOS Keychain in every build (`secrets.rs`). `audio` in `UIBackgroundModes` keeps a dictation going if you switch apps; App Review may ask about it.
 - **`apps/desktop/src`**: React 19, Vite and Tailwind 4, with hand-rolled primitives in `components/ui.tsx` (no Radix) using Sush's theme tokens. Icons are Phosphor (`@phosphor-icons/react`). Registry components from `@ui-shrushank`/`@ui-shrushank-pro` go in `components/ui/` (configured in `components.json`; the pro registry needs `SHRUSHANK_PRO_TOKEN`, which lives in the repo-root `.env`).
   - Both windows load `index.html`. `main.tsx` renders `overlay.tsx` when the window label is `overlay`, and the settings app otherwise.
   - `lib/tauri.ts` mirrors the Rust commands and serde types. **If you change a Rust command or serde type, update this file to match.**

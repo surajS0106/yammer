@@ -11,7 +11,7 @@ import { dayKey, lastDays, wordCount } from "@/lib/stats";
 import { api, errorMessage, type Note } from "@/lib/tauri";
 import { useBackKey } from "@/lib/back";
 import { useDockAction } from "@/lib/dock";
-import { deviceName, isAndroid } from "@/lib/utils";
+import { deviceName, isIOS, isPhone } from "@/lib/utils";
 
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const weekday = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
@@ -94,10 +94,10 @@ function NoteEditor({ note, onChange, onDelete, onBack }: { note: Note; onChange
       </div>
       <Textarea
         // On a phone focus brings up the keyboard, which would cover a note you only opened to read.
-        autoFocus={!isAndroid || !note.text}
+        autoFocus={!isPhone || !note.text}
         rows={16}
         className="bg-card text-[15px]"
-        placeholder={isAndroid ? "Tap Sushi and talk. Or type, or paste something to transform." : "Click here, then hold the hotkey and talk. Or type, or paste something to transform."}
+        placeholder={isIOS ? "Type, or paste a dictation or anything else to transform." : isPhone ? "Tap Sushi and talk. Or type, or paste something to transform." : "Click here, then hold the hotkey and talk. Or type, or paste something to transform."}
         value={note.text}
         onChange={(e) => {
           setUndo(null);
@@ -229,7 +229,7 @@ export function ScratchpadPage({ go }: { go: (page: PageId) => void }) {
   const q = query.trim().toLowerCase();
   const shown = q ? notes.filter((n) => n.text.toLowerCase().includes(q)) : notes;
 
-  if (isAndroid) {
+  if (isPhone) {
     return (
       <div className="space-y-6">
         <PageHeader title="Scratchpad" />
@@ -243,7 +243,7 @@ export function ScratchpadPage({ go }: { go: (page: PageId) => void }) {
               </Button>
             }
           >
-            Drop a to-do list, polish a message, brain-dump an idea. Tap Sushi to dictate into a note, then reshape it with a transform.
+            Drop a to-do list, polish a message, brain-dump an idea. {isIOS ? "Paste in a dictation or type, then reshape it with a transform." : "Tap Sushi to dictate into a note, then reshape it with a transform."}
           </EmptyState>
         ) : (
           <>

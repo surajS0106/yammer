@@ -2,13 +2,13 @@ import { ArrowCounterClockwise, Question } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { PlatformContext, type PageId } from "@/App";
-import { AndroidPermissions } from "@/components/android-panel";
+import { PhonePermissions } from "@/components/phone-panel";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
 import { SettingsHero } from "@/components/settings-hero";
 import { Button, Row, Section, Segmented, Select, Switch } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
 import { api, errorMessage, type Theme } from "@/lib/tauri";
-import { isAndroid, isMac } from "@/lib/utils";
+import { isPhone, isMac } from "@/lib/utils";
 
 // 0 means none for recordings and forever for days, so it goes first in one list and last in the other.
 const RECORDINGS = [0, 10, 20, 50, 100];
@@ -41,11 +41,11 @@ export function GeneralPage({ go }: { go: (page: PageId) => void }) {
     }
   };
 
-  if (isAndroid) {
+  if (isPhone) {
     const tile = "flex min-w-0 flex-col justify-between gap-3 rounded-3xl border bg-card p-4";
     return (
       <div className="space-y-6">
-        <AndroidPermissions />
+        <PhonePermissions />
         <section className="grid grid-cols-2 gap-3">
           <div className={tile}>
             <span className="text-sm leading-snug font-semibold">Keep recordings</span>

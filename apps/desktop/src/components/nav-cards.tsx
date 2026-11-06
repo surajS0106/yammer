@@ -3,7 +3,7 @@
 
 import type { PageId } from "@/App";
 import { ContentCard } from "@/components/ui/ContentCard";
-import { cn, isAndroid } from "@/lib/utils";
+import { cn, isPhone } from "@/lib/utils";
 
 export interface NavCard {
   to: PageId;
@@ -21,7 +21,7 @@ const retheme =
   "[&>a>span:first-child]:bg-primary [&>a>span:last-child]:text-primary dark:[&>a>span:last-child]:text-primary";
 
 // A phone's cards are tiles.
-const phone = isAndroid ? "[&>a]:rounded-3xl dark:[&>a]:rounded-3xl " : "";
+const phone = isPhone ? "[&>a]:rounded-3xl dark:[&>a]:rounded-3xl " : "";
 
 export function NavCards({ cards, go, className }: { cards: NavCard[]; go: (page: PageId) => void; className?: string }) {
   return (

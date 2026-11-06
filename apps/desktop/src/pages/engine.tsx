@@ -11,7 +11,7 @@ import { deleteModel, downloadModel, useModels } from "@/lib/models";
 import { languages, providerLabel, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import type { SttApi } from "@/lib/tauri";
-import { cn, formatBytes, isAndroid } from "@/lib/utils";
+import { cn, formatBytes, isPhone } from "@/lib/utils";
 
 function LocalModels() {
   const { settings, update } = useSettings();
@@ -93,7 +93,7 @@ function CloudProvider() {
           label="Provider"
           value={preset.id}
           onChange={choosePreset}
-          options={sttPresets.filter((p) => !isAndroid || p.id !== "ollama").map((p) => ({ value: p.id, label: p.label, icon: <ProviderLogo id={p.id} /> }))}
+          options={sttPresets.filter((p) => !isPhone || p.id !== "ollama").map((p) => ({ value: p.id, label: p.label, icon: <ProviderLogo id={p.id} /> }))}
         />
       </Row>
       <Row label="Model">
@@ -196,9 +196,9 @@ export function EnginePage({ go }: { go: (page: PageId) => void }) {
 
   return (
     <div className="space-y-6">
-      <SettingsHero title="Speech engine" description={isAndroid ? "Where your speech becomes text. On a phone, that's a cloud service." : "Where your speech becomes text: privately on this computer, or with a cloud service."} mood="transcribing" />
+      <SettingsHero title="Speech engine" description={isPhone ? "Where your speech becomes text. On a phone, that's a cloud service." : "Where your speech becomes text: privately on this computer, or with a cloud service."} mood="transcribing" />
 
-      {!isAndroid && <div role="radiogroup" aria-label="Speech engine" className="grid gap-3 @md:grid-cols-2">
+      {!isPhone && <div role="radiogroup" aria-label="Speech engine" className="grid gap-3 @md:grid-cols-2">
         <EngineChoice
           selected={settings.engine === "local"}
           icon={Cpu}

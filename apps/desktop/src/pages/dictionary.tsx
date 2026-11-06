@@ -10,7 +10,7 @@ import { useSettings } from "@/lib/settings";
 import { useHistory } from "@/lib/stats";
 import type { HistoryEntry, Replacement } from "@/lib/tauri";
 import { useDockAction } from "@/lib/dock";
-import { cn, isAndroid } from "@/lib/utils";
+import { cn, isPhone } from "@/lib/utils";
 
 /** The vocabulary setting is one comma- or newline-separated string. */
 export function parseWords(vocabulary: string): string[] {
@@ -52,7 +52,7 @@ function Words() {
           add();
         }}
       >
-        <Input ref={input} placeholder={isAndroid ? "Add words, split by commas" : "Add a word, or several separated by commas"} value={draft} onChange={(e) => setDraft(e.target.value)} />
+        <Input ref={input} placeholder={isPhone ? "Add words, split by commas" : "Add a word, or several separated by commas"} value={draft} onChange={(e) => setDraft(e.target.value)} />
         <Button type="submit" disabled={!draft.trim()}>
           <Plus /> Add
         </Button>
@@ -76,10 +76,10 @@ function Words() {
                   type="button"
                   title={`Remove ${w}`}
                   aria-label={`Remove ${w}`}
-                  className={cn("rounded-full text-muted-foreground hover:bg-accent hover:text-foreground", isAndroid ? "p-2" : "p-0.5")}
+                  className={cn("rounded-full text-muted-foreground hover:bg-accent hover:text-foreground", isPhone ? "p-2" : "p-0.5")}
                   onClick={() => save(words.filter((x) => x !== w))}
                 >
-                  <X className={isAndroid ? "size-3.5" : "size-3"} />
+                  <X className={isPhone ? "size-3.5" : "size-3"} />
                 </button>
               </motion.span>
             ))}
@@ -192,9 +192,9 @@ export function DictionaryPage() {
   const { settings } = useSettings();
   return (
     <div className="space-y-6">
-      {!isAndroid && <PageHeader title="Dictionary" />}
+      {!isPhone && <PageHeader title="Dictionary" />}
       {/* A phone only explains this until there's something to show. */}
-      {(!isAndroid || !parseWords(settings.vocabulary).length) && <Intro
+      {(!isPhone || !parseWords(settings.vocabulary).length) && <Intro
         title="Teach Yammer your words"
         example={
           <>
@@ -206,7 +206,7 @@ export function DictionaryPage() {
         Add the <span className="font-medium text-foreground">names, company jargon and uncommon terms</span> you use, so they come out right in every
         dictation. They’re also passed to AI cleanup.
       </Intro>}
-      {(!isAndroid || parseWords(settings.vocabulary).length > 0) && <DictionaryCard />}
+      {(!isPhone || parseWords(settings.vocabulary).length > 0) && <DictionaryCard />}
       <Words />
       <Corrections />
     </div>

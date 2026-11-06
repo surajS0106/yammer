@@ -1,7 +1,8 @@
 //! Yammer: hold a hotkey anywhere, speak, and the transcript is pasted
 //! where your cursor is. This crate is the OS shell (hotkey, microphone,
 //! tray, overlay, paste); `voice-core` holds the platform-free logic.
-//! Android has its own shell in `android`, and shares `pipeline` and `commands`.
+//! Android and iOS each have their own shell (`android`, `ios`), and share
+//! `mobile`, `pipeline` and `commands`.
 
 #[cfg(target_os = "android")]
 mod android;
@@ -17,6 +18,10 @@ mod focus;
 mod gnome;
 #[cfg(desktop)]
 mod hotkey;
+#[cfg(target_os = "ios")]
+mod ios;
+#[cfg(mobile)]
+mod mobile;
 #[cfg(desktop)]
 mod mute;
 #[cfg(desktop)]
@@ -41,8 +46,8 @@ mod tray;
 #[cfg(desktop)]
 mod whisper;
 
-#[cfg(target_os = "android")]
-use android::overlay;
+#[cfg(mobile)]
+use mobile::overlay;
 #[cfg(desktop)]
 use tauri::{Manager, WindowEvent};
 #[cfg(desktop)]
@@ -55,6 +60,12 @@ use crate::dictation::{Dictation, Input, Mode};
 #[tauri::mobile_entry_point]
 pub fn run() {
     android::run();
+}
+
+#[cfg(target_os = "ios")]
+#[tauri::mobile_entry_point]
+pub fn run() {
+    ios::run();
 }
 
 #[cfg(desktop)]

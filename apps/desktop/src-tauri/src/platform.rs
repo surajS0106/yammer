@@ -5,7 +5,7 @@ use serde::Serialize;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Platform {
-    /// "windows", "macos", "linux" or "android".
+    /// "windows", "macos", "linux", "android" or "ios".
     os: &'static str,
     /// Linux on Wayland: no global hotkeys or synthetic keystrokes for apps.
     wayland: bool,
@@ -16,7 +16,7 @@ pub struct Platform {
     ydotool: bool,
     /// macOS: whether the app may send keystrokes (Accessibility). `None` elsewhere.
     accessibility: Option<bool>,
-    /// The app's version from tauri.conf.json, which tauri.android.conf.json overrides, so Android versions on its own.
+    /// The app's version from tauri.conf.json, which tauri.android.conf.json and tauri.ios.conf.json override, so phones version on their own.
     version: String,
 }
 

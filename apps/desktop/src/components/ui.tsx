@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 
 import { ease, spring } from "@/components/motion";
 import { useBackKey } from "@/lib/back";
-import { cn, hotkeyParts, isAndroid } from "@/lib/utils";
+import { cn, hotkeyParts, isPhone } from "@/lib/utils";
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "default" | "outline" | "ghost" | "destructive";
@@ -25,9 +25,9 @@ export function Button({ variant = "default", size = "md", className, ...props }
         variant === "ghost" && "hover:bg-accent hover:text-accent-foreground",
         variant === "destructive" && "bg-destructive/10 text-destructive hover:bg-destructive/20",
         // Fingers need more room than a pointer.
-        size === "sm" && (isAndroid ? "h-10 px-3.5 text-[13px]" : "h-7 px-2.5 text-xs"),
-        size === "md" && (isAndroid ? "h-11 px-4" : "h-8 px-3"),
-        size === "icon" && (isAndroid ? "size-10" : "size-8"),
+        size === "sm" && (isPhone ? "h-10 px-3.5 text-[13px]" : "h-7 px-2.5 text-xs"),
+        size === "md" && (isPhone ? "h-11 px-4" : "h-8 px-3"),
+        size === "icon" && (isPhone ? "size-10" : "size-8"),
         className,
       )}
       {...props}
@@ -57,7 +57,7 @@ export function Switch({
       className={cn(
         "relative inline-flex h-[20px] w-[36px] shrink-0 items-center rounded-full transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
         checked ? "bg-primary" : "bg-input dark:bg-input/80",
-        isAndroid && "after:absolute after:-inset-3",
+        isPhone && "after:absolute after:-inset-3",
       )}
     >
       <span
@@ -74,11 +74,11 @@ const field =
   "w-full max-w-full rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-50 dark:bg-input/30";
 
 export function Input({ className, ...props }: React.ComponentProps<"input">) {
-  return <input className={cn(field, isAndroid ? "h-11 text-base" : "h-8", className)} {...props} />;
+  return <input className={cn(field, isPhone ? "h-11 text-base" : "h-8", className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cn(field, "min-h-20 resize-y py-2 leading-relaxed", isAndroid && "text-base", className)} {...props} />;
+  return <textarea className={cn(field, "min-h-20 resize-y py-2 leading-relaxed", isPhone && "text-base", className)} {...props} />;
 }
 
 /**
@@ -300,7 +300,7 @@ export function Select<T extends string | number>({
 
   React.useEffect(() => {
     // A phone's sheet has its own backdrop to tap.
-    if (!open || isAndroid) return;
+    if (!open || isPhone) return;
     const onDown = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -356,7 +356,7 @@ export function Select<T extends string | number>({
         className={cn(
           field,
           "flex cursor-pointer items-center gap-2 pr-2 text-left hover:bg-accent/60 disabled:cursor-default disabled:hover:bg-transparent",
-          isAndroid ? "h-11" : "h-8",
+          isPhone ? "h-11" : "h-8",
           open && "border-ring ring-3 ring-ring/30",
         )}
       >
@@ -371,7 +371,7 @@ export function Select<T extends string | number>({
         </motion.span>
       </button>
 
-      {isAndroid && (
+      {isPhone && (
         <Sheet open={open} onClose={() => setOpen(false)} title={label}>
           <ul ref={listRef} id={`${uid}-list`} role="listbox" aria-label={label}>
             {options.map((o, i) => (
@@ -395,7 +395,7 @@ export function Select<T extends string | number>({
       )}
 
       <AnimatePresence>
-        {open && !isAndroid && (
+        {open && !isPhone && (
           <motion.div
             initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -430,7 +430,7 @@ export function Select<T extends string | number>({
                   transition={{ delay: reduce ? 0 : Math.min(i, 10) * 0.015, duration: 0.15 }}
                   onMouseEnter={() => !o.disabled && setHighlighted(i)}
                   onClick={() => choose(i)}
-                  className={cn("relative flex cursor-pointer items-center gap-2 rounded-md px-2 text-sm", isAndroid ? "py-3" : "py-1.5", o.disabled && "cursor-default opacity-50")}
+                  className={cn("relative flex cursor-pointer items-center gap-2 rounded-md px-2 text-sm", isPhone ? "py-3" : "py-1.5", o.disabled && "cursor-default opacity-50")}
                 >
                   {/* The highlight slides in from the row it left, so it sits under every row's content (z-0 vs z-10),
                       not just its own; otherwise moving down, a later row's highlight covers the earlier row's text. */}
@@ -495,7 +495,7 @@ export function CommitInput({
 }
 
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-xl border bg-card text-card-foreground", isAndroid && "rounded-3xl", className)} {...props} />;
+  return <div className={cn("rounded-xl border bg-card text-card-foreground", isPhone && "rounded-3xl", className)} {...props} />;
 }
 
 /** A settings row: label and description on the left, the control on the right (or below, when stacked or out of room). */
@@ -597,7 +597,7 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           className={cn(
             "relative shrink-0 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-            isAndroid ? "py-2" : "py-1",
+            isPhone ? "py-2" : "py-1",
             fill && "flex-1",
             value === o.value ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           )}

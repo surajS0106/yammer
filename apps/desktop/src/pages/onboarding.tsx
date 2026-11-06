@@ -9,7 +9,7 @@ import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 
 import { PlatformContext, type PageId } from "@/App";
-import { AndroidPermissions, AndroidTry } from "@/components/android-panel";
+import { PhonePermissions, PhoneTry } from "@/components/phone-panel";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
 import { KeyField } from "@/components/key-field";
 import { smooth } from "@/components/motion";
@@ -21,7 +21,7 @@ import { languages, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import { api, on, type Engine, type OverlayState } from "@/lib/tauri";
 import { useBackKey } from "@/lib/back";
-import { cn, formatBytes, isAndroid, isMac } from "@/lib/utils";
+import { cn, formatBytes, isIOS, isMac, isPhone } from "@/lib/utils";
 
 type StepId = "welcome" | "engine" | "connect" | "permissions" | "hotkey" | "try";
 
@@ -62,7 +62,7 @@ export function Onboarding({ onDone }: { onDone: (page?: PageId) => void }) {
   const [dir, setDir] = React.useState(1);
 
   // A phone has no hotkey or on-device engine to choose.
-  const steps: StepId[] = isAndroid ? ["welcome", "connect", "permissions", "try"] : [
+  const steps: StepId[] = isPhone ? ["welcome", "connect", "permissions", "try"] : [
     "welcome",
     "engine",
     "connect",
@@ -92,7 +92,7 @@ export function Onboarding({ onDone }: { onDone: (page?: PageId) => void }) {
         if (progress !== undefined) return { label: "Continue while it downloads" };
         return { label: "Continue", disabled: true };
       case "permissions":
-        return { label: !isAndroid && platform?.accessibility === false ? "Skip for now" : "Continue" };
+        return { label: !isPhone && platform?.accessibility === false ? "Skip for now" : "Continue" };
       case "try":
         return { label: "Finish" };
       default:
@@ -170,7 +170,7 @@ function StepHeader({ title, description }: { title: string; description?: React
 function WelcomeStep({ steps }: { steps: StepId[] }) {
   const coming: Record<Exclude<StepId, "welcome">, [React.ElementType, string]> = {
     engine: [Cpu, "Choose how your speech becomes text"],
-    connect: [PlugZap, isAndroid ? "Add your speech service’s API key" : "Download a model or add an API key"],
+    connect: [PlugZap, isPhone ? "Add your speech service’s API key" : "Download a model or add an API key"],
     permissions: [ShieldCheck, "Let Yammer hear you and paste for you"],
     hotkey: [Keyboard, "Learn your hotkey"],
     try: [Mic, "Try your first dictation"],
@@ -181,7 +181,7 @@ function WelcomeStep({ steps }: { steps: StepId[] }) {
       <span className="-mt-2 h-3 w-28 rounded-[50%] bg-foreground/10 dark:bg-foreground/15" />
       <h1 className="mt-5 text-3xl font-semibold tracking-tight">Welcome to Yammer</h1>
       <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-pretty text-muted-foreground">
-        Talk into any app, and Yammer types what you said where your cursor is. Setup takes about two minutes.
+        {isIOS ? "Talk, and Yammer copies what you said, ready to paste into any app. Setup takes about two minutes." : "Talk into any app, and Yammer types what you said where your cursor is. Setup takes about two minutes."}
       </p>
       <Card className="mt-6 w-full divide-y text-left">
         {steps.slice(1).map((s, i) => {
@@ -351,9 +351,9 @@ function CloudSetup() {
   const cloud = settings.cloud;
   const preset = sttPresets.find((p) => p.id === cloud.preset) ?? sttPresets[sttPresets.length - 1];
   const name = shortLabel(preset.label);
-  const recommended = isAndroid ? "sarvam" : indianLanguages.has(settings.language) ? "sarvam" : "groq";
+  const recommended = isPhone ? "sarvam" : indianLanguages.has(settings.language) ? "sarvam" : "groq";
   // A phone can't reach a local server, and four tabs is the most that fit; Custom is in Settings.
-  const offered = isAndroid ? sttPresets.filter((p) => p.id !== "ollama" && p.id !== "custom") : sttPresets;
+  const offered = isPhone ? sttPresets.filter((p) => p.id !== "ollama" && p.id !== "custom") : sttPresets;
 
   const choose = (id: string) => {
     const p = sttPresets.find((x) => x.id === id)!;
@@ -431,11 +431,11 @@ function KeyStep({ n, done, title, detail, stacked, children }: { n: number; don
 function PermissionsStep() {
   const platform = React.useContext(PlatformContext);
 
-  if (isAndroid) {
+  if (isPhone) {
     return (
       <div>
-        <StepHeader title="A few permissions" description="Android asks before any app can use the microphone or show over other apps." />
-        <AndroidPermissions />
+        <StepHeader title="A few permissions" description={isIOS ? "iOS asks before any app can use the microphone." : "Android asks before any app can use the microphone or show over other apps."} />
+        <PhonePermissions />
       </div>
     );
   }
@@ -590,8 +590,8 @@ function TryStep({ onCleanup }: { onCleanup: () => void }) {
         <h1 className="mt-4 text-2xl font-semibold tracking-tight">{heard ? "You’re all set" : "Try it out"}</h1>
         <p className="mt-1 flex flex-wrap items-center justify-center gap-1.5 text-sm text-muted-foreground">
           {heard ? (
-            "That’s all there is to it. It works the same in any app."
-          ) : isAndroid ? (
+            isIOS ? "That’s all there is to it. Your words are copied, ready to paste into any app." : "That’s all there is to it. It works the same in any app."
+          ) : isPhone ? (
             "Tap Dictate, say something, then tap Finish."
           ) : (
             <>
@@ -609,10 +609,10 @@ function TryStep({ onCleanup }: { onCleanup: () => void }) {
         </Notice>
       )}
 
-      {isAndroid && <AndroidTry />}
-      {isAndroid && heard && <Card className="p-4 text-sm leading-relaxed">{heard}</Card>}
+      {isPhone && <PhoneTry />}
+      {isPhone && heard && <Card className="p-4 text-sm leading-relaxed">{heard}</Card>}
 
-      {!isAndroid && <div>
+      {!isPhone && <div>
         <div className="flex items-start gap-2.5 rounded-lg bg-card px-3 py-2 ring-1 ring-primary/30 transition-shadow focus-within:ring-2 focus-within:ring-primary/60 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--brand)_12%,transparent)]">
           <Mic className="mt-1.5 size-4 shrink-0 text-primary" />
           <Textarea
@@ -627,10 +627,10 @@ function TryStep({ onCleanup }: { onCleanup: () => void }) {
           {live}
         </p>
       </div>}
-      {isAndroid && live && <p aria-live="polite" className="text-center text-xs text-muted-foreground">{live}</p>}
+      {isPhone && live && <p aria-live="polite" className="text-center text-xs text-muted-foreground">{live}</p>}
 
       <Card className="divide-y">
-        {!isAndroid && <div className="flex items-center gap-3 px-4 py-3">
+        {!isPhone && <div className="flex items-center gap-3 px-4 py-3">
           <Keyboard className="size-4 shrink-0 text-muted-foreground" />
           <p className="text-xs leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">Yammer keeps running in the {isMac ? "menu bar" : "tray"}</span> when you close this window, so the

@@ -6,7 +6,7 @@ import * as React from "react";
 
 import { Sushi, type SushiMood } from "@/components/sushi";
 import { Card } from "@/components/ui";
-import { isAndroid } from "@/lib/utils";
+import { isPhone } from "@/lib/utils";
 
 export function SettingsHero({
   title,
@@ -21,7 +21,7 @@ export function SettingsHero({
   children?: React.ReactNode;
 }) {
   // A phone's tabs already name the page; only what's set up right now is worth the room.
-  if (isAndroid) return children ? <div className="flex flex-wrap items-center gap-1.5">{children}</div> : null;
+  if (isPhone) return children ? <div className="flex flex-wrap items-center gap-1.5">{children}</div> : null;
   return (
     <Card className="relative overflow-hidden border-primary/20 bg-primary/[0.05] dark:bg-primary/[0.08]">
       {/* A coral wash from the top left. */}

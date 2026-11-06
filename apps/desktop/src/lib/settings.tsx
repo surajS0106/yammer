@@ -7,7 +7,7 @@ import * as React from "react";
 import { smooth } from "@/components/motion";
 import { api, errorMessage, on, type SecretName, type Settings } from "./tauri";
 import { setTheme } from "./theme";
-import { isAndroid } from "./utils";
+import { isAndroid, isPhone } from "./utils";
 
 interface Ctx {
   settings: Settings;
@@ -96,7 +96,7 @@ export function SettingsProvider({ initial, children }: { initial: Settings; chi
             transition={smooth}
             className={
               // On a phone, above the dock.
-              `fixed right-4 ${isAndroid ? "bottom-24" : "bottom-4"} z-50 max-w-sm rounded-lg border px-3.5 py-2.5 text-sm wrap-anywhere shadow-lg ` +
+              `fixed right-4 ${isPhone ? "bottom-24" : "bottom-4"} z-50 max-w-sm rounded-lg border px-3.5 py-2.5 text-sm wrap-anywhere shadow-lg ` +
               (toastState.tone === "error" ? "border-destructive/30 bg-card text-destructive" : "bg-card")
             }
           >

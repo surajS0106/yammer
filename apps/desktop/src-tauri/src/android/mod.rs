@@ -6,9 +6,7 @@
 //! calls in over JNI (`YammerNative.kt`) rather than through the Tauri plugin,
 //! which needs the activity. The plugin is only for the settings UI.
 
-pub mod overlay;
-
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use jni::objects::{JObject, JShortArray};
 use jni::sys::{jfloat, jint, jstring};
@@ -16,17 +14,13 @@ use jni::JNIEnv;
 use serde::{Deserialize, Serialize};
 use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
 use tauri::{AppHandle, Emitter, Manager, Wry};
-use voice_core::history::Entry;
-use voice_core::settings::{CloudStt, Engine, SttApi};
-use voice_core::{audio, Settings};
+use voice_core::audio;
 
 use crate::error::{AppError, AppResult};
+use crate::mobile::{self, Dictated};
 use crate::overlay::OverlayState;
-use crate::pipeline::{self, Job};
 use crate::state::AppState;
 use crate::{commands, secrets};
-
-const MIN_SPEECH_SAMPLES: usize = voice_core::SAMPLE_RATE as usize * 3 / 10;
 
 static APP: OnceLock<AppHandle> = OnceLock::new();
 
@@ -50,7 +44,7 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             secrets::init(&config_dir);
             let state = AppState::new(config_dir, data_dir)?;
-            cloud_only(&state)?;
+            mobile::cloud_only(&state)?;
             app.manage(state);
             let _ = APP.set(app.handle().clone());
             Ok(())
@@ -85,21 +79,6 @@ pub fn run() {
                 api.prevent_exit();
             }
         });
-}
-
-/// Whisper isn't built for Android, so a phone always uses a cloud engine,
-/// starting with Sarvam. Must match the Sarvam preset in `lib/presets.ts`.
-fn cloud_only(state: &AppState) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap();
-    if settings.engine == Engine::Local {
-        settings.engine = Engine::Cloud;
-        if !settings.onboarded {
-            settings.cloud =
-                CloudStt { preset: "sarvam".into(), base_url: "https://api.sarvam.ai".into(), model: "saaras:v4".into(), api: SttApi::Sarvam };
-        }
-        settings.save(&state.settings_path)?;
-    }
-    Ok(())
 }
 
 // ---- Commands for the settings UI ----
@@ -170,47 +149,6 @@ async fn android_share(native: tauri::State<'_, Native>, name: String, contents:
 
 // ---- Called by the Kotlin service, on its own threads (YammerNative.kt) ----
 
-/// How a recording ended, as JSON for the service.
-#[derive(Serialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
-enum Dictated {
-    Text { text: String, warning: Option<String> },
-    Nothing,
-    Failed { error: String },
-}
-
-async fn dictate(app: &AppHandle, samples: Vec<f32>) -> Dictated {
-    if samples.len() < MIN_SPEECH_SAMPLES || audio::is_silent(&samples) {
-        return Dictated::Nothing;
-    }
-    let settings = app.state::<AppState>().settings();
-    let duration_ms = audio::duration_ms(samples.len());
-    let samples: Arc<[f32]> = samples.into();
-    let job = Job::dictate(&settings, None);
-    crate::overlay::show(app, OverlayState::Transcribing { engine: settings.engine_label() });
-    match pipeline::make(app, &settings, samples.clone(), &job, duration_ms, true).await {
-        Ok(None) => Dictated::Nothing,
-        Ok(Some(made)) => {
-            let text = delivered_text(&settings, &made.entry);
-            pipeline::save(app, made.entry, &samples);
-            Dictated::Text { text, warning: made.warning }
-        }
-        Err(e) => {
-            let error = e.to_string();
-            pipeline::save(app, Entry { error: Some(error.clone()), ..job.entry(&settings, duration_ms) }, &samples);
-            Dictated::Failed { error }
-        }
-    }
-}
-
-fn delivered_text(settings: &Settings, entry: &Entry) -> String {
-    if settings.trailing_space {
-        format!("{} ", entry.text)
-    } else {
-        entry.text.clone()
-    }
-}
-
 /// `pcm` is mono 16-bit at `rate` Hz. Blocks until the text is ready, so call it off the main thread.
 #[no_mangle]
 pub extern "system" fn Java_com_sush_yammer_YammerNative_process<'l>(
@@ -223,7 +161,7 @@ pub extern "system" fn Java_com_sush_yammer_YammerNative_process<'l>(
         (Some(app), Ok(pcm)) => {
             let floats: Vec<f32> = pcm.iter().map(|&s| s as f32 / 32768.0).collect();
             let samples = audio::to_whisper(&floats, 1, rate as u32);
-            let done = tauri::async_runtime::block_on(dictate(app, samples));
+            let done = tauri::async_runtime::block_on(mobile::dictate(app, samples));
             crate::overlay::show(app, OverlayState::Hidden);
             done
         }
