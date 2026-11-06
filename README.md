@@ -26,6 +26,8 @@ On first launch, download a speech model (Base, 148 MB, is recommended) or add a
 
 ### macOS
 
+Builds aren't signed with a developer certificate or notarized yet, so Gatekeeper blocks the first launch. To allow it, go to System Settings → Privacy & Security and choose **Open Anyway**. Releases up to v0.5.0 may instead say to move the app to the Bin; for those, check you downloaded it from the releases page, then run `xattr -dr com.apple.quarantine /Applications/Yammer.app`.
+
 Grant **Microphone** access when asked. Then turn on Yammer under System Settings → Privacy & Security → **Accessibility**, which it needs in order to press ⌘V for you. The app lives in the menu bar.
 
 ### Linux
