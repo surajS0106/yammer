@@ -14,6 +14,19 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Release signing. CI passes the keystore through YAMMER_KEYSTORE* environment variables (release.yml);
+// on a developer machine, key.properties (ignored by git) can hold storeFile, storePassword, keyAlias and
+// keyPassword. With neither, a release build is left unsigned and the debug build is unaffected.
+val keyProperties = Properties().apply {
+    val propFile = rootProject.file("key.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+fun signingValue(env: String, prop: String): String? =
+    System.getenv(env)?.takeIf { it.isNotBlank() } ?: keyProperties.getProperty(prop)
+val releaseStoreFile = signingValue("YAMMER_KEYSTORE_FILE", "storeFile")
+
 android {
     compileSdk = 36
     namespace = "com.sush.yammer"
@@ -25,6 +38,16 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = signingValue("YAMMER_KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("YAMMER_KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("YAMMER_KEY_PASSWORD", "keyPassword")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -40,6 +63,9 @@ android {
             }
         }
         getByName("release") {
+            if (releaseStoreFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             optimization {
                enable = true
             }

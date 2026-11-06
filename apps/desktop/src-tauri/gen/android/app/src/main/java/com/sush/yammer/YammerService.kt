@@ -13,6 +13,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -77,6 +78,9 @@ class YammerService : Service() {
     }
   }
 
+  /** When the current recording began, for the live-update timer. */
+  private var startedAt = 0L
+
   val isRecording: Boolean get() = phase == Phase.RECORDING
 
   val isIdle: Boolean get() = phase == Phase.IDLE
@@ -94,6 +98,7 @@ class YammerService : Service() {
       return
     }
     recorder = rec
+    startedAt = System.currentTimeMillis()
     phase = Phase.RECORDING
     bubble?.setLook(Bubble.Look.LISTENING)
     bubble?.say("Listening… tap to finish")
@@ -130,12 +135,13 @@ class YammerService : Service() {
     updateNotification()
     val json = result.map { JSONObject(it) }.getOrElse {
       bubble?.say(it.message ?: "Something went wrong.", 5000)
+      bubble?.oops()
       return
     }
     when (json.getString("kind")) {
       "text" -> deliver(json.getString("text"), json.optString("warning").takeIf { !json.isNull("warning") })
-      "failed" -> bubble?.say(json.getString("error"), 6000)
-      else -> bubble?.say("Didn't catch that", 2000)
+      "failed" -> { bubble?.say(json.getString("error"), 6000); bubble?.oops() }
+      else -> { bubble?.say("Didn't catch that", 2000); bubble?.oops() }
     }
   }
 
@@ -144,6 +150,7 @@ class YammerService : Service() {
     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("Yammer", text))
     // The clipboard has to reach the target app before it's asked to paste.
+    bubble?.cheer()
     main.postDelayed({
       val pasted = runCatching { YammerAccessibility.paste() }.getOrDefault(false)
       when {
@@ -181,15 +188,24 @@ class YammerService : Service() {
       Phase.RECORDING -> "Listening…" to "Finish"
       Phase.BUSY -> "Transcribing…" to "Dictate"
     }
-    return Notification.Builder(this, CHANNEL)
+    val builder = Notification.Builder(this, CHANNEL)
       .setSmallIcon(R.drawable.ic_notification)
       .setContentTitle(title)
-      .setContentText("The microphone is only on while Sushi is listening.")
+      .setContentText(if (phase == Phase.IDLE) "The microphone is only on while Sushi is listening." else "Tap Sushi again to finish.")
       .setContentIntent(open)
       .setOngoing(true)
       .addAction(Notification.Action.Builder(null, verb, self(ACTION_TOGGLE, 1)).build())
       .addAction(Notification.Action.Builder(null, "Turn off", self(ACTION_STOP, 2)).build())
-      .build()
+    // While listening or transcribing, ask Android to show it as a live update: the status-bar
+    // chip (OnePlus's island, Pixel's "Now bar") with a running timer, like a call or Spotify.
+    if (phase != Phase.IDLE && Build.VERSION.SDK_INT >= 36) {
+      // These are Notification.Builder.setRequestPromotedOngoing and setShortCriticalText, which
+      // the SDK we compile against (36.0) doesn't have yet; the extras are what they set.
+      builder.addExtras(Bundle().apply { putBoolean("android.requestPromotedOngoing", true) })
+      if (phase == Phase.RECORDING) builder.setWhen(startedAt).setShowWhen(true).setUsesChronometer(true)
+      else builder.addExtras(Bundle().apply { putString("android.shortCriticalText", "Typing") })
+    }
+    return builder.build()
   }
 
   companion object {

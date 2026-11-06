@@ -9,7 +9,7 @@ argument-hint: "[audit|internal-test]"
 
 A debug APK is only for the developer's own phone. This takes the app to a build someone else can install, and `audit` (the default) stops after reporting what's still in the way.
 
-**Android has never been released from this repo, so the steps in sections 3 and 4 are untested.** Check them against the current Android and Play documentation, and correct this file when something differs. `release.yml` doesn't build Android, and the desktop updater doesn't cover it.
+**Android has never been released from this repo, so the steps in sections 3 and 4 are untested.** Check them against the current Android and Play documentation, and correct this file when something differs. `release.yml` has an `android` job that attaches a signed arm64 APK to the release once the desktop jobs finish (it needs the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets in the `release` environment, and has never run). The desktop updater doesn't cover Android.
 
 Start every shell command with `. .claude/skills/build-apk/android-env.sh`.
 

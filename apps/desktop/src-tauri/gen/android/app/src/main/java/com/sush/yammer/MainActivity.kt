@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -37,10 +39,22 @@ class MainActivity : TauriActivity() {
     Runtime.getRuntime().exit(0)
   }
 
-  /** Back leaves Yammer running, like Home: there's nothing behind the page, and Sushi should stay. */
+  /**
+   * Back steps through the page's own history first (lib/back.ts keeps one entry per level), and
+   * with none left leaves Yammer running, like Home: Sushi should stay. This runs for the key and
+   * the edge swipe alike (the manifest turns predictive back off), and it never reaches Tauri's own
+   * handler, so it has to do the webview's goBack itself.
+   */
   @Deprecated("Tauri's back handling still calls this")
   override fun onBackPressed() {
-    moveTaskToBack(true)
+    val web = findWebView(window.decorView)
+    if (web != null && web.canGoBack()) web.goBack() else moveTaskToBack(true)
+  }
+
+  private fun findWebView(v: View): WebView? {
+    if (v is WebView) return v
+    if (v is ViewGroup) for (i in 0 until v.childCount) findWebView(v.getChildAt(i))?.let { return it }
+    return null
   }
 
   private companion object {

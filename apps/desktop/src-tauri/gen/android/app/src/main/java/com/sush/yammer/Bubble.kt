@@ -11,10 +11,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -23,10 +23,10 @@ import kotlin.math.sqrt
  * The window can't take focus (FLAG_NOT_FOCUSABLE), so the text box you're typing in keeps it.
  */
 class Bubble(private val context: Context, private val onTap: () -> Unit) {
-  enum class Look(val ring: Int) {
-    IDLE(Color.WHITE),
-    LISTENING(CORAL),
-    BUSY(Color.parseColor("#F5A623")),
+  enum class Look {
+    IDLE,
+    LISTENING,
+    BUSY,
   }
 
   private val windows = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -34,12 +34,7 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
   private val density = context.resources.displayMetrics.density
   private fun dp(n: Int) = (n * density).toInt()
 
-  private val ring = GradientDrawable().apply { shape = GradientDrawable.OVAL }
-  private val icon = ImageView(context).apply {
-    setImageResource(R.drawable.sushi)
-    background = ring
-    setPadding(dp(9), dp(9), dp(9), dp(9))
-    elevation = dp(6).toFloat()
+  private val icon = SushiView(context).apply {
     contentDescription = "Dictate with Yammer"
   }
   private val label = TextView(context).apply {
@@ -57,8 +52,8 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
   private val root = LinearLayout(context).apply {
     orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.CENTER_VERTICAL
-    setPadding(dp(6), dp(6), dp(6), dp(6))
-    addView(icon, LinearLayout.LayoutParams(dp(56), dp(56)))
+    setPadding(dp(4), dp(4), dp(4), dp(4))
+    addView(icon, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
     addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) })
   }
   private val params = WindowManager.LayoutParams(
@@ -69,8 +64,8 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
     PixelFormat.TRANSLUCENT,
   ).apply {
     gravity = Gravity.TOP or Gravity.START
-    x = prefs.getInt("x", 0)
-    y = prefs.getInt("y", context.resources.displayMetrics.heightPixels / 2)
+    x = prefs.getInt("x", 0).coerceIn(0, max(0, context.resources.displayMetrics.widthPixels - dp(110)))
+    y = prefs.getInt("y", context.resources.displayMetrics.heightPixels / 2).coerceIn(0, max(0, context.resources.displayMetrics.heightPixels - dp(130)))
   }
   private var shown = false
   private val hideLabel = Runnable { label.visibility = View.GONE }
@@ -80,7 +75,7 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
     if (shown) return true
     if (!Settings.canDrawOverlays(context)) return false
     setLook(Look.IDLE)
-    icon.setOnTouchListener(dragOrTap())
+    root.setOnTouchListener(dragOrTap())
     windows.addView(root, params)
     shown = true
     return true
@@ -92,17 +87,29 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
   }
 
   fun setLook(look: Look) {
-    ring.setColor(Color.WHITE)
-    ring.setStroke(dp(3), look.ring)
-    if (look != Look.LISTENING) setLevel(0f)
+    icon.removeCallbacks(settle)
+    icon.setMood(when (look) {
+      Look.IDLE -> SushiView.Mood.IDLE
+      Look.LISTENING -> SushiView.Mood.LISTENING
+      Look.BUSY -> SushiView.Mood.TRANSCRIBING
+    })
   }
 
   /** Sushi bounces with your voice, on the same curve as in the app. */
-  fun setLevel(rms: Float) {
-    val scale = 1f + min(1f, sqrt(rms) * 2.4f) * 0.18f
-    icon.scaleX = scale
-    icon.scaleY = scale
+  fun setLevel(rms: Float) = icon.setLevel(rms)
+
+  /** A happy hop and a heart, then back to idle. */
+  fun cheer() = react(SushiView.Mood.DONE)
+
+  /** A shake and a sweat bead, then back to idle. */
+  fun oops() = react(SushiView.Mood.ERROR)
+
+  private fun react(m: SushiView.Mood) {
+    icon.setMood(m)
+    icon.removeCallbacks(settle)
+    icon.postDelayed(settle, 1800)
   }
+  private val settle = Runnable { icon.setMood(SushiView.Mood.IDLE) }
 
   /** A note beside Sushi; it goes away after [ms], or stays if 0. */
   fun say(text: String?, ms: Long = 0) {
@@ -129,19 +136,27 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
           touchX = e.rawX
           touchY = e.rawY
           dragging = false
+          icon.poke()
         }
         MotionEvent.ACTION_MOVE -> {
           val dx = e.rawX - touchX
           val dy = e.rawY - touchY
-          if (!dragging && (abs(dx) > slop || abs(dy) > slop)) dragging = true
+          if (!dragging && (abs(dx) > slop || abs(dy) > slop)) {
+            dragging = true
+            icon.setHeld(true)
+          }
           if (dragging) {
-            params.x = startX + dx.toInt()
-            params.y = startY + dy.toInt()
+            val m = context.resources.displayMetrics
+            params.x = (startX + dx.toInt()).coerceIn(0, max(0, m.widthPixels - dp(110)))
+            params.y = (startY + dy.toInt()).coerceIn(0, max(0, m.heightPixels - dp(130)))
             windows.updateViewLayout(root, params)
           }
         }
-        MotionEvent.ACTION_UP -> {
-          if (dragging) {
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+          icon.setHeld(false)
+          if (e.actionMasked == MotionEvent.ACTION_CANCEL) {
+            // The system took the touch away: neither a tap nor the end of a drag.
+          } else if (dragging) {
             prefs.edit().putInt("x", params.x).putInt("y", params.y).apply()
           } else {
             v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
@@ -151,9 +166,5 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
       }
       return true
     }
-  }
-
-  companion object {
-    private val CORAL = Color.parseColor("#F0654A")
   }
 }
