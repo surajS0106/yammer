@@ -53,7 +53,8 @@ class YammerPlugin(private val activity: Activity) : Plugin(activity) {
         put("overlay", Settings.canDrawOverlays(activity))
         put("accessibility", accessibilityOn())
         put("notifications", Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || granted(Manifest.permission.POST_NOTIFICATIONS))
-        put("running", service != null)
+        // Running only to record a meeting isn't Sushi being on.
+        put("running", service != null && !service.onlyForMeeting)
         put("recording", service?.isRecording == true)
       },
     )
@@ -114,12 +115,30 @@ class YammerPlugin(private val activity: Activity) : Plugin(activity) {
       return
     }
     val service = YammerService.instance
+    // Sushi, which would say so, may be hidden.
+    if (service?.inMeeting == true) {
+      invoke.reject("A meeting is being transcribed. Stop it before dictating.")
+      return
+    }
     if (service != null) {
       activity.runOnUiThread { service.toggle() }
     } else {
       YammerService.startThenToggle(activity)
     }
     invoke.resolve()
+  }
+
+  /** Record a meeting for Rust (`android::meeting_audio`). Resolves once the microphone is open. */
+  @Command
+  fun startMeeting(invoke: Invoke) {
+    if (!granted(Manifest.permission.RECORD_AUDIO)) {
+      invoke.reject("Allow the microphone first.")
+      return
+    }
+    YammerService.forMeeting(activity) { service ->
+      val error = if (service == null) "Yammer's recording service didn't start." else service.startMeeting()
+      if (error == null) invoke.resolve() else invoke.reject(error)
+    }
   }
 
   /** Yammer's theme can differ from the phone's: match the area behind the system bars, and their icons, to the page. */

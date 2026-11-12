@@ -11,7 +11,7 @@ import { computeStats, dayKey, formatCompact, useHistory } from "@/lib/stats";
 import { api, on, type OverlayState } from "@/lib/tauri";
 import { installUpdate, useUpdate } from "@/lib/updater";
 import { useMeetingStatus } from "@/lib/meetings";
-import { cn } from "@/lib/utils";
+import { cn, isAndroid } from "@/lib/utils";
 
 type NavItem = { id: PageId; label: string; icon: React.ElementType };
 
@@ -260,8 +260,11 @@ function MicCard({ streak, todayWords, onClick }: { streak: number; todayWords: 
   );
 }
 
-/** Only there when a newer release is out: one click downloads it, installs it and relaunches Yammer. */
-function UpdateCard({ onNotes }: { onNotes: () => void }) {
+/**
+ * Only there when a newer release is out: one click downloads it, installs it and relaunches Yammer.
+ * On a phone (Home) it opens the APK's download instead, and Android's installer takes it from there.
+ */
+export function UpdateCard({ onNotes }: { onNotes: () => void }) {
   const update = useUpdate();
   if (update.phase === "idle") return null;
 
@@ -273,7 +276,7 @@ function UpdateCard({ onNotes }: { onNotes: () => void }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={SPRING}
-      className="rounded-xl border border-primary/40 bg-primary/8 p-3 text-xs"
+      className={cn("rounded-xl border border-primary/40 bg-primary/8 p-3 text-xs", isAndroid && "rounded-3xl p-4")}
     >
       <div className="flex items-center gap-2 font-medium">
         <CircleArrowUp className="size-4 shrink-0 text-primary" />
@@ -288,7 +291,10 @@ function UpdateCard({ onNotes }: { onNotes: () => void }) {
         type="button"
         onClick={() => void installUpdate()}
         disabled={installing}
-        className="relative mt-2.5 flex w-full items-center justify-center gap-1.5 overflow-hidden rounded-lg bg-primary px-2.5 py-1.5 font-medium text-primary-foreground shadow-sm shadow-primary/30 transition-[filter] outline-none hover:brightness-110 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:hover:brightness-100"
+        className={cn(
+          "relative mt-2.5 flex w-full items-center justify-center gap-1.5 overflow-hidden rounded-lg bg-primary px-2.5 py-1.5 font-medium text-primary-foreground shadow-sm shadow-primary/30 transition-[filter] outline-none hover:brightness-110 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:hover:brightness-100",
+          isAndroid && "min-h-11 rounded-xl",
+        )}
       >
         {pct !== null && (
           <span aria-hidden className="absolute inset-y-0 left-0 bg-white/20 transition-[width]" style={{ width: `${pct}%` }} />
@@ -296,11 +302,19 @@ function UpdateCard({ onNotes }: { onNotes: () => void }) {
         {installing && <LoaderCircle className="relative size-3.5 animate-spin" />}
         <span className="relative">{installing ? (pct !== null ? `Updating… ${pct}%` : "Updating…") : "Upgrade now"}</span>
       </button>
+      {isAndroid && (
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+          It downloads in your browser. Open the download to install it, and your History, notes and keys stay as they are.
+        </p>
+      )}
       {update.notes.length > 0 && (
         <button
           type="button"
           onClick={onNotes}
-          className="mt-1.5 w-full rounded-md py-0.5 text-[11px] text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          className={cn(
+            "mt-1.5 w-full rounded-md py-0.5 text-[11px] text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+            isAndroid && "min-h-11",
+          )}
         >
           What's in it?
         </button>

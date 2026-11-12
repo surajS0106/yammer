@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Who said it. The transcript can't tell the other people on a call apart.
+/// Who said it. The transcript can't tell the other people on a call apart,
+/// nor the people around one microphone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Speaker {
@@ -14,6 +15,20 @@ pub enum Speaker {
     You,
     /// The computer's sound output: everyone else on the call.
     Them,
+    /// One microphone that hears everyone, the user included: a phone on the
+    /// table, which can't hear a call's audio the way a computer can.
+    Room,
+}
+
+impl Speaker {
+    /// How the transcript names them.
+    pub fn label(self) -> &'static str {
+        match self {
+            Speaker::You => "You",
+            Speaker::Them => "Them",
+            Speaker::Room => "Room",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -130,7 +145,7 @@ impl Meeting {
         self.segments
             .iter()
             .filter(|s| !s.text.trim().is_empty())
-            .map(|s| format!("[{}] {}: {}", clock(s.at_ms), if s.speaker == Speaker::You { "You" } else { "Them" }, s.text.trim()))
+            .map(|s| format!("[{}] {}: {}", clock(s.at_ms), s.speaker.label(), s.text.trim()))
             .collect::<Vec<_>>()
             .join("\n")
     }

@@ -28,7 +28,6 @@ fn cleanup_label(settings: &Settings, transform: Option<&Transform>) -> String {
     }
 }
 
-#[cfg(desktop)]
 pub fn join_err(e: impl std::fmt::Display) -> AppError {
     AppError::Invalid(format!("internal error: {e}"))
 }

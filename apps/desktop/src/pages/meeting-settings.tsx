@@ -11,7 +11,7 @@ import { Button, CommitInput, Notice, Row, Section, Select, Switch } from "@/com
 import { hasKey, type ModelOption } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import type { CallAudio, LiveEngine, MeetingSettings, SummaryStyle } from "@/lib/tauri";
-import { isMac } from "@/lib/utils";
+import { isAndroid, isMac } from "@/lib/utils";
 
 const isLinux = navigator.userAgent.includes("Linux");
 
@@ -69,16 +69,30 @@ export function MeetingSettingsPage({ go }: { go: (page: PageId) => void }) {
     <div className="space-y-6">
       <SettingsHero
         title="Meetings"
-        description="Transcribe a call as it happens, both sides of it, and get notes written up when it ends."
+        description={
+          isAndroid
+            ? "Transcribe a meeting in the room as it happens, and get notes written up when it ends."
+            : "Transcribe a call as it happens, both sides of it, and get notes written up when it ends."
+        }
         mood="listening"
       >
-        <HeroChip>{audioOptions.find((o) => o.value === m.audio)?.label}</HeroChip>
+        <HeroChip>{isAndroid ? "Your phone's microphone" : audioOptions.find((o) => o.value === m.audio)?.label}</HeroChip>
         <HeroChip>
           {stream ? <ProviderLogo id={stream.provider} tile={false} className="size-3.5" /> : null}
           {stream ? `${stream.label} · ${model}` : "Your speech engine"}
         </HeroChip>
       </SettingsHero>
 
+      {isAndroid ? (
+        <Section title="Listening">
+          <Row
+            label="Listens with"
+            description="Your phone's microphone hears everyone in the room, you included, so the transcript can't tell people apart. Android doesn't let apps hear a call on the phone itself: for a call, use Yammer on your computer."
+          >
+            <span className="text-sm text-muted-foreground">Microphone</span>
+          </Row>
+        </Section>
+      ) : (
       <Section title="Listening">
         <Row label="Hotkey" description="Press once to start transcribing a meeting, and again to stop.">
           <HotkeyRecorder value={m.hotkey} onChange={(hotkey) => set({ hotkey })} onClear={() => void set({ hotkey: "" })} />
@@ -97,10 +111,15 @@ export function MeetingSettingsPage({ go }: { go: (page: PageId) => void }) {
           <Select className="w-60" label="Listen to" value={m.audio} onChange={(audio) => void set({ audio })} options={audioOptions} />
         </Row>
       </Section>
+      )}
 
       <Section
         title="Live transcription"
-        description="A streaming engine shows the words as they're said. Your speech engine works offline with an on-device model, a sentence or two behind."
+        description={
+          isAndroid
+            ? "A streaming engine shows the words as they're said. Your speech engine writes each one down when there's a pause, a sentence or two behind."
+            : "A streaming engine shows the words as they're said. Your speech engine works offline with an on-device model, a sentence or two behind."
+        }
       >
         <Row label="Engine">
           <Select<LiveEngine>

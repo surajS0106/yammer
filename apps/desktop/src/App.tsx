@@ -48,7 +48,7 @@ const settingsTabs: { value: PageId; label: string }[] = [
   { value: "general", label: "General" },
   { value: "engine", label: "Speech engine" },
   { value: "cleanup", label: "AI cleanup" },
-  // Meetings capture the computer's sound, which only the desktop app can.
+  // A phone's tabs have no room for a fourth: its meeting settings open from the Meetings page.
   ...(isAndroid ? [] : [{ value: "meeting-settings" as PageId, label: "Meetings" }]),
 ];
 const isSettings = (id: PageId) => settingsTabs.some((t) => t.value === id);
@@ -63,9 +63,16 @@ const pageTabs = (id: PageId) => [settingsTabs, ...(isAndroid ? [teachTabs] : []
 
 /** Pages reached from inside another one: they get a back button and a breadcrumb trail up to it. The phone has no tab for Insights or Help. */
 const pageParents: Partial<Record<PageId, PageId>> = isAndroid
-  ? { changelog: "help", help: "general", insights: "home", general: "home", engine: "home", cleanup: "home" }
+  ? { changelog: "help", help: "general", insights: "home", general: "home", engine: "home", cleanup: "home", meetings: "home", "meeting-settings": "meetings" }
   : { changelog: "help" };
-const pageLabels: Partial<Record<PageId, string>> = { home: "Home", general: "Settings", help: "Help", insights: "Insights", changelog: "What's new" };
+const pageLabels: Partial<Record<PageId, string>> = {
+  home: "Home",
+  general: "Settings",
+  help: "Help",
+  insights: "Insights",
+  changelog: "What's new",
+  meetings: "Meetings",
+};
 
 /** The page and its ancestors, outermost first. */
 function trail(page: PageId): PageId[] {
@@ -76,7 +83,7 @@ function trail(page: PageId): PageId[] {
 /** Pages that lay out dashboards or card grids get more room; forms and lists stay at a readable measure. */
 const widePages = new Set<PageId>(["insights", "help", "meetings"]);
 
-const allIds = new Set<string>([...navPageIds, ...settingsTabs.map((t) => t.value), "help", "changelog"]);
+const allIds = new Set<string>([...navPageIds, ...settingsTabs.map((t) => t.value), "meeting-settings", "help", "changelog"]);
 
 /** Known synchronously, so the title bar lays out right on first paint. */
 const isMac = navigator.userAgent.includes("Mac");

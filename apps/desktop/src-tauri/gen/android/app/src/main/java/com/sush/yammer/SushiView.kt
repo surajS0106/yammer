@@ -181,6 +181,8 @@ class SushiView(context: Context) : View(context) {
     if (act != Act.IDLE) wake()
     lastActive = now
     settle()
+    // The entrance fades Sushi in; a mood change mid-entrance drops it, which would leave Sushi invisible.
+    if (from != null) cur[P.O.ordinal] = 1f
     val resumed = from == act
     val segs = ArrayList<Seg>()
     if (from == Act.HELD) {
@@ -566,7 +568,7 @@ class SushiView(context: Context) : View(context) {
     }
   }
 
-  private companion object {
+  companion object {
     const val SPRITE_W = 16
     const val SPRITE_H = 11
     const val SLEEP_AFTER = 45_000L

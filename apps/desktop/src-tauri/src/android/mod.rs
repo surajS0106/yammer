@@ -4,14 +4,15 @@
 //!
 //! The foreground service keeps running after the activity is gone, so it
 //! calls in over JNI (`YammerNative.kt`) rather than through the Tauri plugin,
-//! which needs the activity. The plugin is only for the settings UI.
+//! which needs the activity. The plugin is only for the settings UI, and for
+//! starting a meeting's recording, which only the app's Meetings page does.
 
 pub mod overlay;
 
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use jni::objects::{JObject, JShortArray};
-use jni::sys::{jfloat, jint, jstring};
+use jni::objects::{JByteArray, JObject, JShortArray};
+use jni::sys::{jboolean, jfloat, jint, jstring, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 use serde::{Deserialize, Serialize};
 use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
@@ -21,6 +22,7 @@ use voice_core::settings::{CloudStt, Engine, SttApi};
 use voice_core::{audio, Settings};
 
 use crate::error::{AppError, AppResult};
+use crate::meeting::{self, Meetings};
 use crate::overlay::OverlayState;
 use crate::pipeline::{self, Job};
 use crate::state::AppState;
@@ -49,6 +51,7 @@ pub fn run() {
             let config_dir = app.path().app_config_dir()?;
             let data_dir = app.path().app_data_dir()?;
             secrets::init(&config_dir);
+            app.manage(Meetings::new(data_dir.join("meetings")));
             let state = AppState::new(config_dir, data_dir)?;
             secrets::migrate(&state.settings());
             cloud_only(&state)?;
@@ -72,10 +75,20 @@ pub fn run() {
             commands::scratchpad_save,
             commands::text_rewrite,
             commands::platform_info,
+            commands::meeting_start,
+            commands::meeting_stop,
+            commands::meeting_toggle,
+            commands::meeting_status,
+            commands::meetings_list,
+            commands::meeting_get,
+            commands::meeting_update,
+            commands::meeting_delete,
+            commands::meeting_summarize,
             copy_text,
             android_status,
             android_action,
             android_share,
+            android_update_check,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Yammer")
@@ -90,6 +103,8 @@ pub fn run() {
 
 /// Whisper isn't built for Android, so a phone always uses a cloud engine,
 /// starting with Sarvam. Must match the Sarvam preset in `lib/presets.ts`.
+/// A new install also keeps less than a computer does, since a phone is carried
+/// around and lost: a month of History and the latest 10 recordings. Both are in Settings.
 fn cloud_only(state: &AppState) -> AppResult<()> {
     let mut settings = state.settings.lock().unwrap();
     if settings.engine == Engine::Local {
@@ -97,6 +112,8 @@ fn cloud_only(state: &AppState) -> AppResult<()> {
         if !settings.onboarded {
             settings.cloud =
                 CloudStt { preset: "sarvam".into(), base_url: "https://api.sarvam.ai".into(), model: "saaras:v4".into(), api: SttApi::Sarvam };
+            settings.history_days = 30;
+            settings.keep_recordings = 10;
         }
         settings.save(&state.settings_path)?;
     }
@@ -167,6 +184,30 @@ async fn android_share(native: tauri::State<'_, Native>, name: String, contents:
         .run_mobile_plugin::<serde_json::Value>("shareFile", ShareArgs { name, contents })
         .map(drop)
         .map_err(AppError::invalid)
+}
+
+/// Android releases are `android-v*` on this repo. Must match `plugins.updater` in tauri.conf.json.
+const RELEASES_URL: &str = "https://api.github.com/repos/surajS0106/yammer/releases?per_page=30";
+
+/// A newer Android release than this one, for the "Upgrade now" card. Its APK opens in the browser,
+/// and Android's installer takes it from there; installing it here would need the
+/// install-packages permission, which Play doesn't allow.
+#[tauri::command]
+async fn android_update_check(app: AppHandle, state: tauri::State<'_, AppState>) -> AppResult<Option<voice_core::releases::AndroidRelease>> {
+    let resp = state
+        .http
+        .get(RELEASES_URL)
+        .header("User-Agent", "Yammer")
+        .header("Accept", "application/vnd.github+json")
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(AppError::invalid)?;
+    if !resp.status().is_success() {
+        return Err(AppError::Invalid(format!("GitHub answered HTTP {}", resp.status().as_u16())));
+    }
+    let releases: serde_json::Value = resp.json().await.map_err(AppError::invalid)?;
+    Ok(voice_core::releases::newer_android(&releases, &app.package_info().version.to_string()))
 }
 
 // ---- Called by the Kotlin service, on its own threads (YammerNative.kt) ----
@@ -254,5 +295,82 @@ pub extern "system" fn Java_com_sush_yammer_YammerNative_recording(_env: JNIEnv,
 pub extern "system" fn Java_com_sush_yammer_YammerNative_level(_env: JNIEnv, _this: JObject, rms: jfloat) {
     if let Some(app) = APP.get() {
         let _ = app.emit("level", rms);
+    }
+}
+
+// ---- A meeting's microphone ----
+
+type OnAudio = Box<dyn Fn(Vec<f32>) + Send>;
+type OnLevel = Box<dyn Fn(f32) + Send>;
+
+/// Where `meetingAudio` hands the meeting's audio. `None` tells the service to stop recording.
+static MEETING_SINK: Mutex<Option<(OnAudio, OnLevel)>> = Mutex::new(None);
+
+/// A meeting's microphone, recorded by the Kotlin service (`YammerService.startMeeting`).
+/// Stopping it ends the recording the next time the service hands over audio.
+pub struct MeetingAudio;
+
+impl MeetingAudio {
+    pub fn stop(self) {}
+}
+
+impl Drop for MeetingAudio {
+    fn drop(&mut self) {
+        *MEETING_SINK.lock().unwrap() = None;
+    }
+}
+
+/// Ask the service to record the meeting, starting it if it's off. `on_audio` gets 16 kHz mono
+/// audio about ten times a second, and `on_level` its level, on the service's recording thread.
+/// Blocks until the microphone is open. Only the app's own page starts a meeting, so the activity
+/// the plugin needs is there, and a foreground service may still start.
+pub fn meeting_audio(
+    app: &AppHandle,
+    on_audio: impl Fn(Vec<f32>) + Send + 'static,
+    on_level: impl Fn(f32) + Send + 'static,
+) -> AppResult<MeetingAudio> {
+    *MEETING_SINK.lock().unwrap() = Some((Box::new(on_audio), Box::new(on_level)));
+    let audio = MeetingAudio;
+    app.state::<Native>().0.run_mobile_plugin::<serde_json::Value>("startMeeting", ()).map_err(AppError::invalid)?;
+    Ok(audio)
+}
+
+/// The meeting's microphone audio: mono 16-bit at `rate` Hz. False once the meeting has stopped,
+/// which tells the service to stop recording.
+#[no_mangle]
+pub extern "system" fn Java_com_sush_yammer_YammerNative_meetingAudio<'l>(
+    mut env: JNIEnv<'l>,
+    _this: JObject<'l>,
+    pcm: JShortArray<'l>,
+    rate: jint,
+) -> jboolean {
+    let sink = MEETING_SINK.lock().unwrap();
+    let Some((on_audio, on_level)) = sink.as_ref() else { return JNI_FALSE };
+    if let Ok(pcm) = read_pcm(&mut env, &pcm) {
+        let floats: Vec<f32> = pcm.iter().map(|&s| s as f32 / 32768.0).collect();
+        let samples = audio::to_whisper(&floats, 1, rate as u32);
+        on_level(audio::rms(&samples));
+        on_audio(samples);
+    }
+    JNI_TRUE
+}
+
+/// The notification's Stop button, or the service losing the microphone.
+#[no_mangle]
+pub extern "system" fn Java_com_sush_yammer_YammerNative_meetingStop(_env: JNIEnv, _this: JObject) {
+    if let Some(app) = APP.get() {
+        if meeting::is_live() {
+            meeting::toggle(app);
+        }
+    }
+}
+
+/// The key for the API keys file, unwrapped by the Android Keystore (`Vault.kt`). Called before
+/// Tauri starts, and again by the service; it's the same key each time.
+#[no_mangle]
+pub extern "system" fn Java_com_sush_yammer_YammerNative_unlock<'l>(env: JNIEnv<'l>, _this: JObject<'l>, key: JByteArray<'l>) {
+    match env.convert_byte_array(&key).map(<[u8; 32]>::try_from) {
+        Ok(Ok(key)) => secrets::unlock(key),
+        _ => eprintln!("the keys file's key wasn't 32 bytes"),
     }
 }

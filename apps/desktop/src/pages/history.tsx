@@ -351,7 +351,15 @@ export function HistoryPage() {
             className={isAndroid ? "min-w-0 flex-1" : "w-auto shrink-0"}
             align="start"
             label="Export"
-            title={q ? "Export the dictations that match your search to Downloads" : "Export every dictation to Downloads"}
+            title={
+              isAndroid
+                ? q
+                  ? "Share the dictations that match your search"
+                  : "Share every dictation"
+                : q
+                  ? "Export the dictations that match your search to Downloads"
+                  : "Export every dictation to Downloads"
+            }
             value={null}
             placeholder={isAndroid ? "Share as…" : "Export…"}
             onChange={(format) => void exportAs(format)}

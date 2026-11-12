@@ -17,7 +17,6 @@ mod focus;
 mod gnome;
 #[cfg(desktop)]
 mod hotkey;
-#[cfg(desktop)]
 mod meeting;
 #[cfg(desktop)]
 mod mute;

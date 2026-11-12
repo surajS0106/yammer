@@ -8,6 +8,7 @@ pub mod history;
 pub mod live;
 pub mod meetings;
 pub mod models;
+pub mod releases;
 pub mod scratchpad;
 pub mod settings;
 pub mod text;

@@ -22,9 +22,11 @@ class YammerAccessibility : AccessibilityService() {
 
   override fun onInterrupt() {}
 
-  /** Pastes the clipboard into the focused text box. False if there isn't one. */
+  /** Pastes the clipboard into the focused text box. False if there isn't one, or it's a password field. */
   private fun pasteClipboard(): Boolean {
     val node = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+    // Never type into a password field for anyone: the text is left to paste by hand.
+    if (node.isPassword) return false
     return node.isEditable && node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
   }
 

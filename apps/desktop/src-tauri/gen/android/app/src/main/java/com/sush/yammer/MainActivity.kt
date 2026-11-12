@@ -14,6 +14,8 @@ import androidx.core.view.WindowInsetsCompat
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
+    // Before Tauri starts: its setup reads the API keys.
+    Vault.unlock(this)
     super.onCreate(savedInstanceState)
     if (loaded) restartWhenIdle()
     loaded = true

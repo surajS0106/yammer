@@ -3,7 +3,11 @@
 //!
 //! A meeting captures up to two channels at once: the microphone ("You") and
 //! what the computer plays ("Them"), each with its own `recorder::live`
-//! capture and its own task. A task cuts its audio into turns at pauses
+//! capture and its own task. A phone can't hear another app's call, so on
+//! Android there's one channel, the microphone, hearing everyone ("Room"),
+//! recorded by the Kotlin service (`android::meeting_audio`).
+//!
+//! A task cuts its audio into turns at pauses
 //! (`live::Segmenter`) and either streams each turn to OpenAI Realtime or
 //! Sarvam over a WebSocket, committing it at the pause, or transcribes each
 //! finished turn with the dictation engine. A stream that drops is
@@ -36,12 +40,25 @@ use voice_core::{cleanup, text as fixes, Settings};
 use crate::error::{AppError, AppResult};
 use crate::overlay::{self, OverlayState};
 use crate::pipeline::join_err;
+#[cfg(desktop)]
 use crate::recorder::{self, Source};
+#[cfg(desktop)]
 use crate::sounds::{self, Cue};
 use crate::state::{now_ms, AppState};
-use crate::{pipeline, secrets, tray, whisper};
+use crate::{pipeline, secrets};
+#[cfg(desktop)]
+use crate::{tray, whisper};
 
 type Ws = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// One channel's audio, being captured.
+#[cfg(desktop)]
+type Capture = recorder::Live;
+#[cfg(target_os = "android")]
+type Capture = crate::android::MeetingAudio;
+/// Where a channel's audio comes from: a phone has only its microphone.
+#[cfg(target_os = "android")]
+type Source = ();
 
 /// A meeting is being transcribed. Read without locks by the overlay, tray and dictation.
 static LIVE: AtomicBool = AtomicBool::new(false);
@@ -76,7 +93,7 @@ pub struct Meetings {
 
 struct Live {
     meeting: Arc<Mutex<Meeting>>,
-    captures: Vec<recorder::Live>,
+    captures: Vec<Capture>,
     tasks: Vec<tauri::async_runtime::JoinHandle<()>>,
     saver: tauri::async_runtime::JoinHandle<()>,
     info: LiveInfo,
@@ -203,6 +220,7 @@ impl Meetings {
     }
 
     /// Yammer is quitting mid-meeting: save what there is, ended now.
+    #[cfg_attr(not(desktop), allow(dead_code))]
     pub fn save_on_exit(&self) {
         if let Some(m) = self.active_any() {
             let mut snapshot = m.lock().unwrap().clone();
@@ -227,6 +245,7 @@ pub fn toggle(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let result = if is_live() { stop(&app).await.map(drop) } else { start(&app).await.map(drop) };
         if let Err(e) = result {
+            #[cfg(desktop)]
             if app.state::<AppState>().settings().sounds {
                 sounds::play(Cue::Error);
             }
@@ -244,25 +263,18 @@ pub async fn start(app: &AppHandle) -> AppResult<LiveInfo> {
     let settings = app.state::<AppState>().settings();
     check_engine(app, &settings)?;
 
-    let mic = (Source::Mic(settings.mic_device.clone()), Speaker::You);
-    let system = (Source::System, Speaker::Them);
-    let wanted = match settings.meeting.audio {
-        CallAudio::Both => vec![mic, system],
-        CallAudio::Mic => vec![mic],
-        CallAudio::System => vec![system],
-    };
-
     let id = now_ms();
     let meeting = Arc::new(Mutex::new(Meeting::new(id, settings.meeting_engine_label())));
     let (mut captures, mut tasks, mut speakers) = (Vec::new(), Vec::new(), Vec::new());
     let mut notice = None;
-    for (source, speaker) in wanted {
+    for (source, speaker) in channels(&settings) {
         // Connected before recording, so a refused key stops the meeting before it starts.
         let ws = connect(&settings).await?;
         let (tx, rx) = unbounded_channel::<Vec<f32>>();
-        let level_app = app.clone();
+        let (open_app, level_app) = (app.clone(), app.clone());
         let opened = tauri::async_runtime::spawn_blocking(move || {
-            recorder::live(
+            open(
+                &open_app,
                 source,
                 move |audio| drop(tx.send(audio)),
                 move |level| drop(level_app.emit("meeting-level", LevelEvent { speaker, level })),
@@ -302,6 +314,7 @@ pub async fn start(app: &AppHandle) -> AppResult<LiveInfo> {
     *me.live.lock().unwrap() = Some(Live { meeting, captures, tasks, saver, info: info.clone() });
     LIVE.store(true, Ordering::SeqCst);
 
+    #[cfg(desktop)]
     if settings.sounds {
         sounds::play(Cue::Start);
     }
@@ -309,6 +322,7 @@ pub async fn start(app: &AppHandle) -> AppResult<LiveInfo> {
     if let Some(text) = notice {
         overlay::flash(app, OverlayState::Message { text, error: true }, 6000);
     }
+    #[cfg(desktop)]
     tray::refresh(app);
     emit_status(app);
     Ok(info)
@@ -326,18 +340,18 @@ pub async fn stop(app: &AppHandle) -> AppResult<Option<Meeting>> {
     saver.abort();
 
     let settings = app.state::<AppState>().settings();
+    #[cfg(desktop)]
     if settings.sounds {
         sounds::play(Cue::Stop);
     }
     overlay::set_meeting(app, None);
     overlay::show(app, OverlayState::Transcribing { engine: info.engine.clone() });
+    #[cfg(desktop)]
     tray::refresh(app);
     emit_status(app);
 
     // Stopping the captures closes their channels, which ends each task once it has caught up.
-    tauri::async_runtime::spawn_blocking(move || captures.into_iter().for_each(recorder::Live::stop))
-        .await
-        .map_err(join_err)?;
+    tauri::async_runtime::spawn_blocking(move || captures.into_iter().for_each(Capture::stop)).await.map_err(join_err)?;
     for mut task in tasks {
         if tokio::time::timeout(STOP_WAIT, &mut task).await.is_err() {
             task.abort();
@@ -427,10 +441,40 @@ async fn write_notes(app: &AppHandle, meeting: &Meeting) -> AppResult<(Option<St
     Ok((title, notes, settings.cleanup.label()))
 }
 
+/// What to capture, and who it is in the transcript.
+#[cfg(desktop)]
+fn channels(settings: &Settings) -> Vec<(Source, Speaker)> {
+    let mic = (Source::Mic(settings.mic_device.clone()), Speaker::You);
+    let system = (Source::System, Speaker::Them);
+    match settings.meeting.audio {
+        CallAudio::Both => vec![mic, system],
+        CallAudio::Mic => vec![mic],
+        CallAudio::System => vec![system],
+    }
+}
+
+/// Android doesn't let an app hear another's call, so a phone listens to the room.
+#[cfg(target_os = "android")]
+fn channels(_: &Settings) -> Vec<(Source, Speaker)> {
+    vec![((), Speaker::Room)]
+}
+
+/// Start capturing a channel. Blocks until it's listening, so call it off the async runtime.
+#[cfg(desktop)]
+fn open(_: &AppHandle, source: Source, on_audio: impl Fn(Vec<f32>) + Send + 'static, on_level: impl Fn(f32) + Send + 'static) -> AppResult<Capture> {
+    recorder::live(source, on_audio, on_level)
+}
+
+#[cfg(target_os = "android")]
+fn open(app: &AppHandle, _: Source, on_audio: impl Fn(Vec<f32>) + Send + 'static, on_level: impl Fn(f32) + Send + 'static) -> AppResult<Capture> {
+    crate::android::meeting_audio(app, on_audio, on_level)
+}
+
 /// Refuse to start a meeting that couldn't be transcribed.
-fn check_engine(app: &AppHandle, settings: &Settings) -> AppResult<()> {
+fn check_engine(#[cfg_attr(not(desktop), allow(unused_variables))] app: &AppHandle, settings: &Settings) -> AppResult<()> {
     match settings.meeting.engine {
         LiveEngine::Dictation => match settings.engine {
+            #[cfg(desktop)]
             Engine::Local if !whisper::is_downloaded(&app.state::<AppState>().models_dir, &settings.local_model) => {
                 Err(AppError::Invalid("Download a speech model in Settings → Speech engine, or pick a streaming engine for meetings.".into()))
             }
@@ -557,6 +601,7 @@ fn prefix(speaker: Speaker) -> &'static str {
     match speaker {
         Speaker::You => "you",
         Speaker::Them => "them",
+        Speaker::Room => "room",
     }
 }
 

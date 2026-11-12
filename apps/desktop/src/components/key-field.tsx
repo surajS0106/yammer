@@ -46,7 +46,7 @@ export function KeyField({ name, keyUrl, page }: { name: SecretName; keyUrl?: st
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         {saved ? <Badge tone="brand">Key saved</Badge> : <Badge>No key</Badge>}
         <span>
-          {isAndroid ? "Stored in Yammer’s private storage on this phone." : "Stored in your system keychain, never in a file."}
+          {isAndroid ? "Stored encrypted on this phone, with a key the Android Keystore holds." : "Stored in your system keychain, never in a file."}
           {others.length > 0 && ` Also used for ${others.join(" and ")}.`}
         </span>
         {keyUrl && (

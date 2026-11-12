@@ -103,7 +103,8 @@ export interface Settings {
 }
 
 /** "you" is the microphone; "them" is what the computer plays: everyone else on the call. */
-export type Speaker = "you" | "them";
+/** `room` is a phone's microphone, which hears everyone there, the user included. */
+export type Speaker = "you" | "them" | "room";
 
 export interface Segment {
   id: string;
@@ -220,6 +221,15 @@ export interface Platform {
 /** Keys are saved per provider, so one key serves every feature set to it. Mirrors `KEY_NAMES` in voice-core's settings.rs. */
 export type SecretName = "openai" | "anthropic" | "groq" | "sarvam" | "custom-stt" | "custom-cleanup";
 
+/** A newer Android release than the one running (`voice_core::releases::AndroidRelease`). */
+export interface AndroidRelease {
+  version: string;
+  /** That version's section of CHANGELOG-android.md. */
+  notes: string;
+  /** The APK. */
+  url: string;
+}
+
 export interface AndroidStatus {
   mic: boolean;
   overlay: boolean;
@@ -301,6 +311,8 @@ export const api = {
   androidAction: (action: AndroidAction) => invoke<void>("android_action", { action }),
   /** Opens Android's share sheet with a new file holding `contents`. */
   androidShare: (name: string, contents: string) => invoke<void>("android_share", { name, contents }),
+  /** The newest `android-v*` GitHub release, if it's newer than this app. */
+  androidUpdateCheck: () => invoke<AndroidRelease | null>("android_update_check"),
   autostartGet: () => invoke<boolean>("autostart_get"),
   autostartSet: (enabled: boolean) => invoke<void>("autostart_set", { enabled }),
   openPermissionSettings: (pane: "microphone" | "accessibility") => invoke<void>("open_permission_settings", { pane }),

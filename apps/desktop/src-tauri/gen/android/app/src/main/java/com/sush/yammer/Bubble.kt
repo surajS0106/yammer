@@ -68,6 +68,9 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
     y = prefs.getInt("y", context.resources.displayMetrics.heightPixels / 2).coerceIn(0, max(0, context.resources.displayMetrics.heightPixels - dp(130)))
   }
   private var shown = false
+
+  /** On screen over other apps. */
+  val isShown: Boolean get() = shown
   private val hideLabel = Runnable { label.visibility = View.GONE }
 
   /** False if "draw over other apps" hasn't been allowed. */

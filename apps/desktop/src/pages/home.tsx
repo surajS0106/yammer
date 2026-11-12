@@ -1,15 +1,31 @@
-import { ChartBar as BarChart3, Check, Cloud, Copy, Cpu, DownloadSimple as Download, GearSix, Microphone as Mic, NotePencil as NotebookPen, Plus, Scissors, Sparkle as Sparkles } from "@phosphor-icons/react";
+import {
+  CaretRight,
+  ChartBar as BarChart3,
+  Check,
+  Cloud,
+  Copy,
+  Cpu,
+  DownloadSimple as Download,
+  GearSix,
+  Microphone as Mic,
+  NotePencil as NotebookPen,
+  Plus,
+  Scissors,
+  Sparkle as Sparkles,
+  UsersThree as Users,
+} from "@phosphor-icons/react";
 import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion, type AnimationPlaybackControlsWithThen } from "motion/react";
 import * as React from "react";
 
 import { PlatformContext, type PageId } from "@/App";
 import { AndroidHero } from "@/components/android-panel";
 import { AnimatedList, Collapse, ListRow } from "@/components/motion";
-import { WhatsNewCard } from "@/components/sidebar";
+import { UpdateCard, WhatsNewCard } from "@/components/sidebar";
 import { moodOf, Sushi } from "@/components/sushi";
 import { WeekBento, WeekStats } from "@/components/week-stats";
 import { Button, Card, Hotkey, Kbd, Notice, Progress, Textarea } from "@/components/ui";
 import { useDockAction } from "@/lib/dock";
+import { useMeetingStatus } from "@/lib/meetings";
 import { downloadModel, useModels } from "@/lib/models";
 import { requestNewNote } from "@/pages/scratchpad";
 import { hasKey, providerLabel, sttPresets } from "@/lib/presets";
@@ -471,6 +487,37 @@ function SetupTile({ icon: Icon, label, value, onClick }: { icon: React.ElementT
   );
 }
 
+/** The phone's way into Meetings, which has no tab of its own. Shows when one is being transcribed. */
+function MeetingsTile({ onOpen }: { onOpen: () => void }) {
+  const live = !!useMeetingStatus()?.live;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "col-span-2 flex min-w-0 items-center gap-3 rounded-3xl border bg-card px-4 py-3 text-left outline-none active:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50",
+        live && "border-red-500/30 bg-red-500/[0.04]",
+      )}
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+        <Users className="size-5.5" weight="duotone" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold">Meetings</span>
+        <span className="block truncate text-xs text-muted-foreground">{live ? "Transcribing a meeting now" : "Transcribe a meeting and get notes"}</span>
+      </span>
+      {live ? (
+        <span className="relative flex size-2.5 shrink-0" aria-label="Live">
+          <span className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-60" />
+          <span className="relative size-2.5 rounded-full bg-red-500" />
+        </span>
+      ) : (
+        <CaretRight className="size-4.5 shrink-0 text-muted-foreground" />
+      )}
+    </button>
+  );
+}
+
 /** Home on a phone: a bento grid of tiles rather than the computer's one-screen dashboard. */
 function PhoneHome({
   go,
@@ -524,7 +571,9 @@ function PhoneHome({
         </div>
       </header>
 
+      {/* A newer release to install, or else what the one installed changed. */}
       <div className="col-span-2 empty:hidden">
+        <UpdateCard onNotes={() => go("changelog")} />
         <WhatsNewCard onOpen={() => go("changelog")} />
       </div>
 
@@ -559,6 +608,8 @@ function PhoneHome({
           className="min-h-9 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
       </Card>
+
+      <MeetingsTile onOpen={() => go("meetings")} />
 
       <WeekBento stats={stats} onOpen={() => go("insights")} />
 

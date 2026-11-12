@@ -114,8 +114,19 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
         </Item>
         <Item q="Where is my data?">
           {isAndroid
-            ? "History, settings, Scratchpad notes and API keys stay in Yammer’s private storage on this phone. Your audio goes to your speech service for each dictation, and text only with AI cleanup."
-            : "History, settings and Scratchpad notes stay on this computer. API keys are in your system keychain. Audio leaves the computer only with a cloud speech engine, and text only with AI cleanup."}
+            ? "History, meetings, settings and Scratchpad notes stay in Yammer’s private storage on this phone, and API keys are encrypted there with a key the Android Keystore holds. Your audio goes to your speech service for each dictation and while a meeting is transcribed. Text goes to your AI cleanup service only with AI cleanup, or when a meeting’s notes are written."
+            : "History, meetings, settings and Scratchpad notes stay on this computer. API keys are in your system keychain. Audio leaves the computer only with a cloud speech engine or a streaming meeting engine, and text only with AI cleanup or when a meeting’s notes are written."}
+        </Item>
+        {isAndroid && (
+          <Item q="What does “Paste for you” do?">
+            It’s an Accessibility service. When a dictation finishes, Yammer finds the text box you’re in and pastes into it. It never pastes
+            into password fields, doesn’t read or keep anything else on your screen, and clears the clipboard after pasting. Without it, the
+            words are copied for you to paste.
+          </Item>
+        )}
+        <Item q="Can I transcribe a meeting without telling people?">
+          Tell everyone at the start that you’re transcribing, and stop if anyone objects. Recording people without their consent is against
+          the law in many places.
         </Item>
       </Section>
     </div>

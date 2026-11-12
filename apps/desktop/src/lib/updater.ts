@@ -1,12 +1,18 @@
 // App updates from the GitHub release's latest.json (plugins.updater in tauri.conf.json).
 // Kept outside React, like models.ts, so an install in progress survives a page switch.
+//
+// Android is released separately, as `android-v*` releases, and can't install its own update:
+// the check is `android_update_check`, and "Upgrade now" opens the APK in the browser, whose
+// download Android's installer opens. Updating keeps History, settings and keys, since the APK
+// is signed with the same key.
 
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import * as React from "react";
 
 import { parseNotes, type Release } from "./changelog";
-import { errorMessage } from "./tauri";
+import { api, errorMessage } from "./tauri";
 import { isAndroid } from "./utils";
 
 /** `notes` are the release's changelog section, from the GitHub release body; empty when it has none. */
@@ -31,8 +37,22 @@ function set(next: UpdateState) {
   listeners.forEach((l) => l());
 }
 
+/** On Android, the APK of the release found. */
+let apkUrl: string | null = null;
+
 async function checkForUpdate() {
   if (state.phase === "installing") return;
+  if (isAndroid) {
+    try {
+      const found = await api.androidUpdateCheck();
+      if (!found) return;
+      apkUrl = found.url;
+      set({ phase: "available", version: found.version, notes: parseNotes(found.notes) });
+    } catch {
+      // Offline, or GitHub's rate limit: stay quiet and try again later.
+    }
+    return;
+  }
   try {
     const found = await check();
     if (!found) return;
@@ -45,6 +65,17 @@ async function checkForUpdate() {
 
 /** Downloads and installs the update, then relaunches. On Windows the installer closes Yammer itself. */
 export async function installUpdate() {
+  if (isAndroid) {
+    if (!apkUrl || state.phase === "idle") return;
+    const pending = { version: state.version, notes: state.notes };
+    try {
+      await openUrl(apkUrl);
+      set({ phase: "available", ...pending });
+    } catch (e) {
+      set({ phase: "error", ...pending, message: errorMessage(e) });
+    }
+    return;
+  }
   if (!update || state.phase === "installing") return;
   const pending = { version: update.version, notes: parseNotes(update.body ?? "") };
   let total = 0;
@@ -66,8 +97,8 @@ export async function installUpdate() {
 
 export function useUpdate(): UpdateState {
   React.useEffect(() => {
-    // A dev build would "upgrade" itself into the release build. Android has no updater yet.
-    if (started || import.meta.env.DEV || isAndroid) return;
+    // A dev build would "upgrade" itself into the release build.
+    if (started || import.meta.env.DEV) return;
     started = true;
     void checkForUpdate();
     setInterval(() => void checkForUpdate(), RECHECK_MS);

@@ -75,7 +75,7 @@ export function SettingsProvider({ initial, children }: { initial: Settings; chi
       try {
         await api.secretSet(name, value);
         setSecrets(await api.secretStatus());
-        toast(value.trim() ? (isAndroid ? "Key saved." : "Key saved to your system keychain.") : "Key removed.", "info");
+        toast(value.trim() ? (isAndroid ? "Key saved, encrypted on this phone." : "Key saved to your system keychain.") : "Key removed.", "info");
       } catch (e) {
         toast(errorMessage(e));
       }

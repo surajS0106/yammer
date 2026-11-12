@@ -1,6 +1,7 @@
 // Meetings: start transcribing a call, watch it written down as it happens
 // (you and everyone else, side by side with your own notes), and read the
-// notes written from it once it ends.
+// notes written from it once it ends. A phone can't hear another app's call,
+// so there it transcribes the room: one microphone hearing everyone.
 
 import {
   ArrowClockwise as Rewrite,
@@ -23,10 +24,11 @@ import { PageHeader, type PageId } from "@/App";
 import { Markdown, toggleCheck } from "@/components/markdown";
 import { Badge, Button, Card, CommitInput, EmptyState, Hotkey, Notice, Segmented, Textarea } from "@/components/ui";
 import { useBackKey } from "@/lib/back";
+import { useDockAction } from "@/lib/dock";
 import { useMeetingStatus } from "@/lib/meetings";
 import { useSettings } from "@/lib/settings";
 import { api, errorMessage, on, type Meeting, type MeetingOverview, type MeetingStatus, type Segment, type Speaker as Who } from "@/lib/tauri";
-import { cn } from "@/lib/utils";
+import { cn, isAndroid } from "@/lib/utils";
 
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const dayOf = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" });
@@ -52,7 +54,13 @@ function titleOf(m: { title: string; startedAt: number }): string {
   return m.title.trim() || `Meeting, ${dayOf.format(m.startedAt)} at ${timeOf.format(m.startedAt)}`;
 }
 
-const speakerName = (s: Who) => (s === "you" ? "You" : "Them");
+const speakerName = (s: Who) => ({ you: "You", them: "Them", room: "Room" })[s];
+const speakerSource = (s: Who) => ({ you: "Your microphone", them: "The computer's sound", room: "Your phone's microphone" })[s];
+
+function SpeakerIcon({ speaker, className }: { speaker: Who; className?: string }) {
+  const Icon = { you: Mic, them: Speaker, room: Users }[speaker];
+  return <Icon className={className} weight="fill" />;
+}
 
 /** Ticks every second while `on`, for a running clock. */
 function useNow(active: boolean): number {
@@ -68,7 +76,7 @@ function useNow(active: boolean): number {
 
 /** Each channel's level, smoothed a little so the meter doesn't flicker. */
 function useLevels(active: boolean): Record<Who, number> {
-  const [levels, setLevels] = React.useState<Record<Who, number>>({ you: 0, them: 0 });
+  const [levels, setLevels] = React.useState<Record<Who, number>>({ you: 0, them: 0, room: 0 });
   React.useEffect(() => {
     if (!active) return;
     const unlisten = on.meetingLevel((e) => setLevels((l) => ({ ...l, [e.speaker]: l[e.speaker] * 0.4 + e.level * 0.6 })));
@@ -161,10 +169,10 @@ function Transcript({ segments, live }: { segments: Segment[]; live: boolean }) 
           <span
             className={cn(
               "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full",
-              g.speaker === "you" ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground",
+              g.speaker === "them" ? "bg-muted text-muted-foreground" : "bg-primary/12 text-primary",
             )}
           >
-            {g.speaker === "you" ? <Mic className="size-3.5" weight="fill" /> : <Speaker className="size-3.5" weight="fill" />}
+            <SpeakerIcon speaker={g.speaker} className="size-3.5" />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2 text-xs">
@@ -289,10 +297,17 @@ function MeetingView({ id, status, onBack, go }: { id: number; status: MeetingSt
     if (!confirmDelete) return setConfirmDelete(true);
     api.meetingDelete(id).then(onBack, (e) => toast(errorMessage(e)));
   };
-  const exportIt = () =>
-    api
-      .exportFile(`${titleOf(meeting).replace(/[\\/:*?"<>|]/g, "-")}.md`, markdownExport({ ...meeting, notes }))
-      .then((path) => toast(`Saved to ${path}`, "info"), (e) => toast(errorMessage(e)));
+  const exportIt = async () => {
+    const name = `${titleOf(meeting).replace(/[\\/:*?"<>|]/g, "-")}.md`;
+    const contents = markdownExport({ ...meeting, notes });
+    try {
+      // A phone's files aren't somewhere you go and look, so it's handed to the share sheet.
+      if (isAndroid) await api.androidShare(name, contents);
+      else toast(`Saved to ${await api.exportFile(name, contents)}`, "info");
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  };
 
   if (live || stopping) {
     const speakers = status?.live?.speakers ?? [];
@@ -306,22 +321,22 @@ function MeetingView({ id, status, onBack, go }: { id: number; status: MeetingSt
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             {speakers.map((s) => (
-              <span key={s} className="flex items-center gap-1.5" title={s === "you" ? "Your microphone" : "The computer's sound"}>
-                {s === "you" ? <Mic className="size-3.5" /> : <Speaker className="size-3.5" />}
+              <span key={s} className="flex items-center gap-1.5" title={speakerSource(s)}>
+                <SpeakerIcon speaker={s} className="size-3.5" />
                 {speakerName(s)}
-                <Meter level={levels[s]} className={s === "you" ? "text-primary" : "text-foreground/60"} />
+                <Meter level={levels[s]} className={s === "them" ? "text-foreground/60" : "text-primary"} />
               </span>
             ))}
           </div>
           <span className="font-mono text-lg font-semibold tabular-nums">{clock(now - meeting.startedAt)}</span>
-          <Button variant="destructive" onClick={() => void stop()} disabled={stopping}>
+          <Button variant="destructive" className={cn(isAndroid && "w-full")} onClick={() => void stop()} disabled={stopping}>
             {stopping ? <Loader2 className="animate-spin" /> : <Stop weight="fill" />}
             {stopping ? "Stopping…" : "Stop"}
           </Button>
         </Card>
         {meeting.notice && <Notice tone="warn">{meeting.notice}</Notice>}
         <div className="grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_18rem]">
-          <Card className="h-[60vh] min-h-72 overflow-y-auto p-4">
+          <Card className={cn("min-h-72 overflow-y-auto p-4", isAndroid ? "h-[50vh] rounded-3xl" : "h-[60vh]")}>
             <Transcript segments={meeting.segments} live />
           </Card>
           <div className="flex flex-col gap-2">
@@ -352,7 +367,7 @@ function MeetingView({ id, status, onBack, go }: { id: number; status: MeetingSt
         <Button size="icon" variant="ghost" title="Copy" disabled={!copyText.trim()} onClick={() => void api.copyText(copyText).then(() => toast("Copied.", "info"))}>
           <Copy />
         </Button>
-        <Button size="icon" variant="ghost" title="Export as Markdown" onClick={() => void exportIt()}>
+        <Button size="icon" variant="ghost" title={isAndroid ? "Share as Markdown" : "Export as Markdown"} onClick={() => void exportIt()}>
           <Download />
         </Button>
         <Button size={confirmDelete ? "sm" : "icon"} variant={confirmDelete ? "destructive" : "ghost"} title="Delete meeting" onClick={remove}>
@@ -455,6 +470,7 @@ export function MeetingsPage({ go }: { go: (page: PageId) => void }) {
   useBackKey(open !== null ? 1 : 0, () => setOpen(null));
 
   const start = async () => {
+    if (starting) return;
     setStarting(true);
     try {
       const started = await api.meetingStart();
@@ -465,6 +481,14 @@ export function MeetingsPage({ go }: { go: (page: PageId) => void }) {
       setStarting(false);
     }
   };
+  // The phone's round button starts and stops a meeting here, rather than dictating into one.
+  useDockAction(
+    !isAndroid || !status
+      ? null
+      : live
+        ? { label: "Stop the meeting", icon: Stop, run: () => void api.meetingStop().catch((e) => toast(errorMessage(e))) }
+        : { label: "Start transcribing", icon: RecordIcon, run: () => void start() },
+  );
 
   if (open !== null) {
     return (
@@ -508,18 +532,26 @@ export function MeetingsPage({ go }: { go: (page: PageId) => void }) {
           <div className="relative space-y-3">
             <div className="flex items-center gap-2">
               <Users className="size-5 text-primary" weight="duotone" />
-              <h2 className="text-base font-semibold tracking-tight">Transcribe a call as it happens</h2>
+              <h2 className="text-base font-semibold tracking-tight">{isAndroid ? "Transcribe a meeting as it happens" : "Transcribe a call as it happens"}</h2>
             </div>
-            <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
-              Start before or during a Teams, Zoom or Meet call. Yammer writes down what you say and what everyone else says, live, and turns it into
-              notes when you stop. Jot your own notes alongside: the write-up builds on them.
-            </p>
+            {isAndroid ? (
+              <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+                Put your phone on the table and start when the meeting does. Yammer writes down what's said in the room as it's said, and turns it into
+                notes when you stop. Jot your own notes alongside: the write-up builds on them. Let everyone know you're transcribing. Android doesn't let
+                apps hear a call on the phone itself, so for a call, use Yammer on your computer.
+              </p>
+            ) : (
+              <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+                Start before or during a Teams, Zoom or Meet call. Yammer writes down what you say and what everyone else says, live, and turns it into
+                notes when you stop. Jot your own notes alongside: the write-up builds on them.
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Button onClick={() => void start()} disabled={starting}>
                 {starting ? <Loader2 className="animate-spin" /> : <RecordIcon weight="fill" className="text-red-300" />}
                 {starting ? "Starting…" : "Start transcribing"}
               </Button>
-              {m.hotkey && (
+              {m.hotkey && !isAndroid && (
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   or press <Hotkey accelerator={m.hotkey} />
                 </span>
@@ -552,7 +584,7 @@ export function MeetingsPage({ go }: { go: (page: PageId) => void }) {
           </Card>
         ) : list ? (
           <EmptyState icon={Users} title="No meetings yet">
-            Each meeting you transcribe is kept here on this computer, with its transcript and notes.
+            Each meeting you transcribe is kept here on this {isAndroid ? "phone" : "computer"}, with its transcript and notes.
           </EmptyState>
         ) : null}
       </section>

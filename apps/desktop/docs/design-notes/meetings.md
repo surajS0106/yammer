@@ -1,8 +1,16 @@
 # Meetings (live call transcription and notes) — Design Notes
 
-Last updated: 2026-11-12
+Last updated: 2026-11-13
 
 ## What changed
+
+### 2026-11-13 (Android)
+- Meetings run on Android. `meeting.rs` is shared; the desktop-only parts (cpal capture, sounds, tray, the whisper model check) are `cfg(desktop)`, and `channels`/`open` pick the capture per platform.
+- A phone records one channel, the microphone, tagged with the new `Speaker::Room` ("Room" in the transcript). The notes prompt says Room is one microphone that heard everyone, the reader included (`crates/voice-core/src/meetings.rs`, `cleanup.rs`).
+- Kotlin records it: `LiveRecorder` (`Recorder.kt`) hands each 100 ms to `YammerNative.meetingAudio`, which returns false once Rust has stopped the meeting. Rust starts it through the plugin's `startMeeting`, which brings up `YammerService` without Sushi if it was off (`forMeeting`, `onlyForMeeting`) and resolves once the microphone is open. The notification shows a timer and a Stop button (`meetingStop`). Losing the microphone, or the service going, stops the meeting so what was heard is saved.
+- Dictation is refused while a meeting runs, from Sushi and from the dock.
+- `tokio-tungstenite` uses rustls with webpki roots on Android, like reqwest, so the streaming engines work there.
+- The phone opens Meetings from a tile on Home, and Meeting settings from the Meetings page. The page's dock button starts and stops a meeting. Exports go to the share sheet.
 
 ### 2026-11-12
 - New Meetings feature: transcribe a call live and write notes from it when it ends (`src-tauri/src/meeting.rs`, `src/pages/meetings.tsx`).
@@ -28,6 +36,8 @@ Last updated: 2026-11-12
   - A small Markdown renderer whose action-item checkboxes can be ticked (`src/components/markdown.tsx`).
 
 ## Why
+
+Android doesn't let one app record another's call. Playback capture excludes voice-call audio, and a call app holding the microphone silences other recorders. So the phone version is for meetings in a room, where the one microphone hears everyone. Tagging that "You" would make the notes credit the user with everything said, so it gets its own label. The microphone stays in Kotlin, as for dictation, because the foreground service is what keeps microphone access with the app in the background. Audio goes to Rust as it's heard, and the return value doubles as the stop signal. That way Rust never has to call into Kotlin with the activity gone, which the Tauri plugin can't do. Starting goes through the plugin anyway: only the app's own page starts a meeting, and Android 14 only lets a microphone service start while the app is on screen.
 
 People asked for notes from Teams calls, where most of what matters is said by the other side. The microphone alone only hears the user, so the computer's output is captured too. Each side is kept as its own channel rather than mixed. That labels who spoke, costs nothing extra, and stays accurate when people talk over each other. The trade-off is echo. With laptop speakers, the mic also hears the call, and those lines appear twice. The settings tell the user to wear headphones rather than try echo cancellation that could drop their own speech.
 
