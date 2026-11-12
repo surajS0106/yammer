@@ -13,7 +13,8 @@ interface Ctx {
   settings: Settings;
   /** Apply a change and save it. Resolves false (and shows the error) if Rust rejected it. */
   update: (change: Partial<Settings> | ((s: Settings) => Settings)) => Promise<boolean>;
-  secrets: Record<SecretName, boolean>;
+  /** Which keys are saved. Look one up with `keyName` in `lib/presets.ts`. */
+  secrets: Partial<Record<SecretName, boolean>>;
   setSecret: (name: SecretName, value: string) => Promise<void>;
   toast: (message: string, tone?: "error" | "info") => void;
 }
@@ -28,7 +29,7 @@ export function useSettings(): Ctx {
 
 export function SettingsProvider({ initial, children }: { initial: Settings; children: React.ReactNode }) {
   const [settings, setSettings] = React.useState(initial);
-  const [secrets, setSecrets] = React.useState<Record<SecretName, boolean>>({ stt: false, cleanup: false });
+  const [secrets, setSecrets] = React.useState<Partial<Record<SecretName, boolean>>>({});
   const [toastState, setToast] = React.useState<{ message: string; tone: "error" | "info"; id: number } | null>(null);
   const latest = React.useRef(settings);
   latest.current = settings;

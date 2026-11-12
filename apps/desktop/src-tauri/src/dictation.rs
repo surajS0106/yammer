@@ -26,7 +26,7 @@ use crate::pipeline::{join_err, make, redo, save, Job, Made};
 use crate::recorder::{self, Recording};
 use crate::sounds::{self, Cue};
 use crate::state::AppState;
-use crate::{focus, hotkey, mute};
+use crate::{focus, hotkey, meeting, mute};
 
 const TAP: Duration = Duration::from_millis(300);
 const MIN_SPEECH_SAMPLES: usize = voice_core::SAMPLE_RATE as usize * 3 / 10;
@@ -219,7 +219,8 @@ impl Controller {
         if settings.sounds {
             sounds::play(Cue::Start);
         }
-        if settings.mute_audio {
+        // Muting would silence the call being transcribed.
+        if settings.mute_audio && !meeting::is_live() {
             mute::mute_after(Duration::from_millis(if settings.sounds { CUE_MS } else { 0 }));
         }
         self.session += 1;

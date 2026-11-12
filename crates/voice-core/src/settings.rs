@@ -59,6 +59,105 @@ pub struct Settings {
     pub onboarded: bool,
     /// The newest version whose "What's new" the user has seen; empty before the first.
     pub seen_changelog: String,
+    /// Live transcription of calls and meetings, and the notes made from them.
+    pub meeting: MeetingSettings,
+}
+
+/// What a meeting transcript listens to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum CallAudio {
+    /// The microphone ("You") and the computer's sound output ("Them").
+    #[default]
+    Both,
+    Mic,
+    /// Only the sound output: a call, webinar or video you're listening to.
+    System,
+}
+
+/// What turns a meeting's audio into text as it happens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum LiveEngine {
+    /// Cut at pauses, and each piece transcribed with the dictation engine (on-device or cloud).
+    #[default]
+    Dictation,
+    /// OpenAI's Realtime transcription over a WebSocket: words appear while they're spoken.
+    OpenaiRealtime,
+    /// Sarvam's streaming speech-to-text over a WebSocket.
+    SarvamStreaming,
+}
+
+impl LiveEngine {
+    /// The model used when none is chosen.
+    pub fn default_model(self) -> &'static str {
+        match self {
+            LiveEngine::Dictation => "",
+            LiveEngine::OpenaiRealtime => "gpt-live-transcribe",
+            LiveEngine::SarvamStreaming => "saaras:v4",
+        }
+    }
+
+    /// The provider preset whose speech key also works here, if any.
+    pub fn provider(self) -> Option<&'static str> {
+        match self {
+            LiveEngine::Dictation => None,
+            LiveEngine::OpenaiRealtime => Some("openai"),
+            LiveEngine::SarvamStreaming => Some("sarvam"),
+        }
+    }
+}
+
+/// The shape of the notes written once a meeting ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum SummaryStyle {
+    #[default]
+    Minutes,
+    Summary,
+    ActionItems,
+    /// `MeetingSettings::summary_instructions`.
+    Custom,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MeetingSettings {
+    /// Starts and stops a meeting transcript. Empty for none.
+    pub hotkey: String,
+    pub audio: CallAudio,
+    pub engine: LiveEngine,
+    /// The streaming engine's model; empty for its default.
+    pub model: String,
+    pub summary: SummaryStyle,
+    /// The format the notes take with `SummaryStyle::Custom`.
+    pub summary_instructions: String,
+    /// Write the notes as soon as the meeting ends, with the AI cleanup model.
+    pub auto_summary: bool,
+}
+
+impl Default for MeetingSettings {
+    fn default() -> Self {
+        Self {
+            hotkey: String::new(),
+            audio: CallAudio::Both,
+            engine: LiveEngine::Dictation,
+            model: String::new(),
+            summary: SummaryStyle::Minutes,
+            summary_instructions: String::new(),
+            auto_summary: true,
+        }
+    }
+}
+
+impl MeetingSettings {
+    /// The streaming engine's model, or its default.
+    pub fn model(&self) -> &str {
+        match self.model.trim() {
+            "" => self.engine.default_model(),
+            m => m,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -250,7 +349,29 @@ pub fn provider_name(preset: &str) -> &'static str {
     }
 }
 
+/// Every name an API key is saved under. Keys belong to a provider, not a feature, so one
+/// OpenAI key serves speech, cleanup and meetings alike. A custom server's key stays with the
+/// feature that points at it, since the speech and cleanup servers are rarely the same.
+pub const KEY_NAMES: &[&str] = &["openai", "anthropic", "groq", "sarvam", "custom-stt", "custom-cleanup"];
+
+/// The key a provider preset uses: `None` when it needs none (Ollama), `custom` for anything unknown.
+fn key_name(preset: &str, custom: &'static str) -> Option<&'static str> {
+    match preset {
+        "ollama" => None,
+        "openai" => Some("openai"),
+        "anthropic" => Some("anthropic"),
+        "groq" => Some("groq"),
+        "sarvam" => Some("sarvam"),
+        _ => Some(custom),
+    }
+}
+
 impl CloudStt {
+    /// The saved key this provider uses.
+    pub fn key_name(&self) -> Option<&'static str> {
+        key_name(&self.preset, "custom-stt")
+    }
+
     /// "Sarvam · saaras:v4"
     pub fn label(&self) -> String {
         format!("{} · {}", provider_name(&self.preset), self.model.trim())
@@ -258,6 +379,11 @@ impl CloudStt {
 }
 
 impl Cleanup {
+    /// The saved key this provider uses.
+    pub fn key_name(&self) -> Option<&'static str> {
+        key_name(&self.preset, "custom-cleanup")
+    }
+
     /// "Anthropic · claude-haiku-5-5"
     pub fn label(&self) -> String {
         format!("{} · {}", provider_name(&self.preset), self.model.trim())
@@ -306,6 +432,7 @@ impl Default for Settings {
             history_days: 0,
             onboarded: false,
             seen_changelog: String::new(),
+            meeting: MeetingSettings::default(),
         }
     }
 }
@@ -319,6 +446,15 @@ impl Settings {
                 format!("On-device · {name}")
             }
             Engine::Cloud => self.cloud.label(),
+        }
+    }
+
+    /// What transcribes a meeting: "OpenAI Realtime · gpt-live-transcribe", or the dictation engine's label.
+    pub fn meeting_engine_label(&self) -> String {
+        match self.meeting.engine {
+            LiveEngine::Dictation => self.engine_label(),
+            LiveEngine::OpenaiRealtime => format!("OpenAI Realtime · {}", self.meeting.model()),
+            LiveEngine::SarvamStreaming => format!("Sarvam streaming · {}", self.meeting.model()),
         }
     }
 
@@ -385,6 +521,22 @@ mod tests {
     }
 
     #[test]
+    fn features_on_one_provider_share_its_key() {
+        let stt = CloudStt { preset: "openai".into(), ..CloudStt::default() };
+        let cleanup = Cleanup { preset: "openai".into(), ..Cleanup::default() };
+        assert_eq!(stt.key_name(), Some("openai"));
+        assert_eq!(stt.key_name(), cleanup.key_name());
+        assert_eq!(LiveEngine::OpenaiRealtime.provider(), stt.key_name());
+        assert_eq!(Cleanup { preset: "ollama".into(), ..Cleanup::default() }.key_name(), None);
+        // Custom servers keep their own keys, as do unknown presets.
+        assert_eq!(CloudStt { preset: "custom".into(), ..CloudStt::default() }.key_name(), Some("custom-stt"));
+        assert_eq!(Cleanup { preset: "mystery".into(), ..Cleanup::default() }.key_name(), Some("custom-cleanup"));
+        for name in [stt.key_name(), Cleanup::default().key_name(), LiveEngine::SarvamStreaming.provider()].into_iter().flatten() {
+            assert!(KEY_NAMES.contains(&name), "{name}");
+        }
+    }
+
+    #[test]
     fn old_or_partial_files_fill_in_defaults() {
         let s: Settings = serde_json::from_str(r#"{"hotkey":"Alt+Space","cleanup":{"enabled":true}}"#).unwrap();
         assert_eq!(s.hotkey, "Alt+Space");
@@ -430,6 +582,22 @@ mod tests {
         assert_eq!((v["keepRecordings"].as_u64(), v["historyDays"].as_u64()), (Some(20), Some(0)));
         assert_eq!(v["transforms"][0]["hotkey"], "");
         assert_eq!(v["seenChangelog"], "");
+        assert_eq!((v["meeting"]["audio"].as_str(), v["meeting"]["engine"].as_str()), (Some("both"), Some("dictation")));
+        assert_eq!((v["meeting"]["summary"].as_str(), v["meeting"]["autoSummary"].as_bool()), (Some("minutes"), Some(true)));
+        let m: MeetingSettings = serde_json::from_str(r#"{"engine":"openai-realtime","summary":"action-items"}"#).unwrap();
+        assert_eq!((m.engine, m.summary, m.audio), (LiveEngine::OpenaiRealtime, SummaryStyle::ActionItems, CallAudio::Both));
+    }
+
+    #[test]
+    fn meeting_models_default_per_engine() {
+        let mut s = Settings::default();
+        assert_eq!(s.meeting_engine_label(), s.engine_label());
+        s.meeting.engine = LiveEngine::OpenaiRealtime;
+        assert_eq!(s.meeting.model(), "gpt-live-transcribe");
+        assert_eq!(s.meeting_engine_label(), "OpenAI Realtime · gpt-live-transcribe");
+        s.meeting.model = " gpt-transcribe ".into();
+        assert_eq!(s.meeting.model(), "gpt-transcribe");
+        assert_eq!(LiveEngine::SarvamStreaming.provider(), Some("sarvam"));
     }
 
     #[test]

@@ -4,6 +4,10 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Yammer listens while you hold the dictation hotkey, to turn your speech into text.</string>
+  <!-- Meeting transcripts record what the computer plays, the other side of a call
+       (cpal's Core Audio process tap, macOS 14.2+). Keep the two plists in sync. -->
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Yammer transcribes the other side of your calls while you're taking meeting notes.</string>
   <!-- Launch without a Dock tile; dock::show adds one when the main window opens. -->
   <key>LSUIElement</key>
   <true/>

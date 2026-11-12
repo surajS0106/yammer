@@ -54,9 +54,9 @@ pub fn rms(samples: &[f32]) -> f32 {
 }
 
 /// 20 ms at 16 kHz, the unit silence is judged in.
-const WINDOW: usize = SAMPLE_RATE as usize / 50;
+pub(crate) const WINDOW: usize = SAMPLE_RATE as usize / 50;
 /// A window at or below this level counts as silence.
-const THRESHOLD: f32 = 0.004;
+pub(crate) const THRESHOLD: f32 = 0.004;
 /// Windows of silence (200 ms) kept on each side of a pause by `squeeze_silence`.
 const PAUSE_KEEP: usize = 10;
 
@@ -132,6 +132,11 @@ pub fn duration_ms(samples_16k: usize) -> u64 {
     samples_16k as u64 * 1000 / SAMPLE_RATE as u64
 }
 
+/// Raw little-endian 16-bit PCM, the body of a WAV file.
+pub fn pcm16(samples: &[f32]) -> Vec<u8> {
+    samples.iter().flat_map(|s| ((s.clamp(-1.0, 1.0) * 32767.0).round() as i16).to_le_bytes()).collect()
+}
+
 /// A 16 kHz mono 16-bit PCM WAV file.
 pub fn encode_wav(samples: &[f32]) -> Vec<u8> {
     let data_len = (samples.len() * 2) as u32;
@@ -148,9 +153,7 @@ pub fn encode_wav(samples: &[f32]) -> Vec<u8> {
     out.extend(16u16.to_le_bytes());
     out.extend(b"data");
     out.extend(data_len.to_le_bytes());
-    for s in samples {
-        out.extend(((s.clamp(-1.0, 1.0) * 32767.0).round() as i16).to_le_bytes());
-    }
+    out.extend(pcm16(samples));
     out
 }
 

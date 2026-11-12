@@ -12,7 +12,7 @@ import { Button, Card, Hotkey, Kbd, Notice, Progress, Textarea } from "@/compone
 import { useDockAction } from "@/lib/dock";
 import { downloadModel, useModels } from "@/lib/models";
 import { requestNewNote } from "@/pages/scratchpad";
-import { providerLabel, sttPresets } from "@/lib/presets";
+import { hasKey, providerLabel, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import { api, on, type HistoryEntry, type OverlayState } from "@/lib/tauri";
 import { computeStats, dayKey, lastDays, useHistory } from "@/lib/stats";
@@ -209,7 +209,7 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
 
   const model = models.find((m) => m.id === settings.localModel);
   const preset = sttPresets.find((p) => p.id === settings.cloud.preset);
-  const engineReady = settings.engine === "local" ? !!model?.downloaded : !(preset?.needsKey ?? true) || secrets.stt;
+  const engineReady = settings.engine === "local" ? !!model?.downloaded : !(preset?.needsKey ?? true) || hasKey(secrets, settings.cloud.preset, "stt");
   const accessibilityOk = platform?.accessibility !== false;
   const ready = engineReady && accessibilityOk && !hotkeyError;
 

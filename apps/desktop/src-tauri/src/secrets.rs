@@ -12,10 +12,16 @@
 //! isn't copied off the phone, but it isn't encrypted: move it to the Android
 //! Keystore before a public release.
 
-use crate::error::{AppError, AppResult};
+//! A key belongs to a provider (`voice_core::settings::KEY_NAMES`), so the one
+//! saved on any page serves every feature set to that provider.
 
-/// The keys the app keeps: one for cloud transcription, one for cleanup.
-pub const NAMES: &[&str] = &["stt", "cleanup"];
+use crate::error::{AppError, AppResult};
+use voice_core::settings::Settings;
+
+pub use voice_core::settings::KEY_NAMES as NAMES;
+
+/// Keys from before they were shared, saved once per feature.
+const LEGACY_NAMES: &[&str] = &["stt", "cleanup", "live"];
 
 #[cfg(all(desktop, not(debug_assertions)))]
 const SERVICE: &str = "com.sush.yammer";
@@ -150,4 +156,48 @@ pub fn set(name: &str, value: &str) -> AppResult<()> {
 
 pub fn delete(name: &str) -> AppResult<()> {
     backend::remove(&entry_name(name)?)
+}
+
+fn get_opt(name: Option<&str>) -> AppResult<Option<String>> {
+    name.map_or(Ok(None), get)
+}
+
+/// The key for the cloud speech engine's provider.
+pub fn stt(settings: &Settings) -> AppResult<Option<String>> {
+    get_opt(settings.cloud.key_name())
+}
+
+/// The key for the cleanup model's provider.
+pub fn cleanup(settings: &Settings) -> AppResult<Option<String>> {
+    get_opt(settings.cleanup.key_name())
+}
+
+/// The key for the meeting streaming engine's provider.
+pub fn live(settings: &Settings) -> AppResult<Option<String>> {
+    get_opt(settings.meeting.engine.provider())
+}
+
+/// Move per-feature keys (`stt`, `cleanup`, `live`) under the provider each feature is set to.
+/// A provider that already has a key keeps it. A legacy key whose feature now points at a
+/// provider with no key (Ollama) is left alone, and moves once it points at one again.
+pub fn migrate(settings: &Settings) {
+    for &legacy in LEGACY_NAMES {
+        let target = match legacy {
+            "stt" => settings.cloud.key_name(),
+            "cleanup" => settings.cleanup.key_name(),
+            _ => settings.meeting.engine.provider(),
+        };
+        let Some(target) = target else { continue };
+        let entry = format!("key:{legacy}");
+        let result = (|| -> AppResult<()> {
+            let Some(value) = backend::read(&entry)? else { return Ok(()) };
+            if get(target)?.is_none() {
+                set(target, &value)?;
+            }
+            backend::remove(&entry)
+        })();
+        if let Err(e) = result {
+            eprintln!("couldn't move the {legacy} key: {e}");
+        }
+    }
 }

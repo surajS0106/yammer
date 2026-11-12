@@ -1,7 +1,8 @@
-//! The global hotkeys: dictation, editing the selection by voice, and one
-//! for each transform that has its own, plus Esc (registered only while
-//! recording) to cancel. The handler only forwards events to the dictation
-//! task; it may run on the main thread, which registering a shortcut blocks on.
+//! The global hotkeys: dictation, editing the selection by voice, one for
+//! each transform that has its own, and starting or stopping a meeting
+//! transcript, plus Esc (registered only while recording) to cancel. The
+//! handler only forwards events to the dictation task or the meeting; it may
+//! run on the main thread, which registering a shortcut blocks on.
 
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -12,12 +13,21 @@ use voice_core::Settings;
 
 use crate::dictation::{Dictation, Input, Mode};
 use crate::error::{AppError, AppResult};
-use crate::gnome;
+use crate::{gnome, meeting};
+
+/// What a hotkey does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Action {
+    /// Record a dictation (held, or tapped to latch).
+    Dictation(Mode),
+    /// Start a meeting transcript, or stop the one in progress.
+    Meeting,
+}
 
 #[derive(Default)]
 pub struct Hotkey {
     /// The registered shortcuts and what each starts.
-    current: Mutex<Vec<(Shortcut, Mode)>>,
+    current: Mutex<Vec<(Shortcut, Action)>>,
     /// Why a configured hotkey couldn't be registered, for the UI.
     pub error: Mutex<Option<String>>,
 }
@@ -33,18 +43,26 @@ pub fn parse(accelerator: &str) -> AppResult<Shortcut> {
 /// A configured hotkey: its accelerator, what it starts, and its name in errors.
 pub struct Binding {
     pub accelerator: String,
-    pub mode: Mode,
+    pub action: Action,
     pub name: String,
 }
 
 /// Every hotkey `settings` asks for. The dictation hotkey comes first.
 pub fn bindings(settings: &Settings) -> Vec<Binding> {
-    let mut list = vec![Binding { accelerator: settings.hotkey.clone(), mode: Mode::Dictate, name: "dictation".into() }];
+    let dictate = |mode| Action::Dictation(mode);
+    let mut list = vec![Binding { accelerator: settings.hotkey.clone(), action: dictate(Mode::Dictate), name: "dictation".into() }];
     if !settings.edit_hotkey.trim().is_empty() {
-        list.push(Binding { accelerator: settings.edit_hotkey.clone(), mode: Mode::Edit, name: "editing by voice".into() });
+        list.push(Binding { accelerator: settings.edit_hotkey.clone(), action: dictate(Mode::Edit), name: "editing by voice".into() });
     }
     for t in settings.transforms.iter().filter(|t| !t.hotkey.trim().is_empty()) {
-        list.push(Binding { accelerator: t.hotkey.clone(), mode: Mode::Transform(t.id.clone()), name: format!("the {} transform", t.name) });
+        list.push(Binding {
+            accelerator: t.hotkey.clone(),
+            action: dictate(Mode::Transform(t.id.clone())),
+            name: format!("the {} transform", t.name),
+        });
+    }
+    if !settings.meeting.hotkey.trim().is_empty() {
+        list.push(Binding { accelerator: settings.meeting.hotkey.clone(), action: Action::Meeting, name: "meeting transcripts".into() });
     }
     list
 }
@@ -57,12 +75,13 @@ pub fn on_event(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
         }
         return;
     }
-    let mode = app.state::<Hotkey>().current.lock().unwrap().iter().find(|(s, _)| s == shortcut).map(|(_, m)| m.clone());
-    let Some(mode) = mode else { return };
-    dictation.send(match event.state {
-        ShortcutState::Pressed => Input::Down(mode),
-        ShortcutState::Released => Input::Up(mode),
-    });
+    let action = app.state::<Hotkey>().current.lock().unwrap().iter().find(|(s, _)| s == shortcut).map(|(_, a)| a.clone());
+    match (action, event.state) {
+        (Some(Action::Dictation(mode)), ShortcutState::Pressed) => dictation.send(Input::Down(mode)),
+        (Some(Action::Dictation(mode)), ShortcutState::Released) => dictation.send(Input::Up(mode)),
+        (Some(Action::Meeting), ShortcutState::Pressed) => meeting::toggle(app),
+        _ => {}
+    }
 }
 
 /// The shortcut each binding means, refusing the same one twice.
@@ -92,15 +111,15 @@ pub fn register(app: &AppHandle, settings: &Settings) -> AppResult<()> {
     }
     let result = parse_all(&list).and_then(|shortcuts| {
         if gnome::available() {
-            let entries: Vec<_> = list.iter().zip(&shortcuts).map(|(b, s)| (s, &b.mode)).collect();
+            let entries: Vec<_> = list.iter().zip(&shortcuts).map(|(b, s)| (s, &b.action)).collect();
             gnome::bind(&entries).map_err(|e| AppError::Invalid(format!("Couldn't add the hotkeys as GNOME shortcuts ({e}).")))?;
-            current.extend(shortcuts.into_iter().zip(list.iter().map(|b| b.mode.clone())));
+            current.extend(shortcuts.into_iter().zip(list.iter().map(|b| b.action.clone())));
             return Ok(());
         }
         let mut first_error = None;
         for (shortcut, b) in shortcuts.into_iter().zip(&list) {
             match app.global_shortcut().register(shortcut) {
-                Ok(()) => current.push((shortcut, b.mode.clone())),
+                Ok(()) => current.push((shortcut, b.action.clone())),
                 Err(e) => {
                     first_error.get_or_insert_with(|| {
                         AppError::Invalid(format!(
@@ -120,7 +139,7 @@ pub fn register(app: &AppHandle, settings: &Settings) -> AppResult<()> {
 
 /// Whether `a` and `b` ask for the same hotkeys, so nothing needs re-registering.
 pub fn same(a: &Settings, b: &Settings) -> bool {
-    let key = |s: &Settings| bindings(s).into_iter().map(|b| (b.accelerator, b.mode)).collect::<Vec<_>>();
+    let key = |s: &Settings| bindings(s).into_iter().map(|b| (b.accelerator, b.action)).collect::<Vec<_>>();
     key(a) == key(b)
 }
 
@@ -204,10 +223,17 @@ mod tests {
     fn lists_every_hotkey_and_refuses_repeats() {
         let mut s = Settings { edit_hotkey: "Alt+KeyE".into(), ..Settings::default() };
         s.transforms[1].hotkey = "Alt+KeyB".into();
+        s.meeting.hotkey = "Alt+KeyM".into();
         let list = bindings(&s);
-        let modes: Vec<_> = list.iter().map(|b| b.mode.clone()).collect();
-        assert_eq!(modes, [Mode::Dictate, Mode::Edit, Mode::Transform("bullets".into())]);
+        let actions: Vec<_> = list.iter().map(|b| b.action.clone()).collect();
+        let d = Action::Dictation;
+        assert_eq!(actions, [d(Mode::Dictate), d(Mode::Edit), d(Mode::Transform("bullets".into())), Action::Meeting]);
         assert!(parse_all(&list).is_ok());
+
+        s.meeting.hotkey = "Alt+KeyB".into();
+        let err = parse_all(&bindings(&s)).unwrap_err().to_string();
+        assert!(err.contains("the Bullet points transform"), "{err}");
+        s.meeting.hotkey.clear();
 
         s.transforms[1].hotkey = "Alt+KeyE".into();
         let err = parse_all(&bindings(&s)).unwrap_err().to_string();

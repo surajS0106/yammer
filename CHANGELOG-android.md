@@ -17,6 +17,13 @@ from the desktop app's CHANGELOG.md.
   shows Unreleased.
 -->
 
+## Unreleased
+
+### Improved
+
+- An API key is now saved once per provider: paste your OpenAI, Anthropic, Groq or Sarvam key on any page and the speech engine, AI cleanup and meetings all use it. Keys you already saved carry over.
+- The Model setting for the speech engine and AI cleanup is now a dropdown of each provider's current models, including GPT Transcribe, GPT-6.1, Claude 5.5 and GPT-OSS, with Other model… for anything else.
+
 ## 0.6.0 — 2026-11-06
 
 ### Improved

@@ -15,6 +15,8 @@ import { HelpPage } from "@/pages/help";
 import { HistoryPage } from "@/pages/history";
 import { HomePage } from "@/pages/home";
 import { InsightsPage } from "@/pages/insights";
+import { MeetingSettingsPage } from "@/pages/meeting-settings";
+import { MeetingsPage } from "@/pages/meetings";
 import { Onboarding } from "@/pages/onboarding";
 import { ScratchpadPage } from "@/pages/scratchpad";
 import { SnippetsPage } from "@/pages/snippets";
@@ -32,10 +34,12 @@ export type PageId =
   | "snippets"
   | "transforms"
   | "scratchpad"
+  | "meetings"
   | "history"
   | "general"
   | "engine"
   | "cleanup"
+  | "meeting-settings"
   | "help"
   | "changelog";
 
@@ -44,6 +48,8 @@ const settingsTabs: { value: PageId; label: string }[] = [
   { value: "general", label: "General" },
   { value: "engine", label: "Speech engine" },
   { value: "cleanup", label: "AI cleanup" },
+  // Meetings capture the computer's sound, which only the desktop app can.
+  ...(isAndroid ? [] : [{ value: "meeting-settings" as PageId, label: "Meetings" }]),
 ];
 const isSettings = (id: PageId) => settingsTabs.some((t) => t.value === id);
 
@@ -68,7 +74,7 @@ function trail(page: PageId): PageId[] {
 }
 
 /** Pages that lay out dashboards or card grids get more room; forms and lists stay at a readable measure. */
-const widePages = new Set<PageId>(["insights", "help"]);
+const widePages = new Set<PageId>(["insights", "help", "meetings"]);
 
 const allIds = new Set<string>([...navPageIds, ...settingsTabs.map((t) => t.value), "help", "changelog"]);
 
@@ -215,6 +221,8 @@ export default function App() {
                     {page === "general" && <GeneralPage go={setPage} />}
                     {page === "engine" && <EnginePage go={setPage} />}
                     {page === "cleanup" && <CleanupPage />}
+                    {page === "meetings" && <MeetingsPage go={setPage} />}
+                    {page === "meeting-settings" && <MeetingSettingsPage go={setPage} />}
                     {page === "help" && <HelpPage go={setPage} />}
                     {page === "changelog" && <ChangelogPage />}
                   </div>

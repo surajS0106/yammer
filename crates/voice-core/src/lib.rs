@@ -5,6 +5,8 @@ pub mod audio;
 pub mod cleanup;
 pub mod error;
 pub mod history;
+pub mod live;
+pub mod meetings;
 pub mod models;
 pub mod scratchpad;
 pub mod settings;

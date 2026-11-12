@@ -90,7 +90,7 @@ pub struct Made {
 }
 
 /// Speech to text, with the engine in `settings`: (text, engine id, language).
-async fn transcribe(app: &AppHandle, settings: &Settings, samples: Arc<[f32]>) -> AppResult<(String, String, Option<String>)> {
+pub(crate) async fn transcribe(app: &AppHandle, settings: &Settings, samples: Arc<[f32]>) -> AppResult<(String, String, Option<String>)> {
     let state = app.state::<AppState>();
     match settings.engine {
         // Whisper isn't built for Android; `android::cloud_only` keeps settings off this.
@@ -116,7 +116,7 @@ async fn transcribe(app: &AppHandle, settings: &Settings, samples: Arc<[f32]>) -
             Ok((text, format!("local:{}", model.id), spoken))
         }
         Engine::Cloud => {
-            let key = secrets::get("stt")?;
+            let key = secrets::stt(settings)?;
             let language = match settings.language.trim() {
                 "" | "auto" => None,
                 code => Some(code.to_string()),
@@ -144,7 +144,7 @@ pub async fn make(app: &AppHandle, settings: &Settings, samples: Arc<[f32]>, job
             if progress {
                 overlay::show(app, OverlayState::Editing { model: settings.cleanup.label() });
             }
-            let key = secrets::get("cleanup")?;
+            let key = secrets::cleanup(settings)?;
             let out = cleanup::edit(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, &raw, selection).await?;
             if out.trim().is_empty() {
                 return Err(AppError::Invalid("The cleanup model sent back no text.".into()));
@@ -169,7 +169,7 @@ pub async fn make(app: &AppHandle, settings: &Settings, samples: Arc<[f32]>, job
             if progress {
                 overlay::show(app, OverlayState::Polishing { model: settings.cleanup.label() });
             }
-            let key = secrets::get("cleanup")?;
+            let key = secrets::cleanup(settings)?;
             let instructions = transform.map(|t| t.instructions.as_str());
             match cleanup::clean(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, instructions, &raw).await {
                 Ok(cleaned) if !cleaned.trim().is_empty() => {

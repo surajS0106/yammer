@@ -1,4 +1,4 @@
-import { ChartBar as BarChart3, BookOpenText as BookA, ArrowCircleUp as CircleArrowUp, Question as CircleHelp, Fire as Flame, ClockCounterClockwise as History, House as Home, CircleNotch as LoaderCircle, NotePencil as NotebookPen, Scissors, GearSix as Settings, Sparkle as Sparkles, MagicWand as Wand2, X } from "@phosphor-icons/react";
+import { ChartBar as BarChart3, BookOpenText as BookA, ArrowCircleUp as CircleArrowUp, Question as CircleHelp, Fire as Flame, ClockCounterClockwise as History, House as Home, CircleNotch as LoaderCircle, NotePencil as NotebookPen, Scissors, GearSix as Settings, Sparkle as Sparkles, UsersThree as Users, MagicWand as Wand2, X } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import * as React from "react";
 
@@ -10,6 +10,7 @@ import { useSettings } from "@/lib/settings";
 import { computeStats, dayKey, formatCompact, useHistory } from "@/lib/stats";
 import { api, on, type OverlayState } from "@/lib/tauri";
 import { installUpdate, useUpdate } from "@/lib/updater";
+import { useMeetingStatus } from "@/lib/meetings";
 import { cn } from "@/lib/utils";
 
 type NavItem = { id: PageId; label: string; icon: React.ElementType };
@@ -21,6 +22,7 @@ const groups: { label: string; items: NavItem[] }[] = [
     items: [
       { id: "home", label: "Home", icon: Home },
       { id: "scratchpad", label: "Scratchpad", icon: NotebookPen },
+      { id: "meetings", label: "Meetings", icon: Users },
       { id: "history", label: "History", icon: History },
       { id: "insights", label: "Insights", icon: BarChart3 },
     ],
@@ -55,6 +57,7 @@ export function Sidebar({
   const stats = React.useMemo(() => computeStats(history), [history]);
   const today = dayKey(Date.now());
   const todayCount = React.useMemo(() => history.filter((e) => dayKey(e.at) === today).length, [history, today]);
+  const meetingLive = !!useMeetingStatus()?.live;
 
   const footer: (NavItem & { active: boolean })[] = [
     { id: "general", label: "Settings", icon: Settings, active: settingsActive },
@@ -98,6 +101,7 @@ export function Sidebar({
                 active={page === item.id}
                 onClick={() => go(item.id)}
                 badge={item.id === "history" && todayCount > 0 ? todayCount : undefined}
+                recording={item.id === "meetings" && meetingLive}
               />
             ))}
           </div>
@@ -131,11 +135,14 @@ function NavButton({
   item: { label, icon: Icon },
   active,
   badge,
+  recording,
   onClick,
 }: {
   item: NavItem;
   active: boolean;
   badge?: number;
+  /** A meeting is being transcribed: a pulsing red dot. */
+  recording?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -170,6 +177,12 @@ function NavButton({
         <Icon className="size-4" weight={active ? "fill" : "regular"} />
       </span>
       <span className="relative truncate">{label}</span>
+      {recording && (
+        <span title="Transcribing a meeting" className="relative mr-1 ml-auto flex size-2">
+          <span className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-60" />
+          <span className="relative size-2 rounded-full bg-red-500" />
+        </span>
+      )}
       {badge !== undefined && (
         <span
           title={`${badge} today`}

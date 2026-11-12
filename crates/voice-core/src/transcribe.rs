@@ -148,7 +148,7 @@ fn parse_sarvam(body: &Value) -> Result<String> {
 
 /// Sarvam wants BCP-47 Indian locales ("hi-IN"); anything it doesn't cover,
 /// or no language at all, means auto-detect.
-fn sarvam_language(language: Option<&str>) -> String {
+pub(crate) fn sarvam_language(language: Option<&str>) -> String {
     let code = match language.unwrap_or("") {
         "or" => "od",
         c @ ("hi" | "bn" | "kn" | "ml" | "mr" | "od" | "pa" | "ta" | "te" | "en" | "gu" | "as" | "ur" | "ne" | "kok" | "ks" | "sd" | "sa" | "sat"

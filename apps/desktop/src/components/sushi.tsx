@@ -160,6 +160,9 @@ export function moodOf(s: OverlayState): SushiMood {
       return s.error ? "error" : "done";
     case "failed":
       return "error";
+    // Listening to the call.
+    case "meeting":
+      return "listening";
     default:
       return "idle";
   }

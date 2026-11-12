@@ -18,6 +18,8 @@ mod gnome;
 #[cfg(desktop)]
 mod hotkey;
 #[cfg(desktop)]
+mod meeting;
+#[cfg(desktop)]
 mod mute;
 #[cfg(desktop)]
 mod overlay;
@@ -68,8 +70,8 @@ pub fn run() {
     let app = tauri::Builder::default()
         // Must come first: a second launch hands its arguments to this instance and exits.
         // `yammer --toggle` is how Wayland users bind a system shortcut to dictation (gnome.rs
-        // binds it, `--edit` and `--transform=<id>` for the other hotkeys, and `--cancel` to Esc
-        // while recording, on GNOME).
+        // binds it, `--edit`, `--transform=<id>` and `--meeting` for the other hotkeys, and `--cancel`
+        // to Esc while recording, on GNOME).
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             let transform = args.iter().find_map(|a| a.strip_prefix("--transform="));
             if args.iter().any(|a| a == "--toggle") {
@@ -78,6 +80,8 @@ pub fn run() {
                 app.state::<Dictation>().send(Input::Toggle(Mode::Edit));
             } else if let Some(id) = transform {
                 app.state::<Dictation>().send(Input::Toggle(Mode::Transform(id.into())));
+            } else if args.iter().any(|a| a == "--meeting") {
+                meeting::toggle(app);
             } else if args.iter().any(|a| a == "--cancel") {
                 app.state::<Dictation>().send(Input::Cancel);
             } else {
@@ -106,10 +110,12 @@ pub fn run() {
             if gnome::available() {
                 portal::init(&config_dir);
             }
+            app.manage(meeting::Meetings::new(data_dir.join("meetings")));
             app.manage(state::AppState::new(config_dir, data_dir)?);
             app.manage(dictation::spawn(app.handle().clone()));
 
             let settings = app.state::<state::AppState>().settings();
+            secrets::migrate(&settings);
             overlay::create(app.handle())?;
             overlay::set_always_visible(app.handle(), settings.overlay_always_visible);
             tray::create(app.handle(), &settings)?;
@@ -178,6 +184,15 @@ pub fn run() {
             commands::history_retry,
             commands::overlay_retry,
             commands::export_file,
+            commands::meeting_start,
+            commands::meeting_stop,
+            commands::meeting_toggle,
+            commands::meeting_status,
+            commands::meetings_list,
+            commands::meeting_get,
+            commands::meeting_update,
+            commands::meeting_delete,
+            commands::meeting_summarize,
             commands::scratchpad_list,
             commands::scratchpad_save,
             commands::copy_text,
@@ -201,6 +216,7 @@ pub fn run() {
         // Every way out (tray Quit, Dock Quit, logout) passes here before exit() runs C++ destructors.
         tauri::RunEvent::Exit => {
             mute::restore_now();
+            app.state::<meeting::Meetings>().save_on_exit();
             app.state::<whisper::Whisper>().unload();
         }
         // After Tauri's own startup icon (dev builds set one on Ready), so ours wins.

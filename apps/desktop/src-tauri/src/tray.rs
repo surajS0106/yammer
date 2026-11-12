@@ -55,13 +55,15 @@ fn menu(app: &AppHandle, settings: &Settings) -> tauri::Result<Menu<Wry>> {
     ];
 
     let toggle = MenuItem::with_id(app, "toggle", "Start / stop dictation", true, None::<&str>)?;
+    let meeting_label = if crate::meeting::is_live() { "Stop meeting transcript" } else { "Start meeting transcript" };
+    let meeting = MenuItem::with_id(app, "meeting", meeting_label, true, None::<&str>)?;
     let transform = submenu("Transform", true, &transforms)?;
     let language = submenu(if english_only { "Language (English-only model)" } else { "Language" }, !english_only, &languages)?;
     let engine = submenu("Speech engine", true, &engines)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Yammer", true, None::<&str>)?;
     let separator = || PredefinedMenuItem::separator(app);
-    Menu::with_items(app, &[&toggle, &separator()?, &transform, &language, &engine, &separator()?, &settings_item, &separator()?, &quit])
+    Menu::with_items(app, &[&toggle, &meeting, &separator()?, &transform, &language, &engine, &separator()?, &settings_item, &separator()?, &quit])
 }
 
 fn on_menu(app: &AppHandle, id: &str) {
@@ -75,6 +77,7 @@ fn on_menu(app: &AppHandle, id: &str) {
     } else {
         match id {
             "toggle" => app.state::<Dictation>().send(Input::Toggle(Mode::Dictate)),
+            "meeting" => crate::meeting::toggle(app),
             "settings" => show_main(app),
             "quit" => app.exit(0),
             _ => {}

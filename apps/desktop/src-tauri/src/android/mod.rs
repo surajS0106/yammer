@@ -50,6 +50,7 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             secrets::init(&config_dir);
             let state = AppState::new(config_dir, data_dir)?;
+            secrets::migrate(&state.settings());
             cloud_only(&state)?;
             app.manage(state);
             let _ = APP.set(app.handle().clone());

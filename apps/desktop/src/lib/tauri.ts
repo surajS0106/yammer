@@ -44,6 +44,24 @@ export interface Transform {
   hotkey: string;
 }
 
+export type CallAudio = "both" | "mic" | "system";
+export type LiveEngine = "dictation" | "openai-realtime" | "sarvam-streaming";
+export type SummaryStyle = "minutes" | "summary" | "action-items" | "custom";
+
+export interface MeetingSettings {
+  /** Starts and stops a meeting transcript; "" for none. */
+  hotkey: string;
+  audio: CallAudio;
+  engine: LiveEngine;
+  /** The streaming engine's model; "" for its default. */
+  model: string;
+  summary: SummaryStyle;
+  /** The notes' format with the "custom" style. */
+  summaryInstructions: string;
+  /** Write the notes as soon as the meeting ends. */
+  autoSummary: boolean;
+}
+
 export interface Settings {
   hotkey: string;
   /** Select text, then hold this and say how to change it; "" for none. */
@@ -81,6 +99,61 @@ export interface Settings {
   onboarded: boolean;
   /** The newest version whose "What's new" the user has seen; "" before the first. */
   seenChangelog: string;
+  meeting: MeetingSettings;
+}
+
+/** "you" is the microphone; "them" is what the computer plays: everyone else on the call. */
+export type Speaker = "you" | "them";
+
+export interface Segment {
+  id: string;
+  /** When it was said, in ms from the start of the meeting. */
+  atMs: number;
+  speaker: Speaker;
+  text: string;
+  /** Still being spoken (or transcribed); the final text replaces it. */
+  partial?: boolean;
+}
+
+export interface Meeting {
+  id: number;
+  title: string;
+  startedAt: number;
+  endedAt: number | null;
+  engine: string;
+  segments: Segment[];
+  /** What the user typed during the meeting. */
+  notes: string;
+  /** The notes written from it, in Markdown. */
+  summary?: string;
+  summaryBy?: string;
+  /** Why writing the notes failed. */
+  error?: string;
+  /** Something that went wrong while transcribing. */
+  notice?: string;
+}
+
+export interface MeetingOverview {
+  id: number;
+  title: string;
+  startedAt: number;
+  endedAt: number | null;
+  words: number;
+  preview: string;
+  hasSummary: boolean;
+}
+
+export interface LiveMeeting {
+  id: number;
+  startedAt: number;
+  engine: string;
+  speakers: Speaker[];
+}
+
+export interface MeetingStatus {
+  live: LiveMeeting | null;
+  /** Meetings whose notes are being written. */
+  summarizing: number[];
 }
 
 /** A rectangle in CSS px from the overlay window's top-left. */
@@ -143,7 +216,9 @@ export interface Platform {
   version: string;
 }
 
-export type SecretName = "stt" | "cleanup";
+/** `live` is the streaming engine's key for meetings. */
+/** Keys are saved per provider, so one key serves every feature set to it. Mirrors `KEY_NAMES` in voice-core's settings.rs. */
+export type SecretName = "openai" | "anthropic" | "groq" | "sarvam" | "custom-stt" | "custom-cleanup";
 
 export interface AndroidStatus {
   mic: boolean;
@@ -171,6 +246,8 @@ export type OverlayState =
   /** Pasted, and it heard words the Dictionary doesn't know: offer to add them. */
   | { phase: "words"; words: string[] }
   | { phase: "idle" }
+  /** Between dictations while a meeting is being transcribed. `startedAt` is Unix ms. */
+  | { phase: "meeting"; startedAt: number }
   | { phase: "hidden" };
 
 export const api = {
@@ -202,6 +279,18 @@ export const api = {
   historyRetry: (id: number) => invoke<HistoryEntry>("history_retry", { id }),
   /** Save a file to Downloads and show it; resolves to its path. */
   exportFile: (name: string, contents: string) => invoke<string>("export_file", { name, contents }),
+  meetingStart: () => invoke<LiveMeeting>("meeting_start"),
+  /** Resolves to the meeting transcribed to the end; its notes follow as `meetingUpdated`. */
+  meetingStop: () => invoke<Meeting | null>("meeting_stop"),
+  /** Start or stop, showing any error on the overlay. */
+  meetingToggle: () => invoke<void>("meeting_toggle"),
+  meetingStatus: () => invoke<MeetingStatus>("meeting_status"),
+  meetingsList: () => invoke<MeetingOverview[]>("meetings_list"),
+  meetingGet: (id: number) => invoke<Meeting>("meeting_get", { id }),
+  meetingUpdate: (id: number, change: { title?: string; notes?: string; summary?: string }) => invoke<Meeting>("meeting_update", { id, ...change }),
+  meetingDelete: (id: number) => invoke<void>("meeting_delete", { id }),
+  /** Write (or rewrite) a stopped meeting's notes with the AI cleanup model. */
+  meetingSummarize: (id: number) => invoke<Meeting>("meeting_summarize", { id }),
   scratchpadList: () => invoke<Note[]>("scratchpad_list"),
   scratchpadSave: (notes: Note[]) => invoke<void>("scratchpad_save", { notes }),
   copyText: (text: string) => invoke<void>("copy_text", { text }),
@@ -236,6 +325,17 @@ export const on = {
   /** Where the cursor is over the overlay window (CSS px), or null when it's off it. */
   overlayCursor: (f: (p: { x: number; y: number } | null) => void): Promise<UnlistenFn> =>
     listen<{ x: number; y: number } | null>("overlay-cursor", (e) => f(e.payload)),
+  meetingStatus: (f: (s: MeetingStatus) => void): Promise<UnlistenFn> => listen<MeetingStatus>("meeting-status", (e) => f(e.payload)),
+  /** A line of the live transcript was added or grew. */
+  meetingSegment: (f: (e: { meetingId: number; segment: Segment }) => void): Promise<UnlistenFn> =>
+    listen<{ meetingId: number; segment: Segment }>("meeting-segment", (e) => f(e.payload)),
+  /** A meeting was saved: stopped, or its notes written. */
+  meetingUpdated: (f: (m: Meeting) => void): Promise<UnlistenFn> => listen<Meeting>("meeting-updated", (e) => f(e.payload)),
+  meetingNotice: (f: (e: { meetingId: number; text: string }) => void): Promise<UnlistenFn> =>
+    listen<{ meetingId: number; text: string }>("meeting-notice", (e) => f(e.payload)),
+  /** Each channel's input level, about 20 times a second. */
+  meetingLevel: (f: (e: { speaker: Speaker; level: number }) => void): Promise<UnlistenFn> =>
+    listen<{ speaker: Speaker; level: number }>("meeting-level", (e) => f(e.payload)),
   /** The island asked the settings window to show a page. */
   navigate: (f: (page: string) => void): Promise<UnlistenFn> => listen<string>("navigate", (e) => f(e.payload)),
 };

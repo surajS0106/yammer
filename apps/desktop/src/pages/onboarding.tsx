@@ -17,7 +17,7 @@ import { ProviderLogo } from "@/components/provider-logo";
 import { moodOf, Sushi } from "@/components/sushi";
 import { Badge, Button, Card, CommitInput, Hotkey, Kbd, Notice, Progress, Segmented, Select, Textarea } from "@/components/ui";
 import { downloadModel, useModels } from "@/lib/models";
-import { languages, sttPresets } from "@/lib/presets";
+import { hasKey, keyName, languages, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import { api, on, type Engine, type OverlayState } from "@/lib/tauri";
 import { useBackKey } from "@/lib/back";
@@ -49,7 +49,7 @@ function useEngineReady() {
   const { models, downloading } = useModels();
   const model = models.find((m) => m.id === settings.localModel);
   const preset = sttPresets.find((p) => p.id === settings.cloud.preset);
-  const ready = settings.engine === "local" ? !!model?.downloaded : !(preset?.needsKey ?? true) || secrets.stt;
+  const ready = settings.engine === "local" ? !!model?.downloaded : !(preset?.needsKey ?? true) || hasKey(secrets, settings.cloud.preset, "stt");
   const progress = settings.engine === "local" && model ? downloading[model.id] : undefined;
   return { ready, progress };
 }
@@ -249,7 +249,8 @@ function EngineStep() {
   // Picking the cloud preselects the provider recommended for the language, unless a key is already saved for one.
   const chooseEngine = (engine: Engine) =>
     void update((s) => {
-      if (engine === "local" || secrets.stt) return { ...s, engine };
+      const saved = keyName(s.cloud.preset, "stt");
+      if (engine === "local" || (saved && secrets[saved])) return { ...s, engine };
       const p = sttPresets.find((x) => x.id === (indianLanguages.has(s.language) ? "sarvam" : "groq"))!;
       return { ...s, engine, cloud: { preset: p.id, baseUrl: p.baseUrl, model: p.model, api: p.api } };
     });
@@ -351,6 +352,8 @@ function CloudSetup() {
   const cloud = settings.cloud;
   const preset = sttPresets.find((p) => p.id === cloud.preset) ?? sttPresets[sttPresets.length - 1];
   const name = shortLabel(preset.label);
+  const keyId = keyName(cloud.preset, "stt") ?? "custom-stt";
+  const keySaved = !!secrets[keyId];
   const recommended = isAndroid ? "sarvam" : indianLanguages.has(settings.language) ? "sarvam" : "groq";
   // A phone can't reach a local server, and four tabs is the most that fit; Custom is in Settings.
   const offered = isAndroid ? sttPresets.filter((p) => p.id !== "ollama" && p.id !== "custom") : sttPresets;
@@ -389,16 +392,16 @@ function CloudSetup() {
 
       {preset.needsKey && (
         <Card className="mt-4 divide-y">
-          <KeyStep n={1} done={secrets.stt} title={preset.keyUrl ? `Sign in to ${name}` : "Open your provider’s dashboard"} detail="Create a free account if you don’t have one.">
+          <KeyStep n={1} done={keySaved} title={preset.keyUrl ? `Sign in to ${name}` : "Open your provider’s dashboard"} detail="Create a free account if you don’t have one.">
             {preset.keyUrl && (
               <Button size="sm" variant="outline" onClick={() => void openUrl(preset.keyUrl!)}>
                 Open {name} <ExternalLink />
               </Button>
             )}
           </KeyStep>
-          <KeyStep n={2} done={secrets.stt} title="Create an API key and copy it" detail="Some sites show the key only once, so copy it straight away." />
-          <KeyStep n={3} done={secrets.stt} title="Paste it here" stacked>
-            <KeyField name="stt" />
+          <KeyStep n={2} done={keySaved} title="Create an API key and copy it" detail="Some sites show the key only once, so copy it straight away." />
+          <KeyStep n={3} done={keySaved} title="Paste it here" stacked>
+            <KeyField name={keyId} page="Speech engine" />
           </KeyStep>
         </Card>
       )}

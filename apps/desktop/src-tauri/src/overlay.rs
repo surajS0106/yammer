@@ -31,6 +31,8 @@ const DROP_WAIT: Duration = Duration::from_millis(400);
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 /// Keep a small idle pill on screen between dictations, instead of hiding.
 static ALWAYS_VISIBLE: AtomicBool = AtomicBool::new(false);
+/// When the meeting being transcribed started: between dictations the pill shows it, whatever the setting.
+static MEETING: Mutex<Option<u64>> = Mutex::new(None);
 /// The last state shown, for an overlay webview that loads after it was sent.
 static CURRENT: Mutex<OverlayState> = Mutex::new(OverlayState::Hidden);
 /// Sushi and the pill, which take the mouse; clicks anywhere else pass through.
@@ -276,9 +278,13 @@ pub fn place(app: &AppHandle) {
 
 pub fn show(app: &AppHandle, state: OverlayState) {
     GENERATION.fetch_add(1, Ordering::SeqCst);
+    let meeting = *MEETING.lock().unwrap();
     let state = match state {
+        OverlayState::Hidden | OverlayState::Idle | OverlayState::Meeting { .. } if meeting.is_some() => {
+            OverlayState::Meeting { started_at: meeting.unwrap_or_default() }
+        }
         OverlayState::Hidden | OverlayState::Idle if ALWAYS_VISIBLE.load(Ordering::SeqCst) => OverlayState::Idle,
-        OverlayState::Idle => OverlayState::Hidden,
+        OverlayState::Idle | OverlayState::Meeting { .. } => OverlayState::Hidden,
         s => s,
     };
     *CURRENT.lock().unwrap() = state.clone();
@@ -298,6 +304,15 @@ pub fn show(app: &AppHandle, state: OverlayState) {
         let _ = window.show();
         // Some window managers drop always-on-top across hide/show.
         let _ = window.set_always_on_top(true);
+    }
+}
+
+/// A meeting started (when, in Unix ms) or ended. A dictation showing now
+/// isn't interrupted; the pill changes once it's done.
+pub fn set_meeting(app: &AppHandle, started_at: Option<u64>) {
+    *MEETING.lock().unwrap() = started_at;
+    if matches!(current(), OverlayState::Hidden | OverlayState::Idle | OverlayState::Meeting { .. }) {
+        hide(app);
     }
 }
 

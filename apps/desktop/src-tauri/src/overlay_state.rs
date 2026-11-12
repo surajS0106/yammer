@@ -26,5 +26,8 @@ pub enum OverlayState {
     Words { words: Vec<String> },
     /// Not dictating, but the pill stays on screen ("Always show the pill").
     Idle,
+    /// Not dictating, while a meeting is being transcribed: a recording pill
+    /// with its running time. `started_at` is Unix ms.
+    Meeting { started_at: u64 },
     Hidden,
 }

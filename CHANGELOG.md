@@ -17,13 +17,23 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
 
 ## Unreleased
 
+### New
+
+- Meetings: transcribe a Teams, Zoom or Meet call as it happens, with what you say and what everyone else says side by side, and get minutes, a summary or a list of action items written when you stop.
+- While a meeting is transcribed you can type your own notes beside it, and the notes written at the end build on them.
+- Meetings can stream to OpenAI Realtime or Sarvam to show words as they're said, or use your own speech engine, which works offline with an on-device model.
+- A meeting hotkey, the tray and the floating pill start and stop a meeting, and the pill shows how long it's been going.
+
 ### Improved
 
+- An API key is now saved once per provider: paste your OpenAI, Anthropic, Groq or Sarvam key on any page and the speech engine, AI cleanup and meetings all use it. Keys you already saved carry over.
+- The Model setting for the speech engine and AI cleanup is now a dropdown of each provider's current models, including GPT Transcribe, GPT-6.1, Claude 5.5 and GPT-OSS, with Other model… for anything else.
 - Yammer has a new set of icons throughout the app.
 - Changing a hotkey shows the keys as you press them, and a shortcut your system already uses (like ⌘ Space for Spotlight or Win+L) is turned down with the reason instead of saved.
 
 ### Fixed
 
+- AI cleanup and meeting notes work with models that only accept their default temperature, such as OpenAI's newer GPT models, instead of failing with an HTTP 400 error.
 - When AI cleanup fails, the message now shows as a warning instead of a green check, and a rejected API key tells you where to update it.
 
 ## 0.5.0 — 2026-11-02

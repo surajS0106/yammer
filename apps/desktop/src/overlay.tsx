@@ -11,11 +11,12 @@
 // no mouse moves; hover comes from the cursor position Rust polls instead.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { WarningCircle as AlertCircle, DownloadSimple as ArrowDownToLine, Check, Copy, EyeSlash as EyeOff, ClockCounterClockwise as History, CircleNotch as Loader2, type Icon as LucideIcon, Microphone as Mic, Plus, Power, ArrowCounterClockwise as RotateCcw, SlidersHorizontal as Settings2, Square, MagicWand as Wand2, X } from "@phosphor-icons/react";
+import { WarningCircle as AlertCircle, DownloadSimple as ArrowDownToLine, Check, Copy, EyeSlash as EyeOff, ClockCounterClockwise as History, CircleNotch as Loader2, type Icon as LucideIcon, Microphone as Mic, Plus, Power, ArrowCounterClockwise as RotateCcw, SlidersHorizontal as Settings2, Square, UsersThree as Users, MagicWand as Wand2, X } from "@phosphor-icons/react";
 import { motion, type MotionValue, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import * as React from "react";
 
 import { moodOf, Sushi } from "@/components/sushi";
+import { useMeetingStatus } from "@/lib/meetings";
 import { api, on, type OverlayState, type Settings } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
@@ -177,8 +178,8 @@ function useSettingsValue() {
  * Like the island, it can't take focus or see mouse moves, so its highlight
  * follows the cursor Rust polls, and it closes once the cursor wanders off.
  */
-const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point | null; phase: OverlayState["phase"]; onClose: () => void }>(
-  function ContextMenu({ at, cursor, phase, onClose }, ref) {
+const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point | null; phase: OverlayState["phase"]; meetingLive: boolean; onClose: () => void }>(
+  function ContextMenu({ at, cursor, phase, meetingLive, onClose }, ref) {
     const hotkey = useHotkeyLabel();
     const settings = useSettingsValue();
     const dictating = phase === "listening" || phase === "transcribing" || phase === "polishing" || phase === "editing";
@@ -196,9 +197,11 @@ const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point 
         ...(transforms.length
           ? [{ id: "transform", label: `Transform: ${active >= 0 ? transforms[active].name : "None"}`, icon: Wand2, hint: "Change", keepOpen: true, run: nextTransform }]
           : []),
+        { id: "meeting", label: meetingLive ? "Stop meeting transcript" : "Start meeting transcript", icon: meetingLive ? Square : Users, run: api.meetingToggle },
       ],
       [
         { id: "history", label: "History", icon: History, run: () => api.overlayOpen("history") },
+        { id: "meetings", label: "Meetings", icon: Users, run: () => api.overlayOpen("meetings") },
         { id: "settings", label: "Settings", icon: Settings2, run: () => api.overlayOpen("general") },
       ],
       [
@@ -571,6 +574,25 @@ function FailedCard({ text, id, cursor, held, cardRef }: { text: string; id: num
   );
 }
 
+/** Between dictations during a meeting: a recording dot and how long it's been going. */
+function MeetingClock({ startedAt }: { startedAt: number }) {
+  const [now, setNow] = React.useState(Date.now);
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const s = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const mm = String(Math.floor(s / 60) % 60).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return (
+    <>
+      <span className="size-1.5 shrink-0 rounded-full bg-red-500" style={{ animation: "dot-pulse 1.2s ease-in-out infinite" }} />
+      <span className="shrink-0 text-white/85">Meeting</span>
+      <span className="font-mono text-xs text-white/60 tabular-nums">{s >= 3600 ? `${Math.floor(s / 3600)}:${mm}:${ss}` : `${mm}:${ss}`}</span>
+    </>
+  );
+}
+
 export function Overlay() {
   const [state, setState] = React.useState<OverlayState>({ phase: "hidden" });
   // Bumped on every change, so a new transcript card starts its countdown afresh.
@@ -589,6 +611,7 @@ export function Overlay() {
 
   const [menu, setMenu] = React.useState<Point | null>(null);
   React.useEffect(() => setMenu(null), [state.phase]);
+  const meetingLive = !!useMeetingStatus()?.live;
 
   const sushiRef = React.useRef<HTMLDivElement>(null);
   const pillRef = React.useRef<HTMLDivElement>(null);
@@ -701,7 +724,7 @@ export function Overlay() {
         setMenu({ x: e.clientX, y: e.clientY });
       }}
     >
-      {menu && <ContextMenu ref={menuRef} at={menu} cursor={cursor} phase={state.phase} onClose={() => setMenu(null)} />}
+      {menu && <ContextMenu ref={menuRef} at={menu} cursor={cursor} phase={state.phase} meetingLive={meetingLive} onClose={() => setMenu(null)} />}
       {/* A card counts as the pill: a hit area that drags the overlay. */}
       {state.phase === "transcript" ? (
         <TranscriptCard key={shown} text={state.text} words={state.words} cursor={cursor} held={held} cardRef={pillRef} />
@@ -749,6 +772,7 @@ export function Overlay() {
                   <span className="truncate text-xs text-white/55">{state.phase === "transcribing" ? state.engine : state.model}</span>
                 </>
               )}
+              {state.phase === "meeting" && <MeetingClock startedAt={state.startedAt} />}
               {state.phase === "message" && (
                 <>
                   {state.error ? (

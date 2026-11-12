@@ -1,14 +1,16 @@
 //! GNOME on Wayland only delivers global key grabs to X11 apps, so there the
 //! hotkey is a GNOME custom keyboard shortcut that runs `yammer --toggle`,
 //! written with `gsettings` (`--edit` for editing by voice, `--transform=<id>`
-//! for a transform's own hotkey). GNOME only reports the press, so it's tap to
-//! start, tap to finish. While recording, Esc is bound to `yammer --cancel`.
+//! for a transform's own hotkey, `--meeting` for meeting transcripts). GNOME
+//! only reports the press, so it's tap to start, tap to finish. While
+//! recording, Esc is bound to `yammer --cancel`.
 
 use std::process::Command;
 
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 
 use crate::dictation::Mode;
+use crate::hotkey::Action;
 
 const LIST_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys";
 const ENTRY_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding";
@@ -16,6 +18,7 @@ const BASE: &str = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybind
 const TOGGLE: &str = "yammer";
 const CANCEL: &str = "yammer-cancel";
 const EDIT: &str = "yammer-edit";
+const MEETING: &str = "yammer-meeting";
 /// Followed by a number: one entry per transform hotkey.
 const TRANSFORM: &str = "yammer-transform-";
 
@@ -28,15 +31,16 @@ pub fn available() -> bool {
 
 /// Bind each shortcut to what it starts, set up the (unbound) Esc entry, and
 /// clear entries left from hotkeys that were removed.
-pub fn bind(hotkeys: &[(&Shortcut, &Mode)]) -> Result<(), String> {
+pub fn bind(hotkeys: &[(&Shortcut, &Action)]) -> Result<(), String> {
     let mut used = vec![path(TOGGLE), path(CANCEL)];
     let mut transforms = 0;
-    for (shortcut, mode) in hotkeys {
+    for (shortcut, action) in hotkeys {
         let binding = gtk_accelerator(shortcut)?;
-        let (id, name, flag) = match mode {
-            Mode::Dictate => (TOGGLE.to_string(), "Yammer: dictate".to_string(), "--toggle".to_string()),
-            Mode::Edit => (EDIT.to_string(), "Yammer: edit the selection".to_string(), "--edit".to_string()),
-            Mode::Transform(t) => {
+        let (id, name, flag) = match action {
+            Action::Meeting => (MEETING.to_string(), "Yammer: start or stop a meeting transcript".to_string(), "--meeting".to_string()),
+            Action::Dictation(Mode::Dictate) => (TOGGLE.to_string(), "Yammer: dictate".to_string(), "--toggle".to_string()),
+            Action::Dictation(Mode::Edit) => (EDIT.to_string(), "Yammer: edit the selection".to_string(), "--edit".to_string()),
+            Action::Dictation(Mode::Transform(t)) => {
                 transforms += 1;
                 (format!("{TRANSFORM}{transforms}"), format!("Yammer: dictate with {t}"), format!("--transform={}", shell_word(t)))
             }
@@ -180,7 +184,8 @@ mod tests {
     fn converts_to_gtk_accelerators() {
         let gtk = |a| gtk_accelerator(&crate::hotkey::parse(a).unwrap()).unwrap();
         assert_eq!(gtk("Shift+KeyZ"), "<Shift>z");
-        assert_eq!(gtk("CommandOrControl+Shift+Space"), "<Control><Shift>space");
+        // Not CommandOrControl: on macOS that's ⌘ (<Super>), and this only runs on Linux.
+        assert_eq!(gtk("Control+Shift+Space"), "<Control><Shift>space");
         assert_eq!(gtk("Super+Alt+Digit1"), "<Alt><Super>1");
         assert_eq!(gtk("F9"), "F9");
         assert_eq!(quote(r"it's \"), r"'it\'s \\'");

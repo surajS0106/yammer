@@ -3,12 +3,13 @@ import type * as React from "react";
 
 import type { PageId } from "@/App";
 import { KeyField } from "@/components/key-field";
+import { ModelPicker } from "@/components/model-picker";
 import { ProviderLogo } from "@/components/provider-logo";
 import { SettingsHero } from "@/components/settings-hero";
 import { Badge, Button, CommitInput, Notice, Progress, Row, Section, Select } from "@/components/ui";
 import { parseWords } from "@/pages/dictionary";
 import { deleteModel, downloadModel, useModels } from "@/lib/models";
-import { languages, providerLabel, sttPresets } from "@/lib/presets";
+import { keyName, languages, providerLabel, sttPresets } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import type { SttApi } from "@/lib/tauri";
 import { cn, formatBytes, isAndroid } from "@/lib/utils";
@@ -97,12 +98,7 @@ function CloudProvider() {
         />
       </Row>
       <Row label="Model">
-        <CommitInput className="w-60" list="stt-models" value={cloud.model} onCommit={(model) => void update({ cloud: { ...cloud, model } })} />
-        <datalist id="stt-models">
-          {preset.models.map((m) => (
-            <option key={m} value={m} />
-          ))}
-        </datalist>
+        <ModelPicker models={preset.models} value={cloud.model} onChange={(model) => void update({ cloud: { ...cloud, model } })} />
       </Row>
       {preset.id === "custom" || preset.id === "ollama" ? (
         <>
@@ -130,7 +126,7 @@ function CloudProvider() {
       ) : null}
       {preset.needsKey && (
         <Row label="API key" stacked>
-          <KeyField name="stt" keyUrl={preset.keyUrl} />
+          <KeyField name={keyName(cloud.preset, "stt") ?? "custom-stt"} keyUrl={preset.keyUrl} page="Speech engine" />
         </Row>
       )}
     </Section>

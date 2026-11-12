@@ -18,6 +18,8 @@ use crate::dictation::{Dictation, Input, Mode};
 use crate::error::{AppError, AppResult};
 #[cfg(desktop)]
 use crate::hotkey::{self, Hotkey};
+#[cfg(desktop)]
+use crate::meeting::{self, Meetings};
 use crate::overlay::{self, OverlayState};
 use crate::state::AppState;
 #[cfg(desktop)]
@@ -25,6 +27,8 @@ use crate::whisper::{self, Whisper};
 #[cfg(desktop)]
 use crate::{paste, recorder, tray};
 use crate::{pipeline, platform, secrets};
+#[cfg(desktop)]
+use voice_core::meetings::{Meeting, Overview};
 
 #[tauri::command]
 pub fn settings_get(state: State<'_, AppState>) -> Settings {
@@ -257,6 +261,81 @@ pub fn export_file(app: AppHandle, name: String, contents: String) -> AppResult<
     Ok(path.display().to_string())
 }
 
+#[cfg(desktop)]
+/// Start transcribing a meeting. Resolves once it's listening.
+#[tauri::command]
+pub async fn meeting_start(app: AppHandle) -> AppResult<meeting::LiveInfo> {
+    meeting::start(&app).await
+}
+
+#[cfg(desktop)]
+/// Stop the meeting; resolves to it, transcribed to the end. Its notes follow as `meeting-updated`.
+#[tauri::command]
+pub async fn meeting_stop(app: AppHandle) -> AppResult<Option<Meeting>> {
+    meeting::stop(&app).await
+}
+
+#[cfg(desktop)]
+/// The overlay's menu: start or stop, reporting errors on the overlay.
+#[tauri::command]
+pub fn meeting_toggle(app: AppHandle) {
+    meeting::toggle(&app);
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub fn meeting_status(meetings: State<'_, Meetings>) -> meeting::Status {
+    meetings.status()
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub fn meetings_list(meetings: State<'_, Meetings>) -> Vec<Overview> {
+    meetings.list()
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub fn meeting_get(meetings: State<'_, Meetings>, id: u64) -> AppResult<Meeting> {
+    meetings.get(id)
+}
+
+#[cfg(desktop)]
+/// Rename a meeting, change the notes typed during it, or edit the notes written from it.
+#[tauri::command]
+pub fn meeting_update(
+    meetings: State<'_, Meetings>,
+    id: u64,
+    title: Option<String>,
+    notes: Option<String>,
+    summary: Option<String>,
+) -> AppResult<Meeting> {
+    meetings.update(id, |m| {
+        if let Some(title) = title {
+            m.title = title.trim().to_string();
+        }
+        if let Some(notes) = notes {
+            m.notes = notes;
+        }
+        if let Some(summary) = summary {
+            m.summary = Some(summary);
+        }
+    })
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub fn meeting_delete(meetings: State<'_, Meetings>, id: u64) -> AppResult<()> {
+    meetings.delete(id)
+}
+
+#[cfg(desktop)]
+/// Write (or rewrite) a stopped meeting's notes with the AI cleanup model.
+#[tauri::command]
+pub async fn meeting_summarize(app: AppHandle, id: u64) -> AppResult<Meeting> {
+    meeting::summarize(&app, id).await
+}
+
 #[tauri::command]
 pub fn scratchpad_list(state: State<'_, AppState>) -> Vec<Note> {
     scratchpad::load(&state.scratchpad_path)
@@ -271,7 +350,7 @@ pub fn scratchpad_save(state: State<'_, AppState>, notes: Vec<Note>) -> AppResul
 #[tauri::command]
 pub async fn text_rewrite(state: State<'_, AppState>, text: String, instructions: String) -> AppResult<String> {
     let settings = state.settings();
-    let key = secrets::get("cleanup")?;
+    let key = secrets::cleanup(&settings)?;
     let out = voice_core::cleanup::rewrite(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, &instructions, &text).await?;
     Ok(voice_core::text::apply(&out, &settings.replacements, &[]))
 }

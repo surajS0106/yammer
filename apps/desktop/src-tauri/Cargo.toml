@@ -39,6 +39,8 @@ arboard = { version = "3", features = ["wayland-data-control"] }
 enigo = "0.6"
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 sha2 = "0.10"
+# Live meeting transcripts stream audio to OpenAI Realtime and Sarvam over WebSockets (meeting.rs).
+tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 # The Kotlin side calls into Rust directly (android/mod.rs), so it works with the app's activity gone.

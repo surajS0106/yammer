@@ -1,8 +1,9 @@
 import { KeyField } from "@/components/key-field";
+import { ModelPicker } from "@/components/model-picker";
 import { ProviderLogo } from "@/components/provider-logo";
 import { HeroChip, SettingsHero } from "@/components/settings-hero";
 import { Card, CommitInput, Notice, Row, Section, Select, Switch } from "@/components/ui";
-import { cleanupPresets, providerLabel } from "@/lib/presets";
+import { cleanupPresets, hasKey, keyName, providerLabel } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import type { Cleanup, LlmFormat } from "@/lib/tauri";
 
@@ -68,12 +69,7 @@ export function CleanupPage() {
           />
         </Row>
         <Row label="Model">
-          <CommitInput className="w-60" list="cleanup-models" value={cleanup.model} onCommit={(model) => void set({ model })} />
-          <datalist id="cleanup-models">
-            {preset.models.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
+          <ModelPicker models={preset.models} value={cleanup.model} onChange={(model) => void set({ model })} />
         </Row>
         {(preset.id === "custom" || preset.id === "ollama") && (
           <>
@@ -96,12 +92,12 @@ export function CleanupPage() {
         )}
         {preset.needsKey && (
           <Row label="API key" stacked>
-            <KeyField name="cleanup" keyUrl={preset.keyUrl} />
+            <KeyField name={keyName(cleanup.preset, "cleanup") ?? "custom-cleanup"} keyUrl={preset.keyUrl} page="AI cleanup" />
           </Row>
         )}
       </Section>
 
-      {cleanup.enabled && preset.needsKey && !secrets.cleanup && <Notice tone="warn">Add an API key above, or cleanup will fail and paste the raw text.</Notice>}
+      {cleanup.enabled && preset.needsKey && !hasKey(secrets, cleanup.preset, "cleanup") && <Notice tone="warn">Add an API key above, or cleanup will fail and paste the raw text.</Notice>}
 
       <Section title="Your rules" description="Added to the cleanup instructions. Example: “Use British spelling. Never use exclamation marks.”">
         <div className="p-3">
