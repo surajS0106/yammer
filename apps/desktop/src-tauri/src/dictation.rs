@@ -286,7 +286,7 @@ fn show_done(app: &AppHandle, done: AppResult<Done>) {
     match done {
         Ok(Done::Pasted { warning: None, words }) if words.is_empty() => overlay::hide(app),
         Ok(Done::Pasted { warning: None, words }) => overlay::show(app, OverlayState::Words { words }),
-        Ok(Done::Pasted { warning: Some(w), .. }) => overlay::flash(app, OverlayState::Message { text: w, error: false }, 3500),
+        Ok(Done::Pasted { warning: Some(w), .. }) => overlay::flash(app, OverlayState::Message { text: w, error: true }, 5000),
         Ok(Done::Copied) => {
             let keys = if cfg!(target_os = "macos") { "⌘V" } else { "Ctrl+V" };
             overlay::flash(app, OverlayState::Message { text: format!("Copied. Press {keys} to paste."), error: false }, 3500);

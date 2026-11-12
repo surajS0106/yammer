@@ -20,6 +20,11 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
 ### Improved
 
 - Yammer has a new set of icons throughout the app.
+- Changing a hotkey shows the keys as you press them, and a shortcut your system already uses (like ⌘ Space for Spotlight or Win+L) is turned down with the reason instead of saved.
+
+### Fixed
+
+- When AI cleanup fails, the message now shows as a warning instead of a green check, and a rejected API key tells you where to update it.
 
 ## 0.5.0 — 2026-11-02
 

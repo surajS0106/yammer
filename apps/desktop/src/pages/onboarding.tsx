@@ -530,7 +530,7 @@ function HotkeyStep() {
       />
       <Card className="flex flex-col items-center gap-4 px-6 py-6">
         <Hotkey accelerator={settings.hotkey} className="[&_kbd]:h-11 [&_kbd]:min-w-11 [&_kbd]:rounded-lg [&_kbd]:bg-background [&_kbd]:px-3 [&_kbd]:text-lg [&_kbd]:shadow-xs" />
-        <HotkeyRecorder value={settings.hotkey} onChange={(hotkey) => update({ hotkey })} />
+        <HotkeyRecorder value={settings.hotkey} onChange={(hotkey) => update({ hotkey })} align="center" />
       </Card>
       {hotkeyError && (
         <div className="mt-3">

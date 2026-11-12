@@ -1,8 +1,12 @@
 # Overlay (Sushi and the pill) — Design Notes
 
-Last updated: 2026-10-19
+Last updated: 2026-11-06
 
 ## What changed
+
+### 2026-11-06 (cleanup failures)
+- A dictation pasted after cleanup failed now flashes as an error for 5 seconds, with the red alert icon and border, instead of a green check for 3.5 seconds (`show_done` in `apps/desktop/src-tauri/src/dictation.rs`). It plays no error sound, because the text was still pasted.
+- An HTTP 401 from the cleanup provider now reads "API key rejected. Update it in Settings → AI cleanup." instead of the provider's own wording (`KEY_REJECTED` and `send` in `crates/voice-core/src/cleanup.rs`). Dictation, Edit by voice and Scratchpad transforms all go through `send`, so they all get this message.
 
 ### 2026-10-19 (hover island)
 - Hovering the idle pill or Sushi opens the pill into an island with three buttons. Dictate toggles dictation, History opens the settings window on History, and Settings opens it on General (`ISLAND` and `IslandButtons` in `apps/desktop/src/overlay.tsx`). The pill grows from 48x8 to 120x40 on the same element, so the existing `ResizeObserver` keeps its hit area current.
@@ -33,6 +37,8 @@ Removing `LSUIElement` so that Yammer has a Dock icon made it a regular app. mac
 WebKit gives a hidden webview no animation frames but keeps its timers running. This happens when the window is hidden, covered, or on another Space. The main window starts hidden, so Sushi's fade-in entrance could stall at opacity 0 on Home. On the overlay, tricks queued while it was hidden and running animations jumped ahead when it came back, which looked like Sushi glitching on every Space or app switch. Resting while hidden costs only the act that was interrupted.
 
 The island first relied on DOM `mouseenter`, and it opened only on click. macOS sends no mouse-moved events to a window that never becomes key, and the overlay must never become key. Yammer already polled the cursor to toggle click-through, so the island reuses that position rather than adding a tracking area or making the panel key. The cost is up to 40 ms of hover latency. The 10px slack is there because the idle pill is only 8px tall. The two other buttons map to History and Settings because Yammer has no meeting recorder or notes.
+
+A green check beside "Cleanup failed (HTTP 401): invalid x-api-key" reported a failure as a success, and it didn't say what to do next. A failed cleanup also recurs on every dictation until it's fixed, so it needs to be noticed. The pill clamps text to two lines of about 44 characters, so the new message is short enough to fit with "(pasted the raw transcript)" after it. The cost is that other 401 details from the provider are no longer shown.
 
 ## What makes it stand out
 
