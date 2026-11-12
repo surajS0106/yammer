@@ -17,6 +17,12 @@ from the desktop app's CHANGELOG.md.
   shows Unreleased.
 -->
 
+## Unreleased
+
+### Improved
+
+- The island at the top of the screen now shows a smooth equaliser beside Sushi while Yammer listens, instead of a jumpy waveform. On OnePlus phones, turn Yammer on under Settings, Notifications & status bar, Live Alerts to see it.
+
 ## 0.7.0 — 2026-11-13
 
 ### New

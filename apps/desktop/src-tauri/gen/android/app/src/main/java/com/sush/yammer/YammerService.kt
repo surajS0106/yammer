@@ -332,8 +332,9 @@ class YammerService : Service() {
 
   /**
    * Ask Android 16 to show this as a live update: the status-bar chip (OnePlus's island, Pixel's
-   * "Now bar"). While listening, it's Sushi hopping with your voice beside a waveform, as a music
-   * app shows what's playing; otherwise [text]. The notification is updated a few times a second
+   * "Now bar"). While listening, it's Sushi beside an equaliser that moves with your voice, as a
+   * music app shows what's playing; otherwise [text]. OxygenOS shows it only once the user turns
+   * Yammer on in Live Alerts, which is off for every third-party app by default. The notification is updated a few times a second
    * then ([islandFrame]), so it only alerts once.
    */
   private fun liveUpdate(builder: Notification.Builder, text: String?) {
