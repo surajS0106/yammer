@@ -44,7 +44,7 @@ Yammer (formerly Larp), a product of Sush: a dictation app modelled on Sush (`..
   - `scratchpad.rs`: the Scratchpad's notes as `scratchpad.json`. Older builds kept them in localStorage; `pages/scratchpad.tsx` moves them over.
   - `meetings.rs`: meeting transcripts, one `meetings/<id>.json` each (so saving mid-call doesn't rewrite the rest): segments tagged `You` (mic), `Them` (system audio) or `Room` (a phone's mic, hearing everyone), the user's own notes, and the written-up notes.
   - `live.rs`: live transcription without a socket. `Segmenter` cuts 16 kHz audio into turns at pauses (OpenAI's `gpt-live-transcribe` has no server VAD, so the app commits each turn), plus the OpenAI Realtime and Sarvam streaming messages.
-  - `transcribe.rs`: cloud speech-to-text over `/audio/transcriptions` or Ollama chat.
+  - `transcribe.rs`: cloud speech-to-text over `/audio/transcriptions` (OpenAI, Groq), Sarvam's `/speech-to-text`, xAI's `/stt` or Ollama chat.
   - `cleanup.rs`: the LLM cleanup prompt and request for OpenAI chat or Anthropic messages, plus `rewrite` (Scratchpad transforms), `edit` (edit by voice) and `summarize` (meeting notes, starting with a `# Title` line that `meetings::split_title` takes off).
 - **`apps/desktop/src-tauri`** (crate `yammer`) is the OS shell.
   - `dictation.rs` is the heart of the app. A single task consumes `Input`s (hotkey Down/Up, Toggle, Cancel, Cap, NoSelection, Retry, Finished) in order:

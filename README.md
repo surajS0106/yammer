@@ -5,7 +5,7 @@ A product of Sush.
 Dictate anywhere. Hold a hotkey, speak, let go: your words are transcribed and pasted wherever the cursor is. It's like Wispr Flow, for Windows, macOS and Linux.
 
 - **Hold to talk** (release to paste), or **tap** to start and tap again to finish. **Esc** cancels.
-- **Private by default:** whisper.cpp runs on your machine. Alternatively, use a cloud service (Groq, OpenAI, Ollama or any OpenAI-compatible API).
+- **Private by default:** whisper.cpp runs on your machine. Alternatively, use a cloud service (Groq, OpenAI, Sarvam, xAI, Ollama or any OpenAI-compatible API).
 - **Optional AI cleanup:** an LLM removes "um"s, applies "scratch that" corrections and fixes punctuation. If it fails, the raw transcript is pasted instead.
 - **Restores your clipboard** after pasting. History stays on your machine, and API keys are kept in the OS keychain.
 

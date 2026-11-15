@@ -62,6 +62,16 @@ export const sttPresets: SttPreset[] = [
     ],
   },
   {
+    id: "xai",
+    label: "xAI (Grok)",
+    baseUrl: "https://api.x.ai/v1",
+    model: "grok-voice-transcribe-2.0",
+    api: "xai",
+    needsKey: true,
+    keyUrl: "https://console.x.ai",
+    models: [{ id: "grok-voice-transcribe-2.0", label: "Grok Voice Transcribe 2.0" }],
+  },
+  {
     id: "ollama",
     label: "Ollama (local server)",
     baseUrl: "http://localhost:11434/v1",
@@ -176,6 +186,7 @@ export function keyName(preset: string, feature: "stt" | "cleanup"): SecretName 
     case "anthropic":
     case "groq":
     case "sarvam":
+    case "xai":
       return preset;
     default:
       return feature === "stt" ? "custom-stt" : "custom-cleanup";
@@ -203,6 +214,7 @@ const providerNames: Record<string, string> = {
   groq: "Groq",
   openai: "OpenAI",
   sarvam: "Sarvam",
+  xai: "xAI",
   anthropic: "Anthropic",
   ollama: "Ollama",
 };

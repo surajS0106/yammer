@@ -15,6 +15,12 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
   stops if that heading is missing. The app never shows Unreleased.
 -->
 
+## Unreleased
+
+### New
+
+- You can now dictate with xAI's Grok speech-to-text: pick xAI under Speech engine and add your xAI API key.
+
 ## 0.7.0 — 2026-11-12
 
 ### New

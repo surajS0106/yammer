@@ -194,6 +194,8 @@ pub enum SttApi {
     OllamaChat,
     /// Sarvam AI's `POST {base}/speech-to-text`, keyed by `api-subscription-key`.
     Sarvam,
+    /// xAI's `POST {base}/stt` (Grok voice transcription), multipart with a bearer key.
+    Xai,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -343,6 +345,7 @@ pub fn provider_name(preset: &str) -> &'static str {
         "groq" => "Groq",
         "openai" => "OpenAI",
         "sarvam" => "Sarvam",
+        "xai" => "xAI",
         "anthropic" => "Anthropic",
         "ollama" => "Ollama",
         _ => "Custom",
@@ -352,7 +355,7 @@ pub fn provider_name(preset: &str) -> &'static str {
 /// Every name an API key is saved under. Keys belong to a provider, not a feature, so one
 /// OpenAI key serves speech, cleanup and meetings alike. A custom server's key stays with the
 /// feature that points at it, since the speech and cleanup servers are rarely the same.
-pub const KEY_NAMES: &[&str] = &["openai", "anthropic", "groq", "sarvam", "custom-stt", "custom-cleanup"];
+pub const KEY_NAMES: &[&str] = &["openai", "anthropic", "groq", "sarvam", "xai", "custom-stt", "custom-cleanup"];
 
 /// The key a provider preset uses: `None` when it needs none (Ollama), `custom` for anything unknown.
 fn key_name(preset: &str, custom: &'static str) -> Option<&'static str> {
@@ -362,6 +365,7 @@ fn key_name(preset: &str, custom: &'static str) -> Option<&'static str> {
         "anthropic" => Some("anthropic"),
         "groq" => Some("groq"),
         "sarvam" => Some("sarvam"),
+        "xai" => Some("xai"),
         _ => Some(custom),
     }
 }
@@ -530,6 +534,7 @@ mod tests {
         assert_eq!(Cleanup { preset: "ollama".into(), ..Cleanup::default() }.key_name(), None);
         // Custom servers keep their own keys, as do unknown presets.
         assert_eq!(CloudStt { preset: "custom".into(), ..CloudStt::default() }.key_name(), Some("custom-stt"));
+        assert_eq!(CloudStt { preset: "xai".into(), ..CloudStt::default() }.key_name(), Some("xai"));
         assert_eq!(Cleanup { preset: "mystery".into(), ..Cleanup::default() }.key_name(), Some("custom-cleanup"));
         for name in [stt.key_name(), Cleanup::default().key_name(), LiveEngine::SarvamStreaming.provider()].into_iter().flatten() {
             assert!(KEY_NAMES.contains(&name), "{name}");

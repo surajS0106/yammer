@@ -7,7 +7,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type Engine = "local" | "cloud";
 export type Theme = "system" | "light" | "dark";
-export type SttApi = "transcriptions" | "ollama-chat" | "sarvam";
+export type SttApi = "transcriptions" | "ollama-chat" | "sarvam" | "xai";
 export type LlmFormat = "openai-chat" | "anthropic-messages";
 
 export interface CloudStt {
@@ -219,7 +219,7 @@ export interface Platform {
 
 /** `live` is the streaming engine's key for meetings. */
 /** Keys are saved per provider, so one key serves every feature set to it. Mirrors `KEY_NAMES` in voice-core's settings.rs. */
-export type SecretName = "openai" | "anthropic" | "groq" | "sarvam" | "custom-stt" | "custom-cleanup";
+export type SecretName = "openai" | "anthropic" | "groq" | "sarvam" | "xai" | "custom-stt" | "custom-cleanup";
 
 /** A newer Android release than the one running (`voice_core::releases::AndroidRelease`). */
 export interface AndroidRelease {

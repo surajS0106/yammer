@@ -17,6 +17,12 @@ from the desktop app's CHANGELOG.md.
   shows Unreleased.
 -->
 
+## Unreleased
+
+### New
+
+- You can now dictate with xAI's Grok speech-to-text: pick xAI under Speech engine and add your xAI API key.
+
 ## 0.8.0 — 2026-11-13
 
 ### Improved

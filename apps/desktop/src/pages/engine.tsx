@@ -119,6 +119,7 @@ function CloudProvider() {
                 { value: "transcriptions", label: "/audio/transcriptions" },
                 { value: "ollama-chat", label: "Ollama chat (audio model)" },
                 { value: "sarvam", label: "Sarvam /speech-to-text" },
+                { value: "xai", label: "xAI /stt" },
               ]}
             />
           </Row>

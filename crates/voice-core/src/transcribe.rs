@@ -1,7 +1,7 @@
 //! Cloud speech-to-text (ported from sush-core). Audio goes in as a WAV file
-//! and plain text comes out, over one of three wire formats:
+//! and plain text comes out, over one of four wire formats:
 //! `/audio/transcriptions` (OpenAI, Groq, Azure: whisper and gpt-4o-transcribe
-//! models), Sarvam AI's `/speech-to-text`, or Ollama's native chat with an
+//! models), Sarvam AI's `/speech-to-text`, xAI's `/stt`, or Ollama's native chat with an
 //! audio-capable model.
 
 use std::time::Duration;
@@ -23,6 +23,9 @@ const SARVAM_PIECE_SECS: usize = 25;
 const SARVAM_PARALLEL: usize = 4;
 /// Retries of a piece that hit a rate limit or a server error.
 const SARVAM_RETRIES: u64 = 2;
+
+/// Languages xAI's `format` (inverse text normalisation) supports.
+const XAI_FORMAT_LANGUAGES: &[&str] = &["ar", "de", "en", "es", "fr", "ja", "pt", "ru", "sv", "vi", "zh"];
 
 pub struct Options<'a> {
     /// ISO 639-1 code; `None` lets the service detect it.
@@ -58,6 +61,28 @@ pub async fn transcribe(cfg: &CloudStt, key: Option<&str>, http: &reqwest::Clien
             parse_transcription(&check_status("Transcription", resp).await?.json().await?)?
         }
         SttApi::Sarvam => sarvam(base, cfg.model.trim(), key, http, samples, &opts).await?,
+        SttApi::Xai => {
+            let file = reqwest::multipart::Part::bytes(audio::encode_wav(samples)).file_name("audio.wav").mime_str("audio/wav")?;
+            let mut form = reqwest::multipart::Form::new().text("model", cfg.model.trim().to_string());
+            if let Some(lang) = opts.language {
+                form = form.text("language", lang.to_string());
+                // Inverse text normalisation ("twenty dollars" → "$20"); xAI rejects it without a language it formats.
+                if XAI_FORMAT_LANGUAGES.contains(&lang) {
+                    form = form.text("format", "true");
+                }
+            }
+            for term in xai_keyterms(opts.vocabulary) {
+                form = form.text("keyterm", term.to_string());
+            }
+            // xAI may ignore fields after the file, so it goes last.
+            form = form.part("file", file);
+            let mut req = http.post(format!("{base}/stt")).multipart(form).timeout(Duration::from_secs(120));
+            if let Some(key) = key {
+                req = req.bearer_auth(key);
+            }
+            let resp = req.send().await.map_err(Error::sending("xAI"))?;
+            parse_transcription(&check_status("xAI", resp).await?.json().await?)?
+        }
         SttApi::OllamaChat => {
             let audio = base64::engine::general_purpose::STANDARD.encode(audio::encode_wav(samples));
             let body = json!({
@@ -165,6 +190,11 @@ fn sarvam_keyterms(vocabulary: &str) -> Option<String> {
     (!terms.is_empty()).then(|| Value::from(terms).to_string())
 }
 
+/// The vocabulary as xAI's repeated `keyterm` fields: at most 100 terms of at most 50 characters.
+fn xai_keyterms(vocabulary: &str) -> Vec<&str> {
+    vocabulary.split([',', '\n']).map(str::trim).filter(|t| !t.is_empty() && t.chars().count() <= 50).take(100).collect()
+}
+
 fn parse_ollama(body: &Value) -> Result<String> {
     body.pointer("/message/content")
         .and_then(Value::as_str)
@@ -208,6 +238,20 @@ mod tests {
         assert_eq!(sarvam_language(None), "unknown");
         assert_eq!(sarvam_keyterms(" Sush, Tauri\nwhisper.cpp ,").as_deref(), Some(r#"["Sush","Tauri","whisper.cpp"]"#));
         assert_eq!(sarvam_keyterms("  "), None);
+    }
+
+    #[test]
+    fn xai_keyterms_skip_long_and_empty_terms() {
+        let long = "x".repeat(51);
+        assert_eq!(xai_keyterms(&format!(" Sush, {long}\nwhisper.cpp ,")), vec!["Sush", "whisper.cpp"]);
+        assert!(xai_keyterms("").is_empty());
+        let many: String = (0..150).map(|i| format!("t{i},")).collect();
+        assert_eq!(xai_keyterms(&many).len(), 100);
+        // xAI answers in the same `text` field as /audio/transcriptions.
+        assert_eq!(
+            parse_transcription(&json!({"text": "The balance is $167,983.15.", "language": "en", "duration": 2.1})).unwrap(),
+            "The balance is $167,983.15."
+        );
     }
 
     #[test]
