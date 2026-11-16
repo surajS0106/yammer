@@ -36,6 +36,7 @@ const providerBlurbs: Record<string, string> = {
   groq: "Very fast, with a free tier.",
   openai: "Pay as you go.",
   sarvam: "Built for Indian languages.",
+  xai: "Grok’s speech model, pay as you go.",
   ollama: "Your own Ollama server, no key needed.",
   custom: "Any OpenAI-compatible speech-to-text API.",
 };

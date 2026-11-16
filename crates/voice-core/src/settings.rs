@@ -226,7 +226,7 @@ pub enum SttApi {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CloudStt {
-    /// Which preset the UI shows ("groq", "openai", "sarvam", "ollama", "custom"). Informational.
+    /// Which preset the UI shows ("groq", "openai", "sarvam", "xai", "ollama", "custom"). Informational.
     pub preset: String,
     pub base_url: String,
     pub model: String,

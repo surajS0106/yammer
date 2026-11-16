@@ -6,6 +6,7 @@ import { Card, CommitInput, Notice, Row, Section, Select, Switch } from "@/compo
 import { cleanupPresets, hasKey, keyName, providerLabel } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
 import type { Cleanup, LlmFormat } from "@/lib/tauri";
+import { isAndroid } from "@/lib/utils";
 
 export function CleanupPage() {
   const { settings, update, secrets } = useSettings();
@@ -65,7 +66,7 @@ export function CleanupPage() {
             label="Provider"
             value={preset.id}
             onChange={choosePreset}
-            options={cleanupPresets.map((p) => ({ value: p.id, label: p.label, icon: <ProviderLogo id={p.id} /> }))}
+            options={cleanupPresets.filter((p) => !isAndroid || p.id !== "ollama").map((p) => ({ value: p.id, label: p.label, icon: <ProviderLogo id={p.id} /> }))}
           />
         </Row>
         <Row label="Model">

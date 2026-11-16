@@ -158,6 +158,19 @@ export const cleanupPresets: CleanupPreset[] = [
     ],
   },
   {
+    id: "xai",
+    label: "xAI (Grok)",
+    baseUrl: "https://api.x.ai/v1",
+    model: "grok-4.20-0309-non-reasoning",
+    format: "openai-chat",
+    needsKey: true,
+    keyUrl: "https://console.x.ai",
+    models: [
+      { id: "grok-4.20-0309-non-reasoning", label: "Grok 4.20 — fast" },
+      { id: "grok-4.7", label: "Grok 4.7 — most capable" },
+    ],
+  },
+  {
     id: "ollama",
     label: "Ollama (local server)",
     baseUrl: "http://localhost:11434/v1",

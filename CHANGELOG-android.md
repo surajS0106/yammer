@@ -17,6 +17,12 @@ from the desktop app's CHANGELOG.md.
   shows Unreleased.
 -->
 
+## 0.10.0 — 2026-11-16
+
+### New
+
+- AI cleanup can now use xAI's Grok: pick xAI under AI cleanup, and the xAI key you saved for speech works there too.
+
 ## 0.9.0 — 2026-11-16
 
 ### New

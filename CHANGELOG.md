@@ -15,6 +15,12 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
   stops if that heading is missing. The app never shows Unreleased.
 -->
 
+## 0.9.0 — 2026-11-16
+
+### New
+
+- AI cleanup can now use xAI's Grok: pick xAI under AI cleanup, and the xAI key you saved for speech works there too.
+
 ## 0.8.0 — 2026-11-16
 
 ### New
