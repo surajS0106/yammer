@@ -17,7 +17,7 @@ from the desktop app's CHANGELOG.md.
   shows Unreleased.
 -->
 
-## Unreleased
+## 0.9.0 — 2026-11-16
 
 ### New
 
