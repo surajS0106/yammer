@@ -247,9 +247,13 @@ export interface AndroidStatus {
   /** The foreground service is up, so Sushi can start a recording. */
   running: boolean;
   recording: boolean;
+  /** Sushi was last turned on (true) or off (false), from the app, its notification or the ✕; null before the service kept track. */
+  wanted: boolean | null;
+  /** Installed payment apps (by name) that refuse to work while "Paste for you" is on. */
+  paymentApps: string[];
 }
 
-export type AndroidAction = "requestMic" | "requestNotifications" | "openOverlaySettings" | "openAccessibilitySettings" | "openAppSettings" | "startBubble" | "stopBubble" | "toggle" | "barsLight" | "barsDark";
+export type AndroidAction = "requestMic" | "requestNotifications" | "openOverlaySettings" | "openAccessibilitySettings" | "openAppSettings" | "startBubble" | "stopBubble" | "stopPasting" | "toggle" | "barsLight" | "barsDark";
 
 export type OverlayState =
   | { phase: "listening"; hint: string | null }

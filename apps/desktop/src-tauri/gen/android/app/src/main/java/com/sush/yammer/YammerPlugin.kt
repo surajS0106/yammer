@@ -56,7 +56,33 @@ class YammerPlugin(private val activity: Activity) : Plugin(activity) {
         // Running only to record a meeting isn't Sushi being on.
         put("running", service != null && !service.onlyForMeeting)
         put("recording", service?.isRecording == true)
+        // Null until Sushi is first turned on or off in this version: the page's own memory of it applies.
+        put("wanted", YammerService.wanted(activity) ?: org.json.JSONObject.NULL)
+        put("paymentApps", org.json.JSONArray(paymentApps()))
       },
+    )
+  }
+
+  /** Installed apps that refuse to work while Paste for you is on, by name. The manifest's <queries> lets these be seen. */
+  private fun paymentApps(): List<String> = PAYMENT_APPS.filter { (pkg, _) ->
+    runCatching { activity.packageManager.getPackageInfo(pkg, 0) }.isSuccess
+  }.map { it.second }
+
+  /** Paste for you off, before paying with Google Pay. Only the user can turn it back on, in Accessibility settings. */
+  @Command
+  fun stopPasting(invoke: Invoke) {
+    YammerAccessibility.turnOff()
+    YammerService.instance?.refreshNotification()
+    invoke.resolve()
+  }
+
+  private companion object {
+    /** Package to name. Google Pay is the one users hit; the others are India's other big UPI apps, which run similar checks. */
+    val PAYMENT_APPS = listOf(
+      "com.google.android.apps.nbu.paisa.user" to "Google Pay",
+      "com.phonepe.app" to "PhonePe",
+      "net.one97.paytm" to "Paytm",
+      "in.org.npci.upiapp" to "BHIM",
     )
   }
 

@@ -74,7 +74,19 @@ class YammerService : Service() {
     super.onCreate()
     Vault.unlock(this)
     instance = this
-    bubble = Bubble(this) { toggle() }
+    bubble = Bubble(this, onTap = { toggle() }, canDismiss = { phase == Phase.IDLE }, onDismiss = ::turnOff)
+  }
+
+  /** Sushi off, from its notification, the app or dragging it onto the ✕. Home won't turn it back on by itself. */
+  private fun turnOff() {
+    setWanted(this, false)
+    // Turning Sushi off mid-meeting only hides it: the meeting carries on.
+    if (meeting != null) {
+      bubble?.hide()
+      onlyForMeeting = true
+      return
+    }
+    shutDown()
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -82,13 +94,12 @@ class YammerService : Service() {
     when (intent?.action) {
       ACTION_TOGGLE -> toggle()
       ACTION_STOP -> {
-        // Turning Sushi off mid-meeting only hides it: the meeting carries on.
-        if (meeting != null) {
-          bubble?.hide()
-          onlyForMeeting = true
-          return START_NOT_STICKY
-        }
-        shutDown()
+        turnOff()
+        return START_NOT_STICKY
+      }
+      ACTION_PASTE_OFF -> {
+        if (YammerAccessibility.turnOff()) bubble?.say("Paste for you is off, so payment apps work. Turn it on again in Yammer.", 5000)
+        updateNotification()
         return START_NOT_STICKY
       }
       ACTION_MEETING -> {
@@ -290,6 +301,10 @@ class YammerService : Service() {
     foreground = true
   }
 
+  fun refreshNotification() {
+    if (foreground) updateNotification()
+  }
+
   private fun updateNotification() {
     getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification())
   }
@@ -325,6 +340,8 @@ class YammerService : Service() {
       .setOngoing(true)
       .addAction(Notification.Action.Builder(null, verb, self(ACTION_TOGGLE, 1)).build())
       .addAction(Notification.Action.Builder(null, "Turn off", self(ACTION_STOP, 2)).build())
+    // Google Pay won't work while it's on: one tap to switch it off before paying.
+    if (phase == Phase.IDLE && YammerAccessibility.isOn) builder.addAction(Notification.Action.Builder(null, "Stop pasting", self(ACTION_PASTE_OFF, 4)).build())
     if (phase == Phase.RECORDING) builder.setWhen(startedAt).setShowWhen(true).setUsesChronometer(true)
     if (phase != Phase.IDLE) liveUpdate(builder, if (phase == Phase.BUSY) "Typing" else null)
     return builder.build()
@@ -358,6 +375,7 @@ class YammerService : Service() {
     private const val ACTION_STOP = "com.sush.yammer.STOP"
     private const val ACTION_MEETING = "com.sush.yammer.MEETING"
     private const val ACTION_MEETING_STOP = "com.sush.yammer.MEETING_STOP"
+    private const val ACTION_PASTE_OFF = "com.sush.yammer.PASTE_OFF"
     private const val MAX_MS = 600_000L
     private const val PASTE_DELAY_MS = 120L
     /** Long enough for the app pasted into to have read it. */
@@ -371,7 +389,21 @@ class YammerService : Service() {
 
     /** Must be called while the app is on screen, or Android refuses it the microphone. */
     fun start(context: Context) {
+      setWanted(context, true)
       context.startForegroundService(Intent(context, YammerService::class.java))
+    }
+
+    /**
+     * Whether the user last turned Sushi on (true) or off (false), so Home brings it back after a
+     * reboot but not after it was turned off; null before this was kept here (the page's localStorage had it).
+     */
+    fun wanted(context: Context): Boolean? {
+      val prefs = context.getSharedPreferences("bubble", Context.MODE_PRIVATE)
+      return if (prefs.contains("wanted")) prefs.getBoolean("wanted", false) else null
+    }
+
+    private fun setWanted(context: Context, on: Boolean) {
+      context.getSharedPreferences("bubble", Context.MODE_PRIVATE).edit().putBoolean("wanted", on).apply()
     }
 
     /** Start the service with a recording going: the in-app Dictate button with Sushi off. */

@@ -2,7 +2,9 @@ package com.sush.yammer
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.provider.Settings
@@ -19,10 +21,18 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
- * Sushi floating over other apps. Tap to start or stop dictating; drag to move it.
+ * Sushi floating over other apps. Tap to start or stop dictating; drag to move it, or onto the ✕
+ * that appears at the bottom while dragging to turn Sushi off ([onDismiss]), as chat heads do.
+ * People playing a game full screen found no other way to get rid of it.
  * The window can't take focus (FLAG_NOT_FOCUSABLE), so the text box you're typing in keeps it.
  */
-class Bubble(private val context: Context, private val onTap: () -> Unit) {
+class Bubble(
+  private val context: Context,
+  private val onTap: () -> Unit,
+  /** Whether dropping Sushi on the ✕ may turn it off now: not mid-dictation. */
+  private val canDismiss: () -> Boolean,
+  private val onDismiss: () -> Unit,
+) {
   enum class Look {
     IDLE,
     LISTENING,
@@ -67,6 +77,19 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
     x = prefs.getInt("x", 0).coerceIn(0, max(0, context.resources.displayMetrics.widthPixels - dp(110)))
     y = prefs.getInt("y", context.resources.displayMetrics.heightPixels / 2).coerceIn(0, max(0, context.resources.displayMetrics.heightPixels - dp(130)))
   }
+  private val target = DismissTarget(context, dp(64))
+  private val targetParams = WindowManager.LayoutParams(
+    WindowManager.LayoutParams.WRAP_CONTENT,
+    WindowManager.LayoutParams.WRAP_CONTENT,
+    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+    PixelFormat.TRANSLUCENT,
+  ).apply {
+    gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+    y = dp(72)
+    // Android 12+ lets touches through an untouchable overlay only at 0.8 opacity or less.
+    alpha = 0.8f
+  }
   private var shown = false
 
   /** On screen over other apps. */
@@ -79,13 +102,25 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
     if (!Settings.canDrawOverlays(context)) return false
     setLook(Look.IDLE)
     root.setOnTouchListener(dragOrTap())
+    // The ✕ goes in first so that Sushi, dropped on it, is drawn on top.
+    target.visibility = View.GONE
+    windows.addView(target, targetParams)
     windows.addView(root, params)
     shown = true
+    // Until it's been learnt: someone in a game had no idea how to make Sushi go away.
+    val hints = prefs.getInt("dismissHints", 0)
+    if (hints < 3) {
+      prefs.edit().putInt("dismissHints", hints + 1).apply()
+      say("Drag me to the bottom to hide me", 4000)
+    }
     return true
   }
 
   fun hide() {
-    if (shown) windows.removeView(root)
+    if (shown) {
+      windows.removeView(root)
+      windows.removeView(target)
+    }
     shown = false
   }
 
@@ -130,6 +165,13 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
     private var touchX = 0f
     private var touchY = 0f
     private var dragging = false
+    /** Where the window's (0, 0) is on screen, to put Sushi over the ✕. */
+    private var originX = 0
+    private var originY = 0
+    private var dismissable = false
+    /** Over the ✕: letting go turns Sushi off. */
+    private var over = false
+    private val loc = IntArray(2)
 
     override fun onTouch(v: View, e: MotionEvent): Boolean {
       when (e.actionMasked) {
@@ -138,7 +180,11 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
           startY = params.y
           touchX = e.rawX
           touchY = e.rawY
+          root.getLocationOnScreen(loc)
+          originX = loc[0] - params.x
+          originY = loc[1] - params.y
           dragging = false
+          over = false
           icon.poke()
         }
         MotionEvent.ACTION_MOVE -> {
@@ -147,18 +193,45 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
           if (!dragging && (abs(dx) > slop || abs(dy) > slop)) {
             dragging = true
             icon.setHeld(true)
+            dismissable = canDismiss()
+            if (dismissable) {
+              say(null)
+              target.appear()
+            }
           }
           if (dragging) {
-            val m = context.resources.displayMetrics
-            params.x = (startX + dx.toInt()).coerceIn(0, max(0, m.widthPixels - dp(110)))
-            params.y = (startY + dy.toInt()).coerceIn(0, max(0, m.heightPixels - dp(130)))
+            val near = dismissable && target.isNear(e.rawX, e.rawY, dp(88))
+            if (near != over) {
+              over = near
+              target.setHot(near)
+              v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+            }
+            if (over) {
+              // Sushi snaps onto the ✕. The root's padding is 4dp.
+              target.getLocationOnScreen(loc)
+              params.x = loc[0] + target.width / 2 - originX - icon.width / 2 - dp(4)
+              params.y = loc[1] + target.height / 2 - originY - icon.height / 2 - dp(4)
+            } else {
+              val m = context.resources.displayMetrics
+              params.x = (startX + dx.toInt()).coerceIn(0, max(0, m.widthPixels - dp(110)))
+              params.y = (startY + dy.toInt()).coerceIn(0, max(0, m.heightPixels - dp(130)))
+            }
             windows.updateViewLayout(root, params)
           }
         }
         MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
           icon.setHeld(false)
+          if (dragging && dismissable) target.vanish()
+          if (over) {
+            // It comes back where it was, not on the ✕, the next time it's on screen.
+            params.x = startX
+            params.y = startY
+          }
           if (e.actionMasked == MotionEvent.ACTION_CANCEL) {
             // The system took the touch away: neither a tap nor the end of a drag.
+            if (over) windows.updateViewLayout(root, params)
+          } else if (over) {
+            onDismiss()
           } else if (dragging) {
             prefs.edit().putInt("x", params.x).putInt("y", params.y).apply()
           } else {
@@ -169,5 +242,75 @@ class Bubble(private val context: Context, private val onTap: () -> Unit) {
       }
       return true
     }
+  }
+}
+
+/** The ✕ at the bottom of the screen that Sushi is dropped on to turn it off. It grows and turns red with Sushi over it. */
+private class DismissTarget(context: Context, private val size: Int) : View(context) {
+  private val density = context.resources.displayMetrics.density
+  private var hot = false
+  private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+  private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeWidth = 1.5f * density
+    color = Color.parseColor("#66FFFFFF")
+  }
+  private val cross = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeWidth = 2.5f * density
+    strokeCap = Paint.Cap.ROUND
+    color = Color.WHITE
+  }
+  private val loc = IntArray(2)
+
+  init {
+    contentDescription = "Turn Sushi off"
+  }
+
+  // Room to grow while hot without the window resizing.
+  override fun onMeasure(w: Int, h: Int) = setMeasuredDimension((size * 1.4f).toInt(), (size * 1.4f).toInt())
+
+  override fun onDraw(canvas: Canvas) {
+    val cx = width / 2f
+    val cy = height / 2f
+    val r = size / 2f * (if (hot) 1.25f else 1f)
+    fill.color = if (hot) Color.parseColor("#E5484D") else Color.parseColor("#D9222222")
+    canvas.drawCircle(cx, cy, r, fill)
+    if (!hot) canvas.drawCircle(cx, cy, r, ring)
+    val arm = size * 0.16f
+    canvas.drawLine(cx - arm, cy - arm, cx + arm, cy + arm, cross)
+    canvas.drawLine(cx - arm, cy + arm, cx + arm, cy - arm, cross)
+  }
+
+  fun setHot(on: Boolean) {
+    if (hot == on) return
+    hot = on
+    invalidate()
+  }
+
+  fun isNear(x: Float, y: Float, within: Int): Boolean {
+    if (visibility != VISIBLE || width == 0) return false
+    getLocationOnScreen(loc)
+    val dx = x - (loc[0] + width / 2f)
+    val dy = y - (loc[1] + height / 2f)
+    return sqrt(dx * dx + dy * dy) < within
+  }
+
+  fun appear() {
+    hot = false
+    animate().cancel()
+    visibility = VISIBLE
+    alpha = 0f
+    scaleX = 0.6f
+    scaleY = 0.6f
+    animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(160).start()
+  }
+
+  fun vanish() {
+    animate().cancel()
+    animate().alpha(0f).scaleX(0.6f).scaleY(0.6f).setDuration(140).withEndAction {
+      visibility = GONE
+      hot = false
+    }.start()
   }
 }

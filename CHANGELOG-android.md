@@ -22,6 +22,12 @@ from the desktop app's CHANGELOG.md.
 ### New
 
 - You can now dictate with xAI's Grok speech-to-text: pick xAI under Speech engine and add your xAI API key.
+- You can now hide Sushi by dragging it onto the ✕ that appears at the bottom of the screen, from any app or game.
+- You can now turn off Paste for you in one tap, from Sushi's notification or Settings, so Google Pay lets you pay; Yammer warns you about this before you turn it on.
+
+### Fixed
+
+- Sushi no longer comes back on by itself when you open Yammer after turning it off from its notification.
 
 ## 0.8.0 — 2026-11-13
 

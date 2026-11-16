@@ -124,6 +124,18 @@ export function HelpPage({ go }: { go: (page: PageId) => void }) {
             words are copied for you to paste.
           </Item>
         )}
+        {isAndroid && (
+          <Item q="Google Pay asks me to turn off Yammer’s accessibility">
+            Google Pay, and some bank apps, won’t let you pay while an app installed from outside the Play Store has Accessibility on. Before
+            paying, tap Stop pasting in Sushi’s notification, or turn off Paste for you in Settings, then turn it back on after. Your words are
+            still copied for you to paste while it’s off.
+          </Item>
+        )}
+        {isAndroid && (
+          <Item q="How do I hide Sushi?">
+            Drag Sushi to the ✕ at the bottom of the screen, or tap Turn off in its notification. Turn it back on from Home.
+          </Item>
+        )}
         <Item q="Can I transcribe a meeting without telling people?">
           Tell everyone at the start that you’re transcribing, and stop if anyone objects. Recording people without their consent is against
           the law in many places.

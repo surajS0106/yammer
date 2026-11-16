@@ -52,6 +52,7 @@ function Permission({
   granted,
   action,
   onAllow,
+  revoke,
   children,
 }: {
   icon: React.ElementType;
@@ -60,6 +61,8 @@ function Permission({
   granted: boolean;
   action: string;
   onAllow: () => void;
+  /** A way to take it back from here, offered once it's allowed. */
+  revoke?: { label: string; run: () => void };
   children: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -76,9 +79,23 @@ function Permission({
         <div className="space-y-4 px-3 pt-1">
           <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">{children}</div>
           {granted ? (
-            <p className="flex items-center gap-2 text-sm font-medium">
-              <Check className="size-5 text-emerald-500" weight="bold" /> Allowed
-            </p>
+            <>
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <Check className="size-5 text-emerald-500" weight="bold" /> Allowed
+              </p>
+              {revoke && (
+                <Button
+                  variant="outline"
+                  className="h-12 w-full rounded-2xl"
+                  onClick={() => {
+                    setOpen(false);
+                    revoke.run();
+                  }}
+                >
+                  {revoke.label}
+                </Button>
+              )}
+            </>
           ) : (
             <Button
               className="h-12 w-full rounded-2xl"
@@ -108,8 +125,17 @@ export function AndroidPermissions() {
       <Permission icon={PictureInPicture2} title="Sushi over other apps" granted={!!status?.overlay} action="Open setting" onAllow={() => act("openOverlaySettings")}>
         So you can tap Sushi from any app. Find Yammer in the list and switch it on, then come back.
       </Permission>
-      <Permission icon={MousePointerClick} title="Paste for you" optional granted={!!status?.accessibility} action="Open Accessibility settings" onAllow={() => act("openAccessibilitySettings")}>
+      <Permission
+        icon={MousePointerClick}
+        title="Paste for you"
+        optional
+        granted={!!status?.accessibility}
+        action="Open Accessibility settings"
+        onAllow={() => act("openAccessibilitySettings")}
+        revoke={{ label: "Turn off Paste for you", run: () => act("stopPasting") }}
+      >
         <p>Without it, your words are copied and you paste them yourself. Under Downloaded apps, pick Yammer and switch it on.</p>
+        <PaymentWarning apps={status?.paymentApps} />
         {!status?.accessibility && (
           <p>
             If Android says it’s a restricted setting,{" "}
@@ -127,6 +153,25 @@ export function AndroidPermissions() {
   );
 }
 
+/**
+ * Google Pay, and apps like it, won't let you pay while an Accessibility service from an app that
+ * didn't come from the Play Store is on, and can make you reset your UPI PIN after. Say so before
+ * "Paste for you" is turned on, rather than after a payment fails.
+ */
+function PaymentWarning({ apps }: { apps: string[] | undefined }) {
+  const names = apps?.length ? listNames(apps) : "Google Pay and some bank apps";
+  return (
+    <p>
+      {names} won’t let you pay while Paste for you is on. Before paying, tap Stop pasting in Sushi’s notification, or turn it off here, and
+      switch it back on after.
+    </p>
+  );
+}
+
+function listNames(names: string[]): string {
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 /** Home's first tiles on a phone: the Dictate button with Sushi and the status, then the switch for Sushi over other apps beside `side`. */
 export function AndroidHero({ pill, sushi, side }: { pill: React.ReactNode; sushi: React.ReactNode; side: React.ReactNode }) {
   const status = useAndroidStatus();
@@ -138,7 +183,8 @@ export function AndroidHero({ pill, sushi, side }: { pill: React.ReactNode; sush
   React.useEffect(() => {
     if (!status || restored.current) return;
     restored.current = true;
-    if (bubbleWanted() && status.mic && !status.running) act("startBubble");
+    // Not after it was turned off from its notification or the ✕, which the page doesn't hear about.
+    if ((status.wanted ?? bubbleWanted()) && status.mic && !status.running) act("startBubble");
   }, [status, act]);
 
   const setBubble = (on: boolean) => {
@@ -181,6 +227,17 @@ export function AndroidHero({ pill, sushi, side }: { pill: React.ReactNode; sush
             <button type="button" className="font-medium underline" onClick={() => act(!status.mic ? "requestMic" : "openOverlaySettings")}>
               Allow
             </button>
+          </Notice>
+        </div>
+      )}
+      {status?.accessibility && status.paymentApps.length > 0 && (
+        <div className="col-span-2">
+          <Notice tone="warn">
+            {listNames(status.paymentApps)} won’t let you pay while Paste for you is on.{" "}
+            <button type="button" className="font-medium underline" onClick={() => act("stopPasting")}>
+              Turn it off
+            </button>{" "}
+            before paying, and on again in Settings after.
           </Notice>
         </div>
       )}

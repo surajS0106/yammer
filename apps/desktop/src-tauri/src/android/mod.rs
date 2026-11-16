@@ -132,6 +132,11 @@ pub struct Status {
     /// The foreground service is up, so Sushi can start a recording.
     running: bool,
     recording: bool,
+    /// Sushi was last turned on (true) or off (false); null before the service kept track.
+    wanted: Option<bool>,
+    /// Installed payment apps that refuse to work while "Paste for you" is on.
+    #[serde(default)]
+    payment_apps: Vec<String>,
 }
 
 #[tauri::command]
@@ -150,6 +155,7 @@ async fn android_action(native: tauri::State<'_, Native>, action: String) -> App
         "openAppSettings",
         "startBubble",
         "stopBubble",
+        "stopPasting",
         "toggle",
         "barsLight",
         "barsDark",
