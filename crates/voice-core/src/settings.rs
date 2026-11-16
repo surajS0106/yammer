@@ -120,6 +120,26 @@ pub enum SummaryStyle {
     Custom,
 }
 
+/// What happens when another app starts a call (`calls.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum CallDetect {
+    Off,
+    /// Sushi asks whether to transcribe it.
+    #[default]
+    Ask,
+    /// Sushi counts down, then starts transcribing unless told not to.
+    Auto,
+}
+
+/// An app Sushi never offers to transcribe a call from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IgnoredApp {
+    /// `calls::MicUser::id`.
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct MeetingSettings {
@@ -134,6 +154,9 @@ pub struct MeetingSettings {
     pub summary_instructions: String,
     /// Write the notes as soon as the meeting ends, with the AI cleanup model.
     pub auto_summary: bool,
+    /// When another app starts using the microphone for a call, offer to transcribe it.
+    pub detect: CallDetect,
+    pub ignored_apps: Vec<IgnoredApp>,
 }
 
 impl Default for MeetingSettings {
@@ -146,6 +169,8 @@ impl Default for MeetingSettings {
             summary: SummaryStyle::Minutes,
             summary_instructions: String::new(),
             auto_summary: true,
+            detect: CallDetect::Ask,
+            ignored_apps: Vec::new(),
         }
     }
 }
@@ -591,6 +616,11 @@ mod tests {
         assert_eq!((v["meeting"]["summary"].as_str(), v["meeting"]["autoSummary"].as_bool()), (Some("minutes"), Some(true)));
         let m: MeetingSettings = serde_json::from_str(r#"{"engine":"openai-realtime","summary":"action-items"}"#).unwrap();
         assert_eq!((m.engine, m.summary, m.audio), (LiveEngine::OpenaiRealtime, SummaryStyle::ActionItems, CallAudio::Both));
+        // Settings from before call detection ask, and ignore nothing.
+        assert_eq!((m.detect, m.ignored_apps.len()), (CallDetect::Ask, 0));
+        assert_eq!((v["meeting"]["detect"].as_str(), v["meeting"]["ignoredApps"].as_array().map(Vec::len)), (Some("ask"), Some(0)));
+        let m: MeetingSettings = serde_json::from_str(r#"{"detect":"auto","ignoredApps":[{"id":"zoom","name":"Zoom"}]}"#).unwrap();
+        assert_eq!((m.detect, m.ignored_apps), (CallDetect::Auto, vec![IgnoredApp { id: "zoom".into(), name: "Zoom".into() }]));
     }
 
     #[test]

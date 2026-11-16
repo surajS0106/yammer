@@ -1,5 +1,7 @@
-// Settings → Meetings: how a meeting is heard, what transcribes it live, and
-// how its notes are written afterwards.
+// Settings → Meetings: how a meeting is heard, what happens when a call starts
+// (calls.rs), what transcribes it live, and how its notes are written afterwards.
+
+import { X } from "@phosphor-icons/react";
 
 import type { PageId } from "@/App";
 import { HotkeyRecorder } from "@/components/hotkey-recorder";
@@ -10,7 +12,7 @@ import { HeroChip, SettingsHero } from "@/components/settings-hero";
 import { Button, CommitInput, Notice, Row, Section, Select, Switch } from "@/components/ui";
 import { hasKey, type ModelOption } from "@/lib/presets";
 import { useSettings } from "@/lib/settings";
-import type { CallAudio, LiveEngine, MeetingSettings, SummaryStyle } from "@/lib/tauri";
+import type { CallAudio, CallDetect, LiveEngine, MeetingSettings, SummaryStyle } from "@/lib/tauri";
 import { isAndroid, isMac } from "@/lib/utils";
 
 const isLinux = navigator.userAgent.includes("Linux");
@@ -41,6 +43,12 @@ const audioOptions: { value: CallAudio; label: string }[] = [
   { value: "both", label: "Your mic and the call" },
   { value: "mic", label: "Only your microphone" },
   { value: "system", label: "Only the computer's sound" },
+];
+
+const detectOptions: { value: CallDetect; label: string }[] = [
+  { value: "ask", label: "Ask to transcribe it" },
+  { value: "auto", label: "Transcribe it after a countdown" },
+  { value: "off", label: "Do nothing" },
 ];
 
 const styleOptions: { value: SummaryStyle; label: string }[] = [
@@ -111,6 +119,50 @@ export function MeetingSettingsPage({ go }: { go: (page: PageId) => void }) {
           <Select className="w-60" label="Listen to" value={m.audio} onChange={(audio) => void set({ audio })} options={audioOptions} />
         </Row>
       </Section>
+      )}
+
+      {!isAndroid && (
+        <Section
+          title="Calls"
+          description="Yammer notices when another app, like Zoom, Teams or a browser on Meet, starts using your microphone, and Sushi offers to transcribe the call."
+        >
+          <Row
+            label="When a call starts"
+            description={
+              <>
+                {m.detect === "auto"
+                  ? "Sushi counts down from 5 and starts the transcript, unless you cancel. "
+                  : m.detect === "ask"
+                    ? "Sushi asks whether to transcribe it. "
+                    : null}
+                {m.detect !== "off" && "When the call ends, the transcript stops after a 10-second countdown you can cancel."}
+                {m.detect !== "off" && isMac && " Needs macOS 14.2 or later."}
+              </>
+            }
+          >
+            <Select className="w-64" label="When a call starts" value={m.detect} onChange={(detect) => void set({ detect })} options={detectOptions} />
+          </Row>
+          {m.ignoredApps.length > 0 && (
+            <Row label="Never ask about" description="Sushi leaves calls in these apps alone. Remove one to be asked again." stacked>
+              <div className="flex flex-wrap gap-1.5">
+                {m.ignoredApps.map((a) => (
+                  <span key={a.id} className="inline-flex h-7 items-center gap-1 rounded-full bg-muted pr-1 pl-2.5 text-xs font-medium">
+                    {a.name}
+                    <button
+                      type="button"
+                      aria-label={`Ask about ${a.name} again`}
+                      title="Ask again"
+                      className="grid size-5 cursor-pointer place-items-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
+                      onClick={() => void set({ ignoredApps: m.ignoredApps.filter((x) => x.id !== a.id) })}
+                    >
+                      <X className="size-3" weight="bold" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </Row>
+          )}
+        </Section>
       )}
 
       <Section

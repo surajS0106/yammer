@@ -319,6 +319,13 @@ pub fn meeting_delete(meetings: State<'_, Meetings>, id: u64) -> AppResult<()> {
     meetings.delete(id)
 }
 
+#[cfg(desktop)]
+/// A call card's buttons, or its countdown running out: `id` is the card's.
+#[tauri::command]
+pub fn call_answer(app: AppHandle, id: u64, answer: crate::calls::Answer) {
+    crate::calls::answer(&app, id, answer);
+}
+
 /// Write (or rewrite) a stopped meeting's notes with the AI cleanup model.
 #[tauri::command]
 pub async fn meeting_summarize(app: AppHandle, id: u64) -> AppResult<Meeting> {

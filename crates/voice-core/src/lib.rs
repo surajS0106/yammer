@@ -2,6 +2,7 @@
 //! Audio buffers in, text out; settings and history on disk.
 
 pub mod audio;
+pub mod calls;
 pub mod cleanup;
 pub mod error;
 pub mod history;

@@ -5,6 +5,8 @@
 
 #[cfg(target_os = "android")]
 mod android;
+#[cfg(desktop)]
+mod calls;
 mod commands;
 #[cfg(desktop)]
 mod dictation;
@@ -117,6 +119,7 @@ pub fn run() {
             secrets::migrate(&settings);
             overlay::create(app.handle())?;
             overlay::set_always_visible(app.handle(), settings.overlay_always_visible);
+            calls::watch(app.handle().clone());
             tray::create(app.handle(), &settings)?;
             if let Err(e) = hotkey::register(app.handle(), &settings) {
                 eprintln!("{e}");
@@ -192,6 +195,7 @@ pub fn run() {
             commands::meeting_update,
             commands::meeting_delete,
             commands::meeting_summarize,
+            commands::call_answer,
             commands::scratchpad_list,
             commands::scratchpad_save,
             commands::copy_text,

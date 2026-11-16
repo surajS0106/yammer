@@ -15,6 +15,14 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
   stops if that heading is missing. The app never shows Unreleased.
 -->
 
+## Unreleased
+
+### New
+
+- When Zoom, Teams, Meet or another app starts a call, Sushi offers to transcribe it, and when the call ends it counts down to stopping the transcript.
+- You can have calls transcribed by themselves after a short countdown, or turn the offer off, under Settings → Meetings → Calls.
+- Choose "Never for Zoom" (or any app) on Sushi's offer to stop being asked about calls in that app.
+
 ## 0.7.1 — 2026-11-15
 
 ### New

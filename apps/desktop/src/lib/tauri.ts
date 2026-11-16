@@ -47,6 +47,13 @@ export interface Transform {
 export type CallAudio = "both" | "mic" | "system";
 export type LiveEngine = "dictation" | "openai-realtime" | "sarvam-streaming";
 export type SummaryStyle = "minutes" | "summary" | "action-items" | "custom";
+/** When another app starts a call: do nothing, ask to transcribe it, or count down and transcribe it. */
+export type CallDetect = "off" | "ask" | "auto";
+/** An app Sushi never offers to transcribe a call from. */
+export interface IgnoredApp {
+  id: string;
+  name: string;
+}
 
 export interface MeetingSettings {
   /** Starts and stops a meeting transcript; "" for none. */
@@ -60,6 +67,8 @@ export interface MeetingSettings {
   summaryInstructions: string;
   /** Write the notes as soon as the meeting ends. */
   autoSummary: boolean;
+  detect: CallDetect;
+  ignoredApps: IgnoredApp[];
 }
 
 export interface Settings {
@@ -258,7 +267,14 @@ export type OverlayState =
   | { phase: "idle" }
   /** Between dictations while a meeting is being transcribed. `startedAt` is Unix ms. */
   | { phase: "meeting"; startedAt: number }
+  /** `app` started a call: offer to transcribe it. With `countdownMs`, it starts when the count runs out. */
+  | { phase: "call-started"; id: number; app: string; countdownMs: number | null }
+  /** The call being transcribed ended: count down to stopping the meeting. */
+  | { phase: "call-ended"; id: number; app: string; countdownMs: number }
   | { phase: "hidden" };
+
+/** An answer to a call card, from its buttons or its countdown running out. */
+export type CallAnswer = "start" | "not-now" | "never" | "stop" | "keep-going";
 
 export const api = {
   settingsGet: () => invoke<Settings>("settings_get"),
@@ -294,6 +310,8 @@ export const api = {
   meetingStop: () => invoke<Meeting | null>("meeting_stop"),
   /** Start or stop, showing any error on the overlay. */
   meetingToggle: () => invoke<void>("meeting_toggle"),
+  /** Answer call card `id`; an answer to a card that's gone is ignored. */
+  callAnswer: (id: number, answer: CallAnswer) => invoke<void>("call_answer", { id, answer }),
   meetingStatus: () => invoke<MeetingStatus>("meeting_status"),
   meetingsList: () => invoke<MeetingOverview[]>("meetings_list"),
   meetingGet: (id: number) => invoke<Meeting>("meeting_get", { id }),

@@ -7,7 +7,8 @@
 // the pill becomes a card holding the transcript, with Sushi inside it. When a
 // dictation heard words the Dictionary doesn't know, a card offers to add them
 // (inside the transcript card, if that's showing). When one failed but its
-// recording was kept, a card offers to try it again. The overlay never takes focus, so macOS sends it
+// recording was kept, a card offers to try it again. When another app starts a
+// call, a card offers to transcribe it (calls.rs). The overlay never takes focus, so macOS sends it
 // no mouse moves; hover comes from the cursor position Rust polls instead.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -17,7 +18,7 @@ import * as React from "react";
 
 import { moodOf, Sushi } from "@/components/sushi";
 import { useMeetingStatus } from "@/lib/meetings";
-import { api, on, type OverlayState, type Settings } from "@/lib/tauri";
+import { api, type CallAnswer, on, type OverlayState, type Settings } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 const BARS = 24;
@@ -574,6 +575,148 @@ function FailedCard({ text, id, cursor, held, cardRef }: { text: string; id: num
   );
 }
 
+/** How long the "Transcribe this call?" card waits for an answer, held the same way. */
+const CALL_ASK_MS = 20_000;
+
+/** Counts `ms` down while not `paused`, then calls `onDone` once. Returns the ms left. */
+function useCountdown(ms: number, paused: boolean, onDone: () => void) {
+  const [left, setLeft] = React.useState(ms);
+  const done = React.useRef(onDone);
+  React.useEffect(() => {
+    done.current = onDone;
+  });
+  React.useEffect(() => {
+    if (paused) return;
+    let last = Date.now();
+    const t = setInterval(() => {
+      const now = Date.now();
+      setLeft((l) => Math.max(0, l - (now - last)));
+      last = now;
+    }, 100);
+    return () => clearInterval(t);
+  }, [paused]);
+  const fired = React.useRef(false);
+  React.useEffect(() => {
+    if (left > 0 || fired.current) return;
+    fired.current = true;
+    done.current();
+  }, [left]);
+  return left;
+}
+
+/** A ring that drains as `left` runs down to 0, around the seconds left or `children`. */
+function CountdownRing({ left, total, children }: { left: number; total: number; children?: React.ReactNode }) {
+  return (
+    <span className="relative grid size-8 shrink-0 place-items-center rounded-full text-white/70">
+      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 32 32" aria-hidden>
+        <circle cx={16} cy={16} r={RING_RADIUS} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth={2} />
+        <circle
+          cx={16}
+          cy={16}
+          r={RING_RADIUS}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeDasharray={RING_LENGTH}
+          strokeDashoffset={RING_LENGTH * (1 - left / total)}
+          style={{ transition: "stroke-dashoffset 100ms linear" }}
+        />
+      </svg>
+      {children ?? <span className="font-mono text-xs font-medium text-white tabular-nums">{Math.ceil(left / 1000)}</span>}
+    </span>
+  );
+}
+
+/**
+ * Another app started a call (call-started), or the call being transcribed
+ * ended (call-ended). Sushi offers to transcribe it, or counts down to
+ * starting or stopping the transcript. Hovering holds the count, as on the
+ * other cards; when it runs out the card answers for you: start, stop, or
+ * (when it only asked) not now.
+ */
+function CallCard({
+  state,
+  cursor,
+  held,
+  cardRef,
+}: {
+  state: Extract<OverlayState, { phase: "call-started" | "call-ended" }>;
+  cursor: Point | null;
+  held: boolean;
+  cardRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const refs = React.useRef(new Map<string, HTMLButtonElement>());
+  const over = (el: HTMLElement | null | undefined) => !!cursor && !!el && near(el.getBoundingClientRect(), cursor, 0);
+  const ended = state.phase === "call-ended";
+  const counting = state.countdownMs != null;
+  const total = state.countdownMs ?? CALL_ASK_MS;
+  const [answered, setAnswered] = React.useState(false);
+  const answer = (a: CallAnswer) => {
+    setAnswered(true);
+    void api.callAnswer(state.id, a).catch(() => {});
+  };
+  const left = useCountdown(total, over(cardRef.current) || held || answered, () => answer(ended ? "stop" : counting ? "start" : "not-now"));
+
+  const button = (id: CallAnswer, label: string, primary?: boolean, icon?: React.ReactNode, className?: string) => (
+    <button
+      key={id}
+      ref={(el) => {
+        if (el) refs.current.set(id, el);
+        else refs.current.delete(id);
+      }}
+      type="button"
+      title={label}
+      className={cn(
+        primary
+          ? cn(pillButton(over(refs.current.get(id))), "shrink-0")
+          : cn(
+              "flex h-8 min-w-0 cursor-pointer items-center rounded-full px-3 text-xs font-medium transition-colors",
+              over(refs.current.get(id)) ? "bg-white/10 text-white" : "text-white/60",
+            ),
+        className,
+      )}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={() => answer(id)}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
+  );
+
+  const text = ended
+    ? `Your call in ${state.app} has ended. I'll stop transcribing it.`
+    : counting
+      ? `You're on a call in ${state.app}. I'll start transcribing it.`
+      : `Looks like you're on a call in ${state.app}. Want me to transcribe it?`;
+
+  return (
+    <div ref={cardRef} className={CARD} style={{ animation: "pill-in 160ms ease-out" }}>
+      <div className="flex items-center gap-3">
+        <Sushi mood={ended ? "done" : "idle"} restless={!ended} held={held} className="shrink-0 text-white/70" />
+        <p className="flex-1 text-[11px] leading-4 text-white/55">{text}</p>
+        <CountdownRing left={left} total={total}>
+          {counting ? undefined : <X className="size-3.5" weight="bold" />}
+        </CountdownRing>
+      </div>
+      <div className="flex items-center justify-end gap-1.5">
+        {ended ? (
+          <>
+            {button("keep-going", "Keep going", false, undefined, "shrink-0")}
+            {button("stop", "Stop now", true, <Square className="size-3.5" weight="fill" />)}
+          </>
+        ) : (
+          <>
+            {button("never", `Never for ${state.app}`, false, undefined, "mr-auto")}
+            {button("not-now", counting ? "Cancel" : "Not now", false, undefined, "shrink-0")}
+            {button("start", counting ? "Start now" : "Transcribe", true, <Users className="size-3.5 shrink-0" weight="bold" />)}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Between dictations during a meeting: a recording dot and how long it's been going. */
 function MeetingClock({ startedAt }: { startedAt: number }) {
   const [now, setNow] = React.useState(Date.now);
@@ -732,6 +875,8 @@ export function Overlay() {
         <WordsCard key={shown} words={state.words} cursor={cursor} held={held} cardRef={pillRef} />
       ) : state.phase === "failed" ? (
         <FailedCard key={shown} text={state.text} id={state.id} cursor={cursor} held={held} cardRef={pillRef} />
+      ) : state.phase === "call-started" || state.phase === "call-ended" ? (
+        <CallCard key={shown} state={state} cursor={cursor} held={held} cardRef={pillRef} />
       ) : (
         <>
           <div ref={sushiRef} className="relative z-10 -mb-px">

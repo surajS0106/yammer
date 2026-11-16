@@ -333,9 +333,16 @@ pub fn hide(app: &AppHandle) {
     show(app, OverlayState::Hidden);
 }
 
-/// Close the transcript, words or failed card, unless something newer has replaced it.
+/// Close the transcript, words, failed or call card, unless something newer has replaced it.
 pub fn dismiss(app: &AppHandle) {
-    if matches!(current(), OverlayState::Transcript { .. } | OverlayState::Words { .. } | OverlayState::Failed { .. }) {
+    if matches!(
+        current(),
+        OverlayState::Transcript { .. }
+            | OverlayState::Words { .. }
+            | OverlayState::Failed { .. }
+            | OverlayState::CallStarted { .. }
+            | OverlayState::CallEnded { .. }
+    ) {
         hide(app);
     }
 }

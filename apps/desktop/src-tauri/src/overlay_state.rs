@@ -4,7 +4,7 @@ use serde::Serialize;
 
 #[cfg_attr(not(desktop), allow(dead_code))]
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "phase", rename_all = "kebab-case")]
+#[serde(tag = "phase", rename_all = "kebab-case", rename_all_fields = "camelCase")]
 #[rustfmt::skip] // rustfmt expands every struct variant once any variant has a doc comment.
 pub enum OverlayState {
     Listening { hint: Option<String> },
@@ -29,5 +29,25 @@ pub enum OverlayState {
     /// Not dictating, while a meeting is being transcribed: a recording pill
     /// with its running time. `started_at` is Unix ms.
     Meeting { started_at: u64 },
+    /// `app` started a call: a card offers to transcribe it as a meeting
+    /// (`calls.rs`). With `countdown_ms` it starts by itself when the count runs
+    /// out; without, the card closes then. `id` names this offer in `call_answer`.
+    CallStarted { id: u64, app: String, countdown_ms: Option<u64> },
+    /// The call the meeting was transcribing has ended: a card counts down to stopping it.
+    CallEnded { id: u64, app: String, countdown_ms: u64 },
     Hidden,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OverlayState;
+
+    #[test]
+    fn fields_are_camel_case() {
+        // The overlay reads `startedAt` and `countdownMs` (`lib/tauri.ts`).
+        let v = serde_json::to_value(OverlayState::CallStarted { id: 1, app: "Zoom".into(), countdown_ms: Some(5000) }).unwrap();
+        assert_eq!(v, serde_json::json!({ "phase": "call-started", "id": 1, "app": "Zoom", "countdownMs": 5000 }));
+        let v = serde_json::to_value(OverlayState::Meeting { started_at: 7 }).unwrap();
+        assert_eq!(v, serde_json::json!({ "phase": "meeting", "startedAt": 7 }));
+    }
 }

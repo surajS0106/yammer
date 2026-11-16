@@ -245,13 +245,18 @@ pub fn toggle(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let result = if is_live() { stop(&app).await.map(drop) } else { start(&app).await.map(drop) };
         if let Err(e) = result {
-            #[cfg(desktop)]
-            if app.state::<AppState>().settings().sounds {
-                sounds::play(Cue::Error);
-            }
-            overlay::flash(&app, OverlayState::Message { text: e.to_string(), error: true }, 6000);
+            report(&app, &e);
         }
     });
+}
+
+/// A meeting couldn't start or stop, and no window is there to say why: tell the overlay.
+pub fn report(app: &AppHandle, e: &AppError) {
+    #[cfg(desktop)]
+    if app.state::<AppState>().settings().sounds {
+        sounds::play(Cue::Error);
+    }
+    overlay::flash(app, OverlayState::Message { text: e.to_string(), error: true }, 6000);
 }
 
 pub async fn start(app: &AppHandle) -> AppResult<LiveInfo> {
