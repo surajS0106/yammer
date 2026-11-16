@@ -159,7 +159,7 @@ pub fn encode_wav(samples: &[f32]) -> Vec<u8> {
 
 /// Samples from a mono 16-bit PCM WAV, scaled to [-1, 1].
 pub fn decode_wav(wav: &[u8]) -> Result<Vec<f32>> {
-    let bad = || Error::Decode("audio is not a 16-bit PCM WAV".into());
+    let bad = || Error::Decode("That recording is in a format Yammer can't read.".into());
     if wav.len() < 12 || &wav[0..4] != b"RIFF" || &wav[8..12] != b"WAVE" {
         return Err(bad());
     }

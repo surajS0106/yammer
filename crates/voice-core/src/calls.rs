@@ -30,8 +30,10 @@ impl MicUser {
 /// so a voice search or a quick mic check isn't taken for one.
 pub const HOLD_MS: u64 = 3_000;
 /// How long an app has to have let go of the microphone before its call
-/// counts as over: some apps close and reopen it, as when changing devices.
-pub const LEAVE_MS: u64 = 6_000;
+/// counts as over: two polls, so one missed reading isn't the end of a call.
+/// Apps that close and reopen it for longer (changing devices) get a "call
+/// ended" card, which they take back by holding the mic again before it runs out.
+pub const LEAVE_MS: u64 = 1_000;
 
 /// A call starting or ending.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -279,11 +281,11 @@ mod tests {
         assert_eq!(d.poll(4_000, std::slice::from_ref(&zoom)), vec![Change::Began(zoom.clone())]);
         assert_eq!(d.poll(6_000, std::slice::from_ref(&zoom)), vec![]);
         assert_eq!(d.active(), vec![zoom.clone()]);
-        // A short gap isn't the end of the call.
-        assert_eq!(d.poll(8_000, &[]), vec![]);
-        assert_eq!(d.poll(10_000, std::slice::from_ref(&zoom)), vec![]);
-        assert_eq!(d.poll(14_000, &[]), vec![]);
-        assert_eq!(d.poll(16_000, &[]), vec![Change::Left(zoom.clone())]);
+        // One missed reading isn't the end of the call.
+        assert_eq!(d.poll(6_500, &[]), vec![]);
+        assert_eq!(d.poll(7_000, std::slice::from_ref(&zoom)), vec![]);
+        assert_eq!(d.poll(7_500, &[]), vec![]);
+        assert_eq!(d.poll(8_000, &[]), vec![Change::Left(zoom.clone())]);
         assert!(d.active().is_empty());
         // The next call begins afresh.
         assert_eq!(d.poll(18_000, std::slice::from_ref(&zoom)), vec![]);

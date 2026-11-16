@@ -1,4 +1,4 @@
-import { ChartBar as BarChart3, BookOpenText as BookA, ArrowCircleUp as CircleArrowUp, Question as CircleHelp, Fire as Flame, ClockCounterClockwise as History, House as Home, CircleNotch as LoaderCircle, NotePencil as NotebookPen, Scissors, GearSix as Settings, Sparkle as Sparkles, UsersThree as Users, MagicWand as Wand2, X } from "@phosphor-icons/react";
+import { ChartBar as BarChart3, BookOpenText as BookA, ArrowCircleUp as CircleArrowUp, Question as CircleHelp, Fire as Flame, ClockCounterClockwise as History, House as Home, CircleNotch as LoaderCircle, NotePencil as NotebookPen, Scissors, GearSix as Settings, Sparkle as Sparkles, UsersThree as Users, MagicWand as Wand2, Notebook, X } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import * as React from "react";
 
@@ -33,6 +33,7 @@ const groups: { label: string; items: NavItem[] }[] = [
       { id: "dictionary", label: "Dictionary", icon: BookA },
       { id: "snippets", label: "Snippets", icon: Scissors },
       { id: "transforms", label: "Transforms", icon: Wand2 },
+      { id: "templates", label: "Templates", icon: Notebook },
     ],
   },
 ];
@@ -65,7 +66,7 @@ export function Sidebar({
   ];
 
   return (
-    <nav className="relative isolate flex h-full w-56 flex-col overflow-y-auto border-r bg-sidebar p-3">
+    <nav className="relative isolate flex h-full w-56 flex-col border-r bg-sidebar">
       {/* A coral wash in the top corner, fading out. */}
       <div
         aria-hidden
@@ -75,49 +76,54 @@ export function Sidebar({
         }}
       />
 
-      {/* No native title bar: on macOS this strip sits under the traffic lights. */}
-      {dragStrip && <div data-tauri-drag-region className="h-7 shrink-0" />}
-      <div data-tauri-drag-region className="group/brand mb-2 flex items-center gap-2.5 px-1.5 pt-1">
-        <span className="pointer-events-none flex size-9 items-center justify-center rounded-xl bg-background shadow-xs ring-1 ring-border transition-transform duration-300 group-hover/brand:-rotate-6 group-hover/brand:scale-105">
-          <img src="/yammer-mark.png" alt="" className="size-6" />
-        </span>
-        <span className="pointer-events-none flex flex-col leading-none">
-          <span className="text-lg font-semibold tracking-tight">Yammer</span>
-          <span className="mt-1 text-[11px] text-muted-foreground">
-            by <span className="font-medium text-primary">Sush</span>
+      {/* The brand stays put; only the nav below it scrolls. */}
+      <div className="shrink-0 px-3 pt-3">
+        {/* No native title bar: on macOS this strip sits under the traffic lights. */}
+        {dragStrip && <div data-tauri-drag-region className="h-7" />}
+        <div data-tauri-drag-region className="group/brand mb-2 flex items-center gap-2.5 px-1.5 pt-1">
+          <span className="pointer-events-none flex size-9 items-center justify-center rounded-xl bg-background shadow-xs ring-1 ring-border transition-transform duration-300 group-hover/brand:-rotate-6 group-hover/brand:scale-105">
+            <img src="/yammer-mark.png" alt="" className="size-6" />
           </span>
-        </span>
+          <span className="pointer-events-none flex flex-col leading-none">
+            <span className="text-lg font-semibold tracking-tight">Yammer</span>
+            <span className="mt-1 text-[11px] text-muted-foreground">
+              by <span className="font-medium text-primary">Sush</span>
+            </span>
+          </span>
+        </div>
       </div>
 
-      {/* One hover background glides between items as the pointer moves, as in Sush's sidebar; the selected pill slides too. */}
-      <HoverHighlight className="flex flex-1 flex-col" highlightClassName="rounded-lg bg-sidebar-accent/70">
-        {groups.map((g) => (
-          <div key={g.label} className="flex flex-col gap-0.5">
-            <SectionLabel>{g.label}</SectionLabel>
-            {g.items.map((item) => (
-              <NavButton
-                key={item.id}
-                item={item}
-                active={page === item.id}
-                onClick={() => go(item.id)}
-                badge={item.id === "history" && todayCount > 0 ? todayCount : undefined}
-                recording={item.id === "meetings" && meetingLive}
-              />
-            ))}
-          </div>
-        ))}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
+        {/* One hover background glides between items as the pointer moves, as in Sush's sidebar; the selected pill slides too. */}
+        <HoverHighlight className="flex flex-1 flex-col" highlightClassName="rounded-lg bg-sidebar-accent/70">
+          {groups.map((g) => (
+            <div key={g.label} className="flex flex-col gap-0.5">
+              <SectionLabel>{g.label}</SectionLabel>
+              {g.items.map((item) => (
+                <NavButton
+                  key={item.id}
+                  item={item}
+                  active={page === item.id}
+                  onClick={() => go(item.id)}
+                  badge={item.id === "history" && todayCount > 0 ? todayCount : undefined}
+                  recording={item.id === "meetings" && meetingLive}
+                />
+              ))}
+            </div>
+          ))}
 
-        <div className="mt-auto flex flex-col gap-3 pt-6">
-          <MicCard streak={stats.dayStreak} todayWords={stats.byDay.get(today) ?? 0} onClick={() => go("home")} />
-          <UpdateCard onNotes={() => go("changelog")} />
-          <WhatsNewCard onOpen={() => go("changelog")} />
-          <div className="flex flex-col gap-0.5 border-t pt-2">
-            {footer.map((item) => (
-              <NavButton key={item.id} item={item} active={item.active} onClick={() => go(item.id)} />
-            ))}
+          <div className="mt-auto flex flex-col gap-3 pt-6">
+            <MicCard streak={stats.dayStreak} todayWords={stats.byDay.get(today) ?? 0} onClick={() => go("home")} />
+            <UpdateCard onNotes={() => go("changelog")} />
+            <WhatsNewCard onOpen={() => go("changelog")} />
+            <div className="flex flex-col gap-0.5 border-t pt-2">
+              {footer.map((item) => (
+                <NavButton key={item.id} item={item} active={item.active} onClick={() => go(item.id)} />
+              ))}
+            </div>
           </div>
-        </div>
-      </HoverHighlight>
+        </HoverHighlight>
+      </div>
     </nav>
   );
 }
@@ -153,7 +159,7 @@ function NavButton({
       data-hover-item
       className={cn(
         "group relative flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+        active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground"
       )}
     >
       {active && (
@@ -171,7 +177,7 @@ function NavButton({
           "relative flex size-7 shrink-0 items-center justify-center rounded-md transition-[background-color,color,rotate,scale] duration-300",
           active
             ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30"
-            : "group-hover:-rotate-8 group-hover:scale-110 group-hover:text-primary",
+            : "group-hover:-rotate-8 group-hover:scale-110 group-hover:text-primary"
         )}
       >
         <Icon className="size-4" weight={active ? "fill" : "regular"} />
@@ -208,7 +214,10 @@ function MicCard({ streak, todayWords, onClick }: { streak: number; todayWords: 
   const [level, setLevel] = React.useState(0);
 
   React.useEffect(() => {
-    api.overlayState().then((s) => setPhase(s.phase), () => {});
+    api.overlayState().then(
+      (s) => setPhase(s.phase),
+      () => {}
+    );
     const a = on.dictation((s) => setPhase(s.phase));
     const b = on.level(setLevel);
     return () => {
@@ -226,14 +235,14 @@ function MicCard({ streak, todayWords, onClick }: { streak: number; todayWords: 
       onClick={onClick}
       className={cn(
         "relative overflow-hidden rounded-xl border bg-background/80 p-3 text-left shadow-xs transition-[border-color,box-shadow] outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-card",
-        busy && "border-primary/50 shadow-md shadow-primary/10",
+        busy && "border-primary/50 shadow-md shadow-primary/10"
       )}
     >
       <span
         aria-hidden
         className={cn(
           "pointer-events-none absolute -top-8 -right-8 size-24 rounded-full bg-primary/15 blur-2xl transition-opacity duration-500",
-          busy ? "opacity-100" : "opacity-50",
+          busy ? "opacity-100" : "opacity-50"
         )}
       />
       <span className="relative flex items-center gap-2 text-xs font-medium">
@@ -293,12 +302,10 @@ export function UpdateCard({ onNotes }: { onNotes: () => void }) {
         disabled={installing}
         className={cn(
           "relative mt-2.5 flex w-full items-center justify-center gap-1.5 overflow-hidden rounded-lg bg-primary px-2.5 py-1.5 font-medium text-primary-foreground shadow-sm shadow-primary/30 transition-[filter] outline-none hover:brightness-110 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:hover:brightness-100",
-          isAndroid && "min-h-11 rounded-xl",
+          isAndroid && "min-h-11 rounded-xl"
         )}
       >
-        {pct !== null && (
-          <span aria-hidden className="absolute inset-y-0 left-0 bg-white/20 transition-[width]" style={{ width: `${pct}%` }} />
-        )}
+        {pct !== null && <span aria-hidden className="absolute inset-y-0 left-0 bg-white/20 transition-[width]" style={{ width: `${pct}%` }} />}
         {installing && <LoaderCircle className="relative size-3.5 animate-spin" />}
         <span className="relative">{installing ? (pct !== null ? `Updating… ${pct}%` : "Updating…") : "Upgrade now"}</span>
       </button>
@@ -313,7 +320,7 @@ export function UpdateCard({ onNotes }: { onNotes: () => void }) {
           onClick={onNotes}
           className={cn(
             "mt-1.5 w-full rounded-md py-0.5 text-[11px] text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
-            isAndroid && "min-h-11",
+            isAndroid && "min-h-11"
           )}
         >
           What's in it?

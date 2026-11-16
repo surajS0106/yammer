@@ -29,10 +29,12 @@ pub enum OverlayState {
     /// Not dictating, while a meeting is being transcribed: a recording pill
     /// with its running time. `started_at` is Unix ms.
     Meeting { started_at: u64 },
-    /// `app` started a call: a card offers to transcribe it as a meeting
-    /// (`calls.rs`). With `countdown_ms` it starts by itself when the count runs
-    /// out; without, the card closes then. `id` names this offer in `call_answer`.
-    CallStarted { id: u64, app: String, countdown_ms: Option<u64> },
+    /// `app` started a call, or `event` on the calendar began: a card offers to
+    /// transcribe it as a meeting (`calls.rs`). `app` is empty for an event alone;
+    /// `event` is the calendar event's title, when there is one. With
+    /// `countdown_ms` it starts by itself when the count runs out; without, the
+    /// card closes then. `id` names this offer in `call_answer`.
+    CallStarted { id: u64, app: String, event: Option<String>, countdown_ms: Option<u64> },
     /// The call the meeting was transcribing has ended: a card counts down to stopping it.
     CallEnded { id: u64, app: String, countdown_ms: u64 },
     Hidden,
@@ -45,8 +47,8 @@ mod tests {
     #[test]
     fn fields_are_camel_case() {
         // The overlay reads `startedAt` and `countdownMs` (`lib/tauri.ts`).
-        let v = serde_json::to_value(OverlayState::CallStarted { id: 1, app: "Zoom".into(), countdown_ms: Some(5000) }).unwrap();
-        assert_eq!(v, serde_json::json!({ "phase": "call-started", "id": 1, "app": "Zoom", "countdownMs": 5000 }));
+        let v = serde_json::to_value(OverlayState::CallStarted { id: 1, app: "Zoom".into(), event: None, countdown_ms: Some(5000) }).unwrap();
+        assert_eq!(v, serde_json::json!({ "phase": "call-started", "id": 1, "app": "Zoom", "event": null, "countdownMs": 5000 }));
         let v = serde_json::to_value(OverlayState::Meeting { started_at: 7 }).unwrap();
         assert_eq!(v, serde_json::json!({ "phase": "meeting", "startedAt": 7 }));
     }

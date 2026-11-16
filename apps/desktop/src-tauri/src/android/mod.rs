@@ -52,6 +52,7 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             secrets::init(&config_dir);
             app.manage(Meetings::new(data_dir.join("meetings")));
+            app.manage(crate::calendar::Calendar::default());
             let state = AppState::new(config_dir, data_dir)?;
             secrets::migrate(&state.settings());
             cloud_only(&state)?;
@@ -84,6 +85,15 @@ pub fn run() {
             commands::meeting_update,
             commands::meeting_delete,
             commands::meeting_summarize,
+            commands::meeting_revise,
+            commands::meeting_ask,
+            commands::meeting_delete_segments,
+            commands::meeting_search,
+            commands::meeting_templates,
+            commands::meeting_set_template,
+            commands::calendar_status,
+            commands::calendar_connect,
+            commands::calendar_refresh,
             copy_text,
             android_status,
             android_action,
@@ -141,7 +151,7 @@ pub struct Status {
 
 #[tauri::command]
 async fn android_status(native: tauri::State<'_, Native>) -> AppResult<Status> {
-    native.0.run_mobile_plugin("status", ()).map_err(AppError::invalid)
+    native.0.run_mobile_plugin("status", ()).map_err(plugin_err("Couldn't check Yammer's permissions on this phone."))
 }
 
 /// Ask the Kotlin side to do something the settings UI offers.
@@ -161,9 +171,13 @@ async fn android_action(native: tauri::State<'_, Native>, action: String) -> App
         "barsDark",
     ];
     if !ACTIONS.contains(&action.as_str()) {
-        return Err(AppError::Invalid(format!("unknown action {action}")));
+        return Err(AppError::Invalid("That isn't something Yammer can do on this phone.".into()));
     }
-    native.0.run_mobile_plugin::<serde_json::Value>(&action, ()).map(drop).map_err(AppError::invalid)
+    native
+        .0
+        .run_mobile_plugin::<serde_json::Value>(&action, ())
+        .map(drop)
+        .map_err(plugin_err("That didn't work on this phone. Try again."))
 }
 
 #[derive(Serialize)]
@@ -173,7 +187,11 @@ struct CopyArgs {
 
 #[tauri::command]
 async fn copy_text(native: tauri::State<'_, Native>, text: String) -> AppResult<()> {
-    native.0.run_mobile_plugin::<serde_json::Value>("copyText", CopyArgs { text }).map(drop).map_err(AppError::invalid)
+    native
+        .0
+        .run_mobile_plugin::<serde_json::Value>("copyText", CopyArgs { text })
+        .map(drop)
+        .map_err(plugin_err("Couldn't copy the text."))
 }
 
 #[derive(Serialize)]
@@ -189,7 +207,16 @@ async fn android_share(native: tauri::State<'_, Native>, name: String, contents:
         .0
         .run_mobile_plugin::<serde_json::Value>("shareFile", ShareArgs { name, contents })
         .map(drop)
-        .map_err(AppError::invalid)
+        .map_err(plugin_err("Couldn't open the share sheet. Try again."))
+}
+
+/// A plugin call that failed. A rejection from the Kotlin side is already a sentence for the user
+/// ("Allow the microphone first."), so it's shown as is; anything else is plumbing, shown as `fallback`.
+fn plugin_err(fallback: &'static str) -> impl FnOnce(tauri::plugin::mobile::PluginInvokeError) -> AppError {
+    move |e| match e {
+        tauri::plugin::mobile::PluginInvokeError::InvokeRejected(r) => AppError::Invalid(r.to_string()),
+        other => AppError::because(fallback)(other),
+    }
 }
 
 /// Android releases are `android-v*` on this repo. Must match `plugins.updater` in tauri.conf.json.
@@ -208,11 +235,13 @@ async fn android_update_check(app: AppHandle, state: tauri::State<'_, AppState>)
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
-        .map_err(AppError::invalid)?;
+        .map_err(AppError::because("Couldn't check for a newer version. Check your internet connection."))?;
     if !resp.status().is_success() {
-        return Err(AppError::Invalid(format!("GitHub answered HTTP {}", resp.status().as_u16())));
+        eprintln!("update check: GitHub answered HTTP {}", resp.status().as_u16());
+        return Err(AppError::Invalid("Couldn't check for a newer version right now. Try again later.".into()));
     }
-    let releases: serde_json::Value = resp.json().await.map_err(AppError::invalid)?;
+    let releases: serde_json::Value =
+        resp.json().await.map_err(AppError::because("Couldn't check for a newer version right now. Try again later."))?;
     Ok(voice_core::releases::newer_android(&releases, &app.package_info().version.to_string()))
 }
 
@@ -337,7 +366,10 @@ pub fn meeting_audio(
 ) -> AppResult<MeetingAudio> {
     *MEETING_SINK.lock().unwrap() = Some((Box::new(on_audio), Box::new(on_level)));
     let audio = MeetingAudio;
-    app.state::<Native>().0.run_mobile_plugin::<serde_json::Value>("startMeeting", ()).map_err(AppError::invalid)?;
+    app.state::<Native>()
+        .0
+        .run_mobile_plugin::<serde_json::Value>("startMeeting", ())
+        .map_err(plugin_err("Couldn't start listening. Try again."))?;
     Ok(audio)
 }
 

@@ -12,13 +12,13 @@
 // no mouse moves; hover comes from the cursor position Rust polls instead.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { WarningCircle as AlertCircle, DownloadSimple as ArrowDownToLine, Check, Copy, EyeSlash as EyeOff, ClockCounterClockwise as History, CircleNotch as Loader2, type Icon as LucideIcon, Microphone as Mic, Plus, Power, ArrowCounterClockwise as RotateCcw, SlidersHorizontal as Settings2, Square, UsersThree as Users, MagicWand as Wand2, X } from "@phosphor-icons/react";
+import { WarningCircle as AlertCircle, DownloadSimple as ArrowDownToLine, Check, Copy, EyeSlash as EyeOff, ClockCounterClockwise as History, CircleNotch as Loader2, type Icon as LucideIcon, Microphone as Mic, Plus, Power, ArrowCounterClockwise as RotateCcw, SlidersHorizontal as Settings2, Square, UsersThree as Users, MagicWand as Wand2, Notebook, CaretUp, X } from "@phosphor-icons/react";
 import { motion, type MotionValue, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import * as React from "react";
 
 import { moodOf, Sushi } from "@/components/sushi";
-import { useMeetingStatus } from "@/lib/meetings";
-import { api, type CallAnswer, on, type OverlayState, type Settings } from "@/lib/tauri";
+import { useMeetingStatus, useNoteTemplates } from "@/lib/meetings";
+import { api, type CallAnswer, on, type NoteTemplate, type OverlayState, type Settings } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 const BARS = 24;
@@ -174,15 +174,52 @@ function useSettingsValue() {
   return settings;
 }
 
+const NO_TEMPLATES: NoteTemplate[] = [];
+
+/** The live meeting's template, for the pill and the menu: the one picked for it, else the default. */
+function useLiveTemplate(settings: Settings | null, liveId: number | undefined) {
+  const templates = useNoteTemplates(settings?.meeting.templates ?? NO_TEMPLATES);
+  const [picked, setPicked] = React.useState<string | undefined>();
+  React.useEffect(() => {
+    setPicked(undefined);
+    if (liveId === undefined) return;
+    api.meetingGet(liveId).then((m) => setPicked(m.template), () => {});
+    const unlisten = on.meetingUpdated((m) => m.id === liveId && setPicked(m.template));
+    return () => void unlisten.then((f) => f());
+  }, [liveId]);
+  const at = templates.findIndex((t) => t.id === (picked ?? settings?.meeting.summary));
+  const current = templates[at] as NoteTemplate | undefined;
+  const pick = (id: string) => {
+    if (liveId === undefined) return Promise.resolve();
+    setPicked(id);
+    return api.meetingSetTemplate(liveId, id).then(() => {});
+  };
+  /** On to the next template, round to the first: the menu's switch, like the transform one. */
+  const next = () => (templates.length ? pick(templates[(at + 1) % templates.length].id) : Promise.resolve());
+  return { all: templates, current, pick, next };
+}
+
 /**
  * The right-click menu, drawn like the island rather than as the webview's own.
  * Like the island, it can't take focus or see mouse moves, so its highlight
  * follows the cursor Rust polls, and it closes once the cursor wanders off.
  */
-const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point | null; phase: OverlayState["phase"]; meetingLive: boolean; onClose: () => void }>(
-  function ContextMenu({ at, cursor, phase, meetingLive, onClose }, ref) {
+const ContextMenu = React.forwardRef<
+  HTMLDivElement,
+  {
+    at: Point;
+    cursor: Point | null;
+    phase: OverlayState["phase"];
+    meetingLive: boolean;
+    settings: Settings | null;
+    template: ReturnType<typeof useLiveTemplate>;
+    /** Just the meeting's templates, to pick one: opened from the template's name on the pill. */
+    templatesOnly?: boolean;
+    onClose: () => void;
+  }
+>(
+  function ContextMenu({ at, cursor, phase, meetingLive, settings, template, templatesOnly, onClose }, ref) {
     const hotkey = useHotkeyLabel();
-    const settings = useSettingsValue();
     const dictating = phase === "listening" || phase === "transcribing" || phase === "polishing" || phase === "editing";
     // Each click moves on to the next transform, then back to none.
     const transforms = settings?.transforms ?? [];
@@ -192,13 +229,23 @@ const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point 
       const next = transforms[active + 1]?.id ?? "";
       return api.settingsSet({ ...settings, activeTransform: next }).then(() => {});
     };
-    const groups: MenuItem[][] = [
+    const templateItems: MenuItem[] = template.all.map((t) => ({
+      id: `template-${t.id}`,
+      label: t.name,
+      icon: t.id === template.current?.id ? Check : Notebook,
+      hint: t.id === template.current?.id ? "In use" : undefined,
+      run: () => template.pick(t.id),
+    }));
+    const groups: MenuItem[][] = templatesOnly ? [templateItems] : [
       [
         { id: "dictate", label: dictating ? "Stop dictation" : "Start dictation", icon: dictating ? Square : Mic, hint: hotkey, run: api.overlayToggleDictation },
         ...(transforms.length
           ? [{ id: "transform", label: `Transform: ${active >= 0 ? transforms[active].name : "None"}`, icon: Wand2, hint: "Change", keepOpen: true, run: nextTransform }]
           : []),
         { id: "meeting", label: meetingLive ? "Stop meeting transcript" : "Start meeting transcript", icon: meetingLive ? Square : Users, run: api.meetingToggle },
+        ...(meetingLive && template.current
+          ? [{ id: "template", label: `Notes as: ${template.current.name}`, icon: Notebook, hint: "Change", keepOpen: true, run: template.next }]
+          : []),
       ],
       [
         { id: "history", label: "History", icon: History, run: () => api.overlayOpen("history") },
@@ -217,54 +264,82 @@ const ContextMenu = React.forwardRef<HTMLDivElement, { at: Point; cursor: Point 
     const hot =
       cursor && [...items.current].find(([, el]) => el.isConnected && near(el.getBoundingClientRect(), cursor, 0))?.[0];
 
-    // Opens up and to the right of the click, kept inside the window.
+    // Opens up and to the right of the click, kept inside the window; past its top, the list scrolls.
     const left = Math.min(Math.max(6, at.x - 10), window.innerWidth - MENU_WIDTH - 6);
     const bottom = Math.max(6, window.innerHeight - at.y + 6);
+    const maxHeight = window.innerHeight - bottom - 6;
+
+    const reduce = useReducedMotion();
+    const layout = React.useId();
+    // The template in use is brought into view, smoothly, when the list is longer than the room for it.
+    const inUse = templatesOnly && template.current ? `template-${template.current.id}` : null;
+    React.useEffect(() => {
+      if (inUse) items.current.get(inUse)?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+    }, [inUse, reduce]);
+    let row = 0;
 
     return (
       <motion.div
         ref={ref}
         role="menu"
-        initial={{ opacity: 0, y: 4, scale: 0.97 }}
+        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.12, ease: "easeOut" }}
-        className="fixed z-30 origin-bottom-left rounded-2xl border border-white/10 bg-neutral-900/95 p-1.5 text-[13px] text-white shadow-[0_12px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl select-none"
-        style={{ left, bottom, width: MENU_WIDTH }}
+        transition={{ duration: reduce ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }}
+        className={cn(
+          "fixed z-30 flex origin-bottom-left flex-col overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/95 text-[13px] text-white backdrop-blur-xl select-none",
+          TIGHT_SHADOW,
+        )}
+        style={{ left, bottom, width: MENU_WIDTH, maxHeight }}
         onMouseDown={(e) => e.stopPropagation()}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
         }}
       >
-        {groups.map((group, g) => (
-          <React.Fragment key={g}>
-            {g > 0 && <div className="mx-2 my-1 h-px bg-white/[0.08]" />}
-            {group.map(({ id, label, icon: Icon, hint, danger, keepOpen, run }) => (
-              <button
-                key={id}
-                ref={(el) => {
-                  if (el) items.current.set(id, el);
-                  else items.current.delete(id);
-                }}
-                type="button"
-                role="menuitem"
-                className={cn(
-                  "flex h-8 w-full cursor-default items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors duration-75",
-                  danger ? "text-red-300/90" : "text-white/85",
-                  hot === id && (danger ? "bg-red-500/15 text-red-200" : "bg-white/10 text-white"),
-                )}
-                onClick={() => {
-                  if (!keepOpen) onClose();
-                  void run().catch(() => {});
-                }}
-              >
-                <Icon className={cn("size-4 shrink-0", !danger && (hot === id ? "text-white" : "text-white/55"))} weight="bold" />
-                <span className="flex-1 truncate">{label}</span>
-                {hint && <span className="shrink-0 text-[11px] text-white/40">{hint}</span>}
-              </button>
-            ))}
-          </React.Fragment>
-        ))}
+        <motion.div layoutScroll className="isolate min-h-0 overflow-y-auto overscroll-contain scroll-smooth p-1.5 [scrollbar-width:thin]">
+          {groups.map((group, g) => (
+            <React.Fragment key={g}>
+              {g > 0 && <div className="mx-2 my-1 h-px bg-white/[0.08]" />}
+              {group.map(({ id, label, icon: Icon, hint, danger, keepOpen, run }) => (
+                <motion.button
+                  key={id}
+                  ref={(el: HTMLButtonElement | null) => {
+                    if (el) items.current.set(id, el);
+                    else items.current.delete(id);
+                  }}
+                  type="button"
+                  role="menuitem"
+                  // Rows fade in one after another, as the app's dropdowns do. Opacity only: a transform
+                  // would make each row its own stacking context and lift the sliding highlight over the text.
+                  initial={reduce ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: reduce ? 0 : Math.min(row++, 10) * 0.015, duration: 0.15 }}
+                  className={cn(
+                    "relative flex h-8 w-full shrink-0 cursor-default items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors duration-100",
+                    danger ? "text-red-300/90" : "text-white/85",
+                    hot === id && (danger ? "text-red-200" : "text-white"),
+                  )}
+                  onClick={() => {
+                    if (!keepOpen) onClose();
+                    void run().catch(() => {});
+                  }}
+                >
+                  {/* The highlight slides from the row the cursor left, under every row's content (z-0 vs z-10). */}
+                  {hot === id && (
+                    <motion.span
+                      layoutId={`${layout}-hot`}
+                      transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 600, damping: 40 }}
+                      className={cn("absolute inset-0 z-0 rounded-lg", danger ? "bg-red-500/15" : "bg-white/10")}
+                    />
+                  )}
+                  <Icon className={cn("relative z-10 size-4 shrink-0", !danger && (hot === id ? "text-white" : "text-white/55"))} weight="bold" />
+                  <span className="relative z-10 flex-1 truncate">{label}</span>
+                  {hint && <span className="relative z-10 shrink-0 text-[11px] text-white/40">{hint}</span>}
+                </motion.button>
+              ))}
+            </React.Fragment>
+          ))}
+        </motion.div>
       </motion.div>
     );
   },
@@ -277,8 +352,13 @@ const WORDS_MS = 10_000;
 const RING_RADIUS = 14;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
-const CARD =
-  "relative z-20 flex w-[304px] flex-col gap-3 rounded-[20px] border border-white/10 bg-neutral-900/95 p-4 text-white shadow-[0_12px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl";
+/**
+ * The overlay window is only 8px wider than a card on each side and 8px deeper below it, so the
+ * shadow must stay inside that: a soft, wide one is cut off by the window's edge and shows as a box.
+ */
+const TIGHT_SHADOW = "shadow-[0_2px_6px_-1px_rgba(0,0,0,0.4),0_1px_2px_rgba(0,0,0,0.25)]";
+
+const CARD = `relative z-20 flex w-[304px] flex-col gap-3 rounded-[20px] border border-white/10 bg-neutral-900/95 p-4 text-white ${TIGHT_SHADOW} backdrop-blur-xl`;
 
 /** A card's text button (Copy, Add, …), lit while the cursor is on it. */
 function pillButton(hot: boolean) {
@@ -684,17 +764,43 @@ function CallCard({
     </button>
   );
 
+  // A call during a calendar event is named after the event; an event alone has no app.
+  const event = state.phase === "call-started" ? state.event : null;
+  const what = event ? (state.app ? `“${event}” in ${state.app}` : `“${event}”`) : `a call in ${state.app}`;
   const text = ended
     ? `Your call in ${state.app} has ended. I'll stop transcribing it.`
-    : counting
-      ? `You're on a call in ${state.app}. I'll start transcribing it.`
-      : `Looks like you're on a call in ${state.app}. Want me to transcribe it?`;
+    : !state.app
+      ? counting
+        ? `${what} is starting. I'll take notes.`
+        : `${what} is starting. Want me to take notes?`
+      : counting
+        ? `You're on ${what}. I'll start transcribing it.`
+        : `Looks like you're on ${what}. Want me to transcribe it?`;
 
   return (
     <div ref={cardRef} className={CARD} style={{ animation: "pill-in 160ms ease-out" }}>
       <div className="flex items-center gap-3">
         <Sushi mood={ended ? "done" : "idle"} restless={!ended} held={held} className="shrink-0 text-white/70" />
-        <p className="flex-1 text-[11px] leading-4 text-white/55">{text}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] leading-4 text-white/55">{text}</p>
+          {!ended && state.app && (
+            <button
+              ref={(el) => {
+                if (el) refs.current.set("never", el);
+                else refs.current.delete("never");
+              }}
+              type="button"
+              className={cn(
+                "mt-1 cursor-pointer text-[11px] leading-4 underline-offset-2 transition-colors",
+                over(refs.current.get("never")) ? "text-white underline" : "text-white/40",
+              )}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => answer("never")}
+            >
+              Don't ask for {state.app} again
+            </button>
+          )}
+        </div>
         <CountdownRing left={left} total={total}>
           {counting ? undefined : <X className="size-3.5" weight="bold" />}
         </CountdownRing>
@@ -707,9 +813,8 @@ function CallCard({
           </>
         ) : (
           <>
-            {button("never", `Never for ${state.app}`, false, undefined, "mr-auto")}
             {button("not-now", counting ? "Cancel" : "Not now", false, undefined, "shrink-0")}
-            {button("start", counting ? "Start now" : "Transcribe", true, <Users className="size-3.5 shrink-0" weight="bold" />)}
+            {button("start", counting ? "Start now" : state.app ? "Transcribe" : "Take notes", true, <Users className="size-3.5 shrink-0" weight="bold" />)}
           </>
         )}
       </div>
@@ -718,7 +823,18 @@ function CallCard({
 }
 
 /** Between dictations during a meeting: a recording dot and how long it's been going. */
-function MeetingClock({ startedAt }: { startedAt: number }) {
+function MeetingClock({
+  startedAt,
+  template,
+  open,
+  onTemplate,
+}: {
+  startedAt: number;
+  template?: string;
+  /** The template list is showing: the caret points back down, to close it. */
+  open: boolean;
+  onTemplate: (at: Point) => void;
+}) {
   const [now, setNow] = React.useState(Date.now);
   React.useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -731,6 +847,25 @@ function MeetingClock({ startedAt }: { startedAt: number }) {
     <>
       <span className="size-1.5 shrink-0 rounded-full bg-red-500" style={{ animation: "dot-pulse 1.2s ease-in-out infinite" }} />
       <span className="shrink-0 text-white/85">Meeting</span>
+      {template && (
+        <button
+          type="button"
+          title="Pick the template this meeting's notes are written with"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          // Not a drag of the pill, and not the click-anywhere that closes the menu: this one toggles it.
+          onMouseDown={(e) => e.stopPropagation()}
+          className="flex min-w-0 items-center gap-1 rounded-full bg-white/[0.08] px-2 py-0.5 text-xs text-white/75 transition-colors hover:bg-white/15 hover:text-white"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            onTemplate({ x: r.left + 10, y: r.top });
+          }}
+        >
+          <Notebook className="size-3 shrink-0" />
+          <span className="max-w-24 truncate">{template}</span>
+          <CaretUp className={cn("size-2.5 shrink-0 transition-transform duration-150", open && "rotate-180")} weight="bold" />
+        </button>
+      )}
       <span className="font-mono text-xs text-white/60 tabular-nums">{s >= 3600 ? `${Math.floor(s / 3600)}:${mm}:${ss}` : `${mm}:${ss}`}</span>
     </>
   );
@@ -753,8 +888,12 @@ export function Overlay() {
   }, []);
 
   const [menu, setMenu] = React.useState<Point | null>(null);
+  const [templateMenu, setTemplateMenu] = React.useState(false);
   React.useEffect(() => setMenu(null), [state.phase]);
-  const meetingLive = !!useMeetingStatus()?.live;
+  const liveMeeting = useMeetingStatus()?.live;
+  const meetingLive = !!liveMeeting;
+  const settings = useSettingsValue();
+  const template = useLiveTemplate(settings, liveMeeting?.id);
 
   const sushiRef = React.useRef<HTMLDivElement>(null);
   const pillRef = React.useRef<HTMLDivElement>(null);
@@ -864,10 +1003,11 @@ export function Overlay() {
       onMouseDown={onMouseDown}
       onContextMenu={(e) => {
         e.preventDefault();
+        setTemplateMenu(false);
         setMenu({ x: e.clientX, y: e.clientY });
       }}
     >
-      {menu && <ContextMenu ref={menuRef} at={menu} cursor={cursor} phase={state.phase} meetingLive={meetingLive} onClose={() => setMenu(null)} />}
+      {menu && <ContextMenu ref={menuRef} at={menu} cursor={cursor} phase={state.phase} meetingLive={meetingLive} settings={settings} template={template} templatesOnly={templateMenu} onClose={() => setMenu(null)} />}
       {/* A card counts as the pill: a hit area that drags the overlay. */}
       {state.phase === "transcript" ? (
         <TranscriptCard key={shown} text={state.text} words={state.words} cursor={cursor} held={held} cardRef={pillRef} />
@@ -898,7 +1038,8 @@ export function Overlay() {
               ref={pillRef}
               key={state.phase}
               className={cn(
-                "flex max-w-[304px] items-center gap-2 rounded-full border border-white/10 bg-neutral-900/92 py-1.5 text-[13px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur",
+                "flex max-w-[304px] items-center gap-2 rounded-full border border-white/10 bg-neutral-900/92 py-1.5 text-[13px] text-white backdrop-blur",
+                TIGHT_SHADOW,
                 state.phase === "listening" ? "px-3" : "px-4",
                 state.phase === "message" && state.error && "border-red-400/30",
               )}
@@ -917,7 +1058,17 @@ export function Overlay() {
                   <span className="truncate text-xs text-white/55">{state.phase === "transcribing" ? state.engine : state.model}</span>
                 </>
               )}
-              {state.phase === "meeting" && <MeetingClock startedAt={state.startedAt} />}
+              {state.phase === "meeting" && <MeetingClock
+                  startedAt={state.startedAt}
+                  template={template.current?.name}
+                  open={templateMenu && !!menu}
+                  onTemplate={(at) => {
+                    // A second click on it closes the list, as a dropdown's would.
+                    if (templateMenu && menu) return setMenu(null);
+                    setTemplateMenu(true);
+                    setMenu(at);
+                  }}
+                />}
               {state.phase === "message" && (
                 <>
                   {state.error ? (

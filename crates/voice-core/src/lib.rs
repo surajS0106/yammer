@@ -2,11 +2,13 @@
 //! Audio buffers in, text out; settings and history on disk.
 
 pub mod audio;
+pub mod calendar;
 pub mod calls;
 pub mod cleanup;
 pub mod error;
 pub mod history;
 pub mod live;
+pub mod mcp;
 pub mod meetings;
 pub mod models;
 pub mod releases;

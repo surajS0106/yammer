@@ -72,7 +72,7 @@ export async function installUpdate() {
       await openUrl(apkUrl);
       set({ phase: "available", ...pending });
     } catch (e) {
-      set({ phase: "error", ...pending, message: errorMessage(e) });
+      set({ phase: "error", ...pending, message: errorMessage(e, "Couldn't open the download. Try again.") });
     }
     return;
   }
@@ -91,7 +91,7 @@ export async function installUpdate() {
     });
     await relaunch();
   } catch (e) {
-    set({ phase: "error", ...pending, message: errorMessage(e) });
+    set({ phase: "error", ...pending, message: errorMessage(e, "Couldn't install the update. Check your internet connection and try again.") });
   }
 }
 

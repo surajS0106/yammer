@@ -20,8 +20,10 @@ import { MeetingsPage } from "@/pages/meetings";
 import { Onboarding } from "@/pages/onboarding";
 import { ScratchpadPage } from "@/pages/scratchpad";
 import { SnippetsPage } from "@/pages/snippets";
+import { TemplatesPage } from "@/pages/templates";
 import { TransformsPage } from "@/pages/transforms";
 import { useBackKey } from "@/lib/back";
+import { requestOpenMeeting } from "@/lib/meetings";
 import { DockActionContext, type DockAction } from "@/lib/dock";
 import { useSettings } from "@/lib/settings";
 import { api, on, type Platform } from "@/lib/tauri";
@@ -33,6 +35,7 @@ export type PageId =
   | "dictionary"
   | "snippets"
   | "transforms"
+  | "templates"
   | "scratchpad"
   | "meetings"
   | "history"
@@ -58,6 +61,7 @@ const teachTabs: { value: PageId; label: string }[] = [
   { value: "dictionary", label: "Dictionary" },
   { value: "snippets", label: "Snippets" },
   { value: "transforms", label: "Transforms" },
+  { value: "templates", label: "Templates" },
 ];
 const pageTabs = (id: PageId) => [settingsTabs, ...(isAndroid ? [teachTabs] : [])].find((tabs) => tabs.some((t) => t.value === id));
 
@@ -133,7 +137,11 @@ export default function App() {
     const unlisten = on.navigate((id) => {
       if (allIds.has(id)) setPage(id as PageId);
     });
-    return () => void unlisten.then((f) => f());
+    const unlistenMeeting = on.openMeeting((id) => {
+      requestOpenMeeting(id);
+      setPage("meetings");
+    });
+    return () => [unlisten, unlistenMeeting].forEach((u) => void u.then((f) => f()));
   }, []);
 
   React.useEffect(() => {
@@ -223,6 +231,7 @@ export default function App() {
                     {page === "dictionary" && <DictionaryPage />}
                     {page === "snippets" && <SnippetsPage />}
                     {page === "transforms" && <TransformsPage go={setPage} />}
+                    {page === "templates" && <TemplatesPage go={setPage} />}
                     {page === "scratchpad" && <ScratchpadPage go={setPage} />}
                     {page === "history" && <HistoryPage />}
                     {page === "general" && <GeneralPage go={setPage} />}

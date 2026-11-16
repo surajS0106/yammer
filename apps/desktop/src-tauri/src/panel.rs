@@ -11,7 +11,10 @@ use objc2::ffi;
 use objc2::runtime::{AnyClass, AnyObject, Sel};
 use objc2::{msg_send, sel, ClassType, MainThreadMarker};
 use objc2_app_kit::{NSPanel, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
+use objc2_foundation::NSRect;
 use tauri::WebviewWindow;
+
+use crate::overlay::SUSHI_BAND;
 
 const PANEL_CLASS: &CStr = c"YammerOverlayPanel";
 const FOCUSABLE: &CStr = c"focusable";
@@ -96,8 +99,33 @@ unsafe fn build(tao: &AnyClass) -> Option<&'static AnyClass> {
         ffi::class_addMethod(cls as *const _ as *mut _, sel, imp, ffi::method_getTypeEncoding(method));
     }
 
+    // macOS stops a dragged window's top edge at the menu bar, but Sushi sits at the
+    // bottom of a tall transparent window, so it couldn't get near the top of the screen.
+    let constrain = sel!(constrainFrameRect:toScreen:);
+    let method = ffi::class_getInstanceMethod(NSWindow::class(), constrain);
+    if !method.is_null() {
+        ffi::class_addMethod(
+            cls as *const _ as *mut _,
+            constrain,
+            std::mem::transmute::<ConstrainFrame, objc2::runtime::Imp>(constrain_frame),
+            ffi::method_getTypeEncoding(method),
+        );
+    }
+
     let panel_ivar = ffi::class_getInstanceVariable(cls, FOCUSABLE.as_ptr());
     let same_layout =
         ffi::class_getInstanceSize(cls) == ffi::class_getInstanceSize(tao) && ffi::ivar_getOffset(panel_ivar) == ffi::ivar_getOffset(tao_ivar);
     same_layout.then_some(cls)
+}
+
+type ConstrainFrame = unsafe extern "C-unwind" fn(&AnyObject, Sel, NSRect, *mut AnyObject) -> NSRect;
+
+/// Let the window go up past the menu bar until only its bottom band, where Sushi
+/// and the pill sit, is left below it, so Sushi can be dragged right to the top.
+unsafe extern "C-unwind" fn constrain_frame(_this: &AnyObject, _cmd: Sel, frame: NSRect, screen: *mut AnyObject) -> NSRect {
+    let Some(screen) = screen.as_ref() else { return frame };
+    let visible: NSRect = msg_send![screen, visibleFrame];
+    // Cocoa's y runs upward from the bottom of the screen, and `origin` is the window's bottom-left.
+    let highest = visible.origin.y + visible.size.height - SUSHI_BAND;
+    NSRect { origin: objc2_foundation::NSPoint { x: frame.origin.x, y: frame.origin.y.min(highest) }, ..frame }
 }

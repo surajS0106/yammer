@@ -17,6 +17,29 @@ from the desktop app's CHANGELOG.md.
   shows Unreleased.
 -->
 
+## Unreleased
+
+### New
+
+- Meeting notes now come from templates: Minutes, Brief summary, Action items, 1:1, Stand-up, Customer call, Interview and Lecture, plus your own on the new Templates page under Teach.
+- Pick which template your meetings are written with right on the Meetings page, before you start.
+- While a meeting is going on, you can change the template its notes will be written with from the top of the meeting.
+- You can write any meeting's notes again with a different template, straight from the meeting.
+- A meeting's notes now have an Enhanced and a My notes side, so you can switch between the written notes and what you typed.
+- You can edit the written notes by hand, or ask for changes such as "make it shorter" and undo them if you don't like the result.
+- Ask questions about a meeting, or have a follow-up email or the action items drafted from it, and the answers stay with the meeting.
+- While a meeting is going on you can ask "What did I miss?" or write notes of what's been said so far, without stopping it.
+- You can take lines out of a meeting's transcript, such as something said off the record.
+- Search your meetings by their titles, notes and transcripts from the top of the Meetings page.
+- Connect your calendar under Meetings → Settings with its secret iCal address from Google Calendar or Outlook: a meeting recorded during an event takes its name, shows who was invited, and its notes spell their names right.
+- The Meetings page shows what's coming up on your calendar, with Start notes for each event and Join for its video call.
+
+### Improved
+
+- Error messages are now plain sentences that say what went wrong and what to do, instead of technical codes.
+- Past meetings are grouped by day, so each one shows just its time and length, and its preview starts with the notes rather than their heading.
+- A meeting starts transcribing as soon as you tap to start it.
+
 ## 0.10.0 — 2026-11-16
 
 ### New

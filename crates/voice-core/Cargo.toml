@@ -12,6 +12,10 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+# The calendar (calendar.rs): times and zones, and repeating events.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+chrono-tz = "0.10"
+rrule = "0.14"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 reqwest = { workspace = true, features = ["native-tls"] }

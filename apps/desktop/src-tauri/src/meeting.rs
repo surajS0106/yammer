@@ -33,7 +33,7 @@ use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::{self, Message};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use voice_core::live::{self, Event, Segmenter, Turn};
-use voice_core::meetings::{self, Meeting, Overview, Segment, Speaker, Store};
+use voice_core::meetings::{self, ChatRole, ChatTurn, Hit, Meeting, Overview, Segment, Speaker, Store};
 use voice_core::settings::{CallAudio, Engine, LiveEngine};
 use voice_core::{cleanup, text as fixes, Settings};
 
@@ -168,6 +168,18 @@ impl Meetings {
         list
     }
 
+    /// Meetings with every word of `query`, best first, including the one in progress.
+    pub fn search(&self, query: &str) -> Vec<Hit> {
+        let mut hits = self.store.search(query);
+        if let Some(m) = self.active_any() {
+            let live = m.lock().unwrap().clone();
+            hits.retain(|h| h.id != live.id);
+            hits.extend(live.search(query));
+            meetings::sort_hits(&mut hits);
+        }
+        hits
+    }
+
     pub fn get(&self, id: u64) -> AppResult<Meeting> {
         match self.active(id) {
             Some(m) => Ok(m.lock().unwrap().clone()),
@@ -240,6 +252,16 @@ fn emit_status(app: &AppHandle) {
 
 /// The hotkey, tray and overlay: start a meeting, or stop the one in progress.
 /// Errors go to the overlay, as there's no window to show them in.
+/// Start a meeting unless one is going, or stop the one that is (`yammer --meeting=start|stop`,
+/// from Sush): unlike `toggle`, asking twice does nothing the second time.
+#[cfg(desktop)]
+pub fn set_live(app: &AppHandle, live: bool) {
+    if is_live() == live {
+        return;
+    }
+    toggle(app);
+}
+
 pub fn toggle(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -269,36 +291,46 @@ pub async fn start(app: &AppHandle) -> AppResult<LiveInfo> {
     check_engine(app, &settings)?;
 
     let id = now_ms();
-    let meeting = Arc::new(Mutex::new(Meeting::new(id, settings.meeting_engine_label())));
+    // The default template, from the start, so the live view can show it and the user can change it mid-call.
+    let template = Some(settings.meeting.template(None).id);
+    // The calendar event it's part of names it and says who's there.
+    let event = app.state::<crate::calendar::Calendar>().for_meeting(id);
+    let title = event.as_ref().map(|e| e.title.clone()).unwrap_or_default();
+    let meeting = Arc::new(Mutex::new(Meeting { template, title, event, ..Meeting::new(id, settings.meeting_engine_label()) }));
+    // Sushi and the start cue answer at once; connecting and opening the audio take a moment.
+    overlay::set_meeting(app, Some(id));
+    #[cfg(desktop)]
+    if settings.sounds {
+        sounds::play(Cue::Start);
+    }
+    let opened = open_channels(app, &settings).await;
     let (mut captures, mut tasks, mut speakers) = (Vec::new(), Vec::new(), Vec::new());
     let mut notice = None;
-    for (source, speaker) in channels(&settings) {
-        // Connected before recording, so a refused key stops the meeting before it starts.
-        let ws = connect(&settings).await?;
-        let (tx, rx) = unbounded_channel::<Vec<f32>>();
-        let (open_app, level_app) = (app.clone(), app.clone());
-        let opened = tauri::async_runtime::spawn_blocking(move || {
-            open(
-                &open_app,
-                source,
-                move |audio| drop(tx.send(audio)),
-                move |level| drop(level_app.emit("meeting-level", LevelEvent { speaker, level })),
-            )
-        })
-        .await
-        .map_err(join_err)?;
-        match opened {
-            Ok(capture) => {
+    let mut failed = None;
+    for (speaker, connected, opened) in opened {
+        match (connected, opened) {
+            (Ok(ws), Ok((capture, rx))) => {
                 captures.push(capture);
                 speakers.push(speaker);
                 tasks.push(tauri::async_runtime::spawn(transcribe(app.clone(), meeting.clone(), speaker, settings.clone(), ws, rx)));
             }
+            // A refused key stops the meeting before it starts.
+            (Err(e), opened) => {
+                captures.extend(opened.ok().map(|(capture, _)| capture));
+                failed.get_or_insert(e);
+            }
             // The other side of the call can't be heard: carry on with the microphone.
-            Err(e) if speaker == Speaker::Them && settings.meeting.audio == CallAudio::Both => {
+            (Ok(_), Err(e)) if speaker == Speaker::Them && settings.meeting.audio == CallAudio::Both => {
                 notice = Some(format!("Only your microphone is being transcribed. {e}"));
             }
-            Err(e) => return Err(e),
+            (Ok(_), Err(e)) => drop(failed.get_or_insert(e)),
         }
+    }
+    if let Some(e) = failed {
+        tasks.iter().for_each(|t| t.abort());
+        let _ = tauri::async_runtime::spawn_blocking(move || captures.into_iter().for_each(Capture::stop)).await;
+        overlay::set_meeting(app, None);
+        return Err(e);
     }
     if let Some(text) = &notice {
         meeting.lock().unwrap().notice = Some(text.clone());
@@ -319,11 +351,6 @@ pub async fn start(app: &AppHandle) -> AppResult<LiveInfo> {
     *me.live.lock().unwrap() = Some(Live { meeting, captures, tasks, saver, info: info.clone() });
     LIVE.store(true, Ordering::SeqCst);
 
-    #[cfg(desktop)]
-    if settings.sounds {
-        sounds::play(Cue::Start);
-    }
-    overlay::set_meeting(app, Some(id));
     if let Some(text) = notice {
         overlay::flash(app, OverlayState::Message { text, error: true }, 6000);
     }
@@ -377,7 +404,8 @@ pub async fn stop(app: &AppHandle) -> AppResult<Option<Meeting>> {
         overlay::show(app, OverlayState::Polishing { model: settings.cleanup.label() });
         let (app, id) = (app.clone(), finished.id);
         tauri::async_runtime::spawn(async move {
-            let done = summarize(&app, id).await;
+            wait_for_notes(&app, id).await;
+            let done = summarize(&app, id, None).await;
             let (text, error) = match &done {
                 Ok(m) if m.error.is_none() => ("Meeting notes are ready".to_string(), false),
                 Ok(m) => (m.error.clone().unwrap_or_default(), true),
@@ -392,34 +420,26 @@ pub async fn stop(app: &AppHandle) -> AppResult<Option<Meeting>> {
     Ok(Some(finished))
 }
 
-/// Write meeting `id`'s notes from its transcript and the user's own notes,
-/// replacing any it had. A failure is saved on the meeting (`error`) as well as returned.
-pub async fn summarize(app: &AppHandle, id: u64) -> AppResult<Meeting> {
+/// Write meeting `id`'s notes from its transcript and the user's own notes, replacing
+/// any it had, with `template` (else the one it was last written with, else the default).
+/// While it's in progress they're written from what's been said so far.
+/// A failure is saved on the meeting (`error`) as well as returned.
+pub async fn summarize(app: &AppHandle, id: u64, template: Option<String>) -> AppResult<Meeting> {
     let me = app.state::<Meetings>();
-    if me.active(id).is_some() {
-        return Err(AppError::Invalid("The notes are written once the meeting is stopped.".into()));
-    }
-    let meeting = me.store.get(id).ok_or_else(gone)?;
-    {
-        let mut busy = me.summarizing.lock().unwrap();
-        if busy.contains(&id) {
-            return Err(AppError::Invalid("The notes for this meeting are already being written.".into()));
-        }
-        busy.push(id);
-    }
-    emit_status(app);
-    let written = write_notes(app, &meeting).await;
-    me.summarizing.lock().unwrap().retain(|&m| m != id);
-    emit_status(app);
+    let meeting = me.get(id)?;
+    let _busy = Busy::start(app, id, "The notes for this meeting are already being written.")?;
+    let written = write_notes(app, &meeting, template.as_deref()).await;
+    drop(_busy);
 
     // Applied to the meeting as it is now, so notes typed meanwhile aren't lost.
     let saved = me.update(id, |m| match &written {
-        Ok((title, notes, by)) => {
-            if let Some(title) = title.as_ref().filter(|_| m.title.trim().is_empty()) {
+        Ok(w) => {
+            if let Some(title) = w.title.as_ref().filter(|_| m.title.trim().is_empty()) {
                 m.title = title.clone();
             }
-            m.summary = Some(notes.clone());
-            m.summary_by = Some(by.clone());
+            m.summary = Some(w.notes.clone());
+            m.summary_by = Some(w.by.clone());
+            m.template = Some(w.template.clone());
             m.error = None;
         }
         Err(e) => m.error = Some(format!("Couldn't write the notes: {e}")),
@@ -428,8 +448,54 @@ pub async fn summarize(app: &AppHandle, id: u64) -> AppResult<Meeting> {
     written.map(|_| saved)
 }
 
-/// (title, notes, model label).
-async fn write_notes(app: &AppHandle, meeting: &Meeting) -> AppResult<(Option<String>, String, String)> {
+/// Meeting `id` is in `Meetings::summarizing` (its notes are being written or revised) while this lives.
+struct Busy {
+    app: AppHandle,
+    id: u64,
+}
+
+impl Busy {
+    fn start(app: &AppHandle, id: u64, already: &str) -> AppResult<Busy> {
+        {
+            let me = app.state::<Meetings>();
+            let mut busy = me.summarizing.lock().unwrap();
+            if busy.contains(&id) {
+                return Err(AppError::Invalid(already.into()));
+            }
+            busy.push(id);
+        }
+        emit_status(app);
+        Ok(Busy { app: app.clone(), id })
+    }
+}
+
+impl Drop for Busy {
+    fn drop(&mut self) {
+        let me = self.app.state::<Meetings>();
+        me.summarizing.lock().unwrap().retain(|&m| m != self.id);
+        emit_status(&self.app);
+    }
+}
+
+/// Notes asked for mid-meeting may still be being written when it stops. The final
+/// notes wait for them, then replace them, written from the whole transcript.
+async fn wait_for_notes(app: &AppHandle, id: u64) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(200);
+    let me = app.state::<Meetings>();
+    while me.summarizing.lock().unwrap().contains(&id) && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
+struct Written {
+    title: Option<String>,
+    notes: String,
+    /// The model's label.
+    by: String,
+    template: String,
+}
+
+async fn write_notes(app: &AppHandle, meeting: &Meeting, template: Option<&str>) -> AppResult<Written> {
     let state = app.state::<AppState>();
     let settings = state.settings();
     let transcript = meeting.transcript();
@@ -437,13 +503,72 @@ async fn write_notes(app: &AppHandle, meeting: &Meeting) -> AppResult<(Option<St
         return Err(AppError::Invalid("Nothing was transcribed, so there's nothing to write notes from.".into()));
     }
     let key = secrets::cleanup(&settings)?;
-    let format = cleanup::summary_format(settings.meeting.summary, &settings.meeting.summary_instructions);
-    let out = cleanup::summarize(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, &format, &meeting.notes, &transcript).await?;
+    let template = settings.meeting.template(template.or(meeting.template.as_deref()));
+    let out = cleanup::summarize(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, &template.instructions, meeting).await?;
     if out.trim().is_empty() {
         return Err(AppError::Invalid("The model sent back no notes.".into()));
     }
     let (title, notes) = meetings::split_title(&out);
-    Ok((title, notes, settings.cleanup.label()))
+    Ok(Written { title, notes, by: settings.cleanup.label(), template: template.id })
+}
+
+/// Rewrite meeting `id`'s written notes as `request` asks ("make it shorter").
+pub async fn revise(app: &AppHandle, id: u64, request: &str) -> AppResult<Meeting> {
+    if request.trim().is_empty() {
+        return Err(AppError::Invalid("Say how the notes should change.".into()));
+    }
+    let me = app.state::<Meetings>();
+    let meeting = me.get(id)?;
+    let Some(summary) = meeting.summary.as_deref().filter(|s| !s.trim().is_empty()) else {
+        return Err(AppError::Invalid("Write the notes first, then ask for changes.".into()));
+    };
+    let busy = Busy::start(app, id, "The notes for this meeting are already being written.")?;
+    let state = app.state::<AppState>();
+    let settings = state.settings();
+    let key = secrets::cleanup(&settings)?;
+    let out = cleanup::revise(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, summary, &meeting.transcript(), request).await?;
+    drop(busy);
+    // A model that adds a title anyway doesn't get to rename the meeting.
+    let (_, notes) = meetings::split_title(&out);
+    if notes.is_empty() {
+        return Err(AppError::Invalid("The model sent back no notes.".into()));
+    }
+    let saved = me.update(id, |m| {
+        m.summary = Some(notes);
+        m.summary_by = Some(settings.cleanup.label());
+        m.error = None;
+    })?;
+    let _ = app.emit("meeting-updated", &saved);
+    Ok(saved)
+}
+
+/// Answer `question` about meeting `id` (what's been said so far, if it's in progress),
+/// with the thread before it as context. Both are saved on the meeting once answered.
+pub async fn ask(app: &AppHandle, id: u64, question: &str) -> AppResult<Meeting> {
+    let question = question.trim();
+    if question.is_empty() {
+        return Err(AppError::Invalid("Type a question.".into()));
+    }
+    let me = app.state::<Meetings>();
+    let meeting = me.get(id)?;
+    let live = me.active(id).is_some();
+    if meeting.transcript().is_empty() && meeting.notes.trim().is_empty() {
+        return Err(AppError::Invalid("Nothing has been said yet, so there's nothing to ask about.".into()));
+    }
+    let asked = ChatTurn { role: ChatRole::User, text: question.to_string(), at: now_ms() };
+    let mut turns = meeting.chat.clone();
+    turns.push(asked.clone());
+    let state = app.state::<AppState>();
+    let settings = state.settings();
+    let key = secrets::cleanup(&settings)?;
+    let answer = cleanup::chat(&settings.cleanup, key.as_deref(), &state.http, &settings.vocabulary, &meeting, live, &turns).await?;
+    if answer.trim().is_empty() {
+        return Err(AppError::Invalid("The model sent back no answer.".into()));
+    }
+    let answered = ChatTurn { role: ChatRole::Assistant, text: answer, at: now_ms() };
+    let saved = me.update(id, |m| m.chat.extend([asked, answered]))?;
+    let _ = app.emit("meeting-updated", &saved);
+    Ok(saved)
 }
 
 /// What to capture, and who it is in the transcript.
@@ -462,6 +587,31 @@ fn channels(settings: &Settings) -> Vec<(Source, Speaker)> {
 #[cfg(target_os = "android")]
 fn channels(_: &Settings) -> Vec<(Source, Speaker)> {
     vec![((), Speaker::Room)]
+}
+
+/// Connect each channel to the streaming engine and start recording it, all at
+/// once rather than one after another. Recording starts while the connection is
+/// made, and what's heard meanwhile waits in the channel for the stream.
+async fn open_channels(
+    app: &AppHandle,
+    settings: &Settings,
+) -> Vec<(Speaker, AppResult<Option<Ws>>, AppResult<(Capture, UnboundedReceiver<Vec<f32>>)>)> {
+    futures::future::join_all(channels(settings).into_iter().map(|(source, speaker)| async move {
+        let (tx, rx) = unbounded_channel::<Vec<f32>>();
+        let (open_app, level_app) = (app.clone(), app.clone());
+        let opening = tauri::async_runtime::spawn_blocking(move || {
+            open(
+                &open_app,
+                source,
+                move |audio| drop(tx.send(audio)),
+                move |level| drop(level_app.emit("meeting-level", LevelEvent { speaker, level })),
+            )
+        });
+        let (connected, opened) = tokio::join!(connect(settings), opening);
+        let opened = opened.map_err(join_err).and_then(|r| r).map(|capture| (capture, rx));
+        (speaker, connected, opened)
+    }))
+    .await
 }
 
 /// Start capturing a channel. Blocks until it's listening, so call it off the async runtime.
@@ -530,7 +680,9 @@ async fn connect(settings: &Settings) -> AppResult<Option<Ws>> {
         ),
         LiveEngine::SarvamStreaming => (live::sarvam_url(model, lang.as_deref()), "Api-Subscription-Key", live_key(settings)?, None),
     };
-    let mut request = url.into_client_request().map_err(AppError::invalid)?;
+    let mut request = url
+        .into_client_request()
+        .map_err(AppError::because("The streaming service's address isn't valid. Check the engine in Settings → Meetings."))?;
     let value = HeaderValue::from_str(&value).map_err(|_| AppError::Invalid(format!("The {name} API key has characters that can't be sent.")))?;
     request.headers_mut().insert(header, value);
 
@@ -550,7 +702,10 @@ async fn connect(settings: &Settings) -> AppResult<Option<Ws>> {
                     Some("session.updated" | "transcription_session.updated") => return Ok(()),
                     Some("error") => {
                         if let Event::Error(e) = live::parse_openai(&v) {
-                            return Err(AppError::Invalid(format!("OpenAI: {e}")));
+                            return Err(AppError::Invalid(format!(
+                                "OpenAI wouldn't start live transcription. It said: “{}”",
+                                e.trim_end_matches('.')
+                            )));
                         }
                     }
                     _ => {}
@@ -573,11 +728,19 @@ fn ws_error(name: &str, e: tungstenite::Error) -> AppError {
             401 | 403 => AppError::Invalid(format!("{name} rejected the API key. Update it in Settings → Meetings.")),
             status => {
                 let body = resp.body().as_deref().map(String::from_utf8_lossy).unwrap_or_default();
-                let body: String = body.chars().take(200).collect();
-                AppError::Invalid(format!("{name} refused the connection (HTTP {status}). {body}").trim().to_string())
+                eprintln!("{name} refused the connection: HTTP {status} {body}");
+                AppError::Invalid(match status {
+                    404 => format!("{name} doesn't offer that model for live transcription. Pick another in Settings → Meetings."),
+                    429 => format!("{name} is busy, or your plan's limit is used up. Wait a moment and try again."),
+                    500..=599 => format!("{name} is having trouble right now. Try again in a moment."),
+                    _ => format!("{name} wouldn't start live transcription. Check the engine and model in Settings → Meetings."),
+                })
             }
         },
-        e => AppError::Invalid(format!("Couldn't reach {name}: {e}")),
+        e => {
+            eprintln!("couldn't reach {name}: {e}");
+            AppError::Invalid(format!("Couldn't reach {name}. Check your internet connection and try again."))
+        }
     }
 }
 
@@ -897,7 +1060,9 @@ impl<'a> Stream<'a> {
                     self.put(&id, at, String::new(), false);
                 }
             }
-            Event::Error(e) => notice(self.app, self.meeting, format!("{}: {e}", provider_name(self.engine()))),
+            Event::Error(e) => {
+                notice(self.app, self.meeting, format!("{} had a problem: “{}”", provider_name(self.engine()), e.trim_end_matches('.')))
+            }
             Event::Other => {}
         }
     }

@@ -58,7 +58,7 @@ pub async fn transcribe(cfg: &CloudStt, key: Option<&str>, http: &reqwest::Clien
                 req = req.bearer_auth(key);
             }
             let resp = req.send().await.map_err(Error::sending("the speech service"))?;
-            parse_transcription(&check_status("Transcription", resp).await?.json().await?)?
+            parse_transcription(&check_status("the speech service", resp).await?.json().await?)?
         }
         SttApi::Sarvam => sarvam(base, cfg.model.trim(), key, http, samples, &opts).await?,
         SttApi::Xai => {
@@ -161,14 +161,14 @@ fn parse_transcription(body: &Value) -> Result<String> {
     body.get("text")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .ok_or_else(|| Error::Decode("transcription response has no `text`".into()))
+        .ok_or_else(|| Error::Decode("The speech service sent back an answer without any words in it. Try again.".into()))
 }
 
 fn parse_sarvam(body: &Value) -> Result<String> {
     body.get("transcript")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .ok_or_else(|| Error::Decode("Sarvam response has no `transcript`".into()))
+        .ok_or_else(|| Error::Decode("Sarvam sent back an answer without any words in it. Try again.".into()))
 }
 
 /// Sarvam wants BCP-47 Indian locales ("hi-IN"); anything it doesn't cover,
@@ -199,7 +199,7 @@ fn parse_ollama(body: &Value) -> Result<String> {
     body.pointer("/message/content")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .ok_or_else(|| Error::Decode("Ollama response has no message content".into()))
+        .ok_or_else(|| Error::Decode("Ollama sent back an empty answer. Check the model can take audio, then try again.".into()))
 }
 
 /// Ollama is usually configured with its OpenAI-compatible `/v1` URL; the

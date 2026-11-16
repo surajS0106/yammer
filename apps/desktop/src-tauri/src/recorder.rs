@@ -94,13 +94,16 @@ pub fn start(device: Option<String>, on_level: impl Fn(f32) + Send + 'static) ->
             let _ = thread.join();
             Err(e)
         }
-        Err(_) => Err(AppError::Invalid("The microphone thread stopped unexpectedly.".into())),
+        Err(_) => Err(AppError::Invalid("The microphone stopped unexpectedly. Try again.".into())),
     }
 }
 
 fn open(device: Option<&str>, buffer: Arc<Mutex<Vec<f32>>>, level: Arc<AtomicU32>) -> AppResult<(cpal::Stream, usize, u32)> {
     let device = pick_device(device)?;
-    let mic_err = |e: &dyn std::fmt::Display| AppError::Invalid(format!("Couldn't open the microphone: {e}"));
+    let mic_err = |e: &dyn std::fmt::Display| {
+        eprintln!("couldn't open the microphone: {e}");
+        AppError::Invalid("Couldn't open the microphone. Check it's connected and that Yammer is allowed to use it.".into())
+    };
     let supported = device.default_input_config().map_err(|e| mic_err(&e))?;
     open_with(&device, supported, buffer, level, &mic_err)
 }
@@ -114,7 +117,10 @@ fn open_output(buffer: Arc<Mutex<Vec<f32>>>, level: Arc<AtomicU32>) -> AppResult
         } else {
             ""
         };
-        AppError::Invalid(format!("Couldn't listen to the computer's sound: {e}.{hint}"))
+        {
+            eprintln!("couldn't listen to the computer's sound: {e}");
+            AppError::Invalid(format!("Couldn't listen to the computer's sound.{hint}"))
+        }
     };
     let device = cpal::default_host().default_output_device().ok_or_else(|| err(&"no sound output found"))?;
     let supported = device.default_output_config().map_err(|e| err(&e))?;
@@ -281,7 +287,7 @@ pub fn live(source: Source, on_audio: impl Fn(Vec<f32>) + Send + 'static, on_lev
             let _ = thread.join();
             Err(e)
         }
-        Err(_) => Err(AppError::Invalid("The audio thread stopped unexpectedly.".into())),
+        Err(_) => Err(AppError::Invalid("Recording the computer's sound stopped unexpectedly. Try again.".into())),
     }
 }
 
@@ -301,7 +307,10 @@ fn monitor(on_audio: impl Fn(Vec<f32>) + Send + 'static, on_level: impl Fn(f32) 
                 "Couldn't listen to the computer's sound ({e}). Install parec (the pulseaudio-utils package), which works with PipeWire too."
             ))
         })?;
-    let mut stdout = child.stdout.take().ok_or_else(|| AppError::Invalid("parec gave no output".into()))?;
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| AppError::Invalid("Couldn't listen to the computer's sound. Check that PulseAudio or PipeWire is running.".into()))?;
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let thread = std::thread::Builder::new()
         .name("live-monitor".into())

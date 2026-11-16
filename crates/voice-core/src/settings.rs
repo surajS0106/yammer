@@ -108,16 +108,93 @@ impl LiveEngine {
     }
 }
 
-/// The shape of the notes written once a meeting ends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
-pub enum SummaryStyle {
-    #[default]
-    Minutes,
-    Summary,
-    ActionItems,
-    /// `MeetingSettings::summary_instructions`.
-    Custom,
+/// How a meeting's notes are laid out: one of Yammer's own, or the user's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteTemplate {
+    pub id: String,
+    pub name: String,
+    /// The layout, as the notes prompt tells it to the model.
+    pub instructions: String,
+    /// What it's for, in a line, for the Templates page. Only Yammer's own have one. Never read from settings.
+    #[serde(default, skip_deserializing, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    /// Shipped with Yammer, so it can't be changed. Never read from settings.
+    #[serde(default, skip_deserializing, skip_serializing_if = "std::ops::Not::not")]
+    pub built_in: bool,
+}
+
+/// The template notes are written with when nothing else is chosen.
+pub const DEFAULT_TEMPLATE: &str = "minutes";
+
+/// Yammer's own templates. Kept in code, not settings, so improving one reaches everyone.
+pub fn built_in_templates() -> Vec<NoteTemplate> {
+    let t = |id: &str, name: &str, description: &str, instructions: &str| NoteTemplate {
+        id: id.into(),
+        name: name.into(),
+        instructions: instructions.into(),
+        description: description.into(),
+        built_in: true,
+    };
+    vec![
+        t(
+            "minutes",
+            "Minutes",
+            "The full record: what was decided, who does what, and what's still open.",
+            "Meeting minutes: \"## Summary\" (two or three sentences), \"## Decisions\", \"## Action items\" (\"- [ ] Who: what, by \
+when\" where the transcript says), \"## Discussion\" (the topics in the order they came up, a few bullets each) and \"## Open questions\".",
+        ),
+        t(
+            "summary",
+            "Brief summary",
+            "A short paragraph and the key points, for a quick catch-up.",
+            "A brief summary: \"## Summary\" (one short paragraph), then \"## Key points\" as bullets, then \"## Action items\" if there are any.",
+        ),
+        t(
+            "action-items",
+            "Action items",
+            "Only what happens next, and what was decided.",
+            "Only what happens next: \"## Action items\" (\"- [ ] Who: what, by when\" where the transcript says), then \"## Decisions\". \
+Nothing else.",
+        ),
+        t(
+            "one-on-one",
+            "1:1",
+            "How they're doing, what you talked about, and feedback both ways.",
+            "Notes of a one-to-one: \"## How they're doing\" (mood, wins, worries, in their words where it helps), \"## Topics\" (a few \
+bullets each), \"## Feedback\" (given either way), \"## Action items\" (\"- [ ] Who: what\") and \"## For next time\".",
+        ),
+        t(
+            "stand-up",
+            "Stand-up",
+            "What each person did, does next and is stuck on.",
+            "A stand-up: \"## Updates\" with a \"### Name\" for each person (or \"### Team\" where people can't be told apart), each with \
+\"Done\", \"Next\" and \"Blocked\" bullets. Then \"## Blockers\" gathered together, and \"## Action items\". Keep it terse.",
+        ),
+        t(
+            "customer-call",
+            "Customer call",
+            "Their situation, pain points, objections and the next steps.",
+            "A call with a customer or prospect: \"## Summary\", \"## Their situation\" (who they are, what they use today), \"## Pain \
+points\" (in their words where possible), \"## What they asked about\", \"## Objections and concerns\", \"## Budget, timeline and \
+decision makers\" (only what was said) and \"## Next steps\" as \"- [ ] \" items.",
+        ),
+        t(
+            "interview",
+            "Interview",
+            "Each question with the gist of the answer, then strengths and concerns.",
+            "A job interview: \"## Candidate\" (role and background, as said), \"## Questions and answers\" (each question asked as a \
+bullet with the gist of the answer beneath it), \"## Strengths\", \"## Concerns\" and \"## Follow-ups\". Report what was said; don't \
+judge the candidate.",
+        ),
+        t(
+            "lecture",
+            "Lecture or class",
+            "Study notes by topic, with the questions raised and what to review.",
+            "Study notes of a lecture or talk: \"## Overview\" (two sentences), then a \"## \" section per topic in the order taught, with \
+definitions, key facts and examples as bullets, \"## Questions raised\", and \"## To review\" as \"- [ ] \" items.",
+        ),
+    ]
 }
 
 /// What happens when another app starts a call (`calls.rs`).
@@ -149,14 +226,21 @@ pub struct MeetingSettings {
     pub engine: LiveEngine,
     /// The streaming engine's model; empty for its default.
     pub model: String,
-    pub summary: SummaryStyle,
-    /// The format the notes take with `SummaryStyle::Custom`.
+    /// Id of the template notes are written with, unless a meeting picks another.
+    /// Older builds kept a style here ("minutes", "action-items", "custom"); the first three are template ids.
+    pub summary: String,
+    /// The user's own templates, after Yammer's.
+    pub templates: Vec<NoteTemplate>,
+    /// Older builds' layout for the "custom" style. `migrate` makes it a template.
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub summary_instructions: String,
     /// Write the notes as soon as the meeting ends, with the AI cleanup model.
     pub auto_summary: bool,
     /// When another app starts using the microphone for a call, offer to transcribe it.
     pub detect: CallDetect,
     pub ignored_apps: Vec<IgnoredApp>,
+    /// When an event on the calendar begins and no meeting is being transcribed, offer to take notes.
+    pub calendar_offer: bool,
 }
 
 impl Default for MeetingSettings {
@@ -166,11 +250,13 @@ impl Default for MeetingSettings {
             audio: CallAudio::Both,
             engine: LiveEngine::Dictation,
             model: String::new(),
-            summary: SummaryStyle::Minutes,
+            summary: DEFAULT_TEMPLATE.into(),
+            templates: Vec::new(),
             summary_instructions: String::new(),
             auto_summary: true,
             detect: CallDetect::Ask,
             ignored_apps: Vec::new(),
+            calendar_offer: true,
         }
     }
 }
@@ -181,6 +267,39 @@ impl MeetingSettings {
         match self.model.trim() {
             "" => self.engine.default_model(),
             m => m,
+        }
+    }
+
+    /// Every template: Yammer's, then the user's own that have a layout.
+    pub fn all_templates(&self) -> Vec<NoteTemplate> {
+        let mut all = built_in_templates();
+        let own = self.templates.iter().filter(|t| !t.instructions.trim().is_empty() && !all.iter().any(|b| b.id == t.id));
+        let own: Vec<NoteTemplate> = own.map(|t| NoteTemplate { built_in: false, description: String::new(), ..t.clone() }).collect();
+        all.extend(own);
+        all
+    }
+
+    /// The template with this id, else the default one, else Minutes.
+    pub fn template(&self, id: Option<&str>) -> NoteTemplate {
+        let all = self.all_templates();
+        let find = |id: &str| all.iter().find(|t| t.id == id).cloned();
+        id.and_then(find).or_else(|| find(&self.summary)).or_else(|| find(DEFAULT_TEMPLATE)).expect("Minutes is built in")
+    }
+
+    /// Settings from before templates: the "custom" style's layout becomes a template of the user's own.
+    pub fn migrate(&mut self) {
+        let custom = std::mem::take(&mut self.summary_instructions);
+        if !custom.trim().is_empty() && !self.templates.iter().any(|t| t.id == "custom") {
+            self.templates.push(NoteTemplate {
+                id: "custom".into(),
+                name: "My layout".into(),
+                instructions: custom.trim().into(),
+                description: String::new(),
+                built_in: false,
+            });
+        }
+        if !self.all_templates().iter().any(|t| t.id == self.summary) {
+            self.summary = DEFAULT_TEMPLATE.into();
         }
     }
 }
@@ -380,7 +499,8 @@ pub fn provider_name(preset: &str) -> &'static str {
 /// Every name an API key is saved under. Keys belong to a provider, not a feature, so one
 /// OpenAI key serves speech, cleanup and meetings alike. A custom server's key stays with the
 /// feature that points at it, since the speech and cleanup servers are rarely the same.
-pub const KEY_NAMES: &[&str] = &["openai", "anthropic", "groq", "sarvam", "xai", "custom-stt", "custom-cleanup"];
+/// `calendar` isn't a provider's: it's the calendar's secret iCal address, which works like a password.
+pub const KEY_NAMES: &[&str] = &["openai", "anthropic", "groq", "sarvam", "xai", "custom-stt", "custom-cleanup", "calendar"];
 
 /// The key a provider preset uses: `None` when it needs none (Ollama), `custom` for anything unknown.
 fn key_name(preset: &str, custom: &'static str) -> Option<&'static str> {
@@ -509,7 +629,9 @@ impl Settings {
 
     /// Load from `path`; a missing or unreadable file gives the defaults.
     pub fn load(path: &Path) -> Settings {
-        std::fs::read(path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default()
+        let mut settings: Settings = std::fs::read(path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
+        settings.meeting.migrate();
+        settings
     }
 
     /// Write atomically (temp file + rename), so a crash never leaves half a file.
@@ -615,12 +737,46 @@ mod tests {
         assert_eq!((v["meeting"]["audio"].as_str(), v["meeting"]["engine"].as_str()), (Some("both"), Some("dictation")));
         assert_eq!((v["meeting"]["summary"].as_str(), v["meeting"]["autoSummary"].as_bool()), (Some("minutes"), Some(true)));
         let m: MeetingSettings = serde_json::from_str(r#"{"engine":"openai-realtime","summary":"action-items"}"#).unwrap();
-        assert_eq!((m.engine, m.summary, m.audio), (LiveEngine::OpenaiRealtime, SummaryStyle::ActionItems, CallAudio::Both));
+        assert_eq!((m.engine, m.summary.as_str(), m.audio), (LiveEngine::OpenaiRealtime, "action-items", CallAudio::Both));
+        assert!(v["meeting"].get("summaryInstructions").is_none() && v["meeting"]["templates"].as_array().is_some_and(Vec::is_empty));
         // Settings from before call detection ask, and ignore nothing.
-        assert_eq!((m.detect, m.ignored_apps.len()), (CallDetect::Ask, 0));
+        assert_eq!((m.detect, m.ignored_apps.len(), m.calendar_offer), (CallDetect::Ask, 0, true));
         assert_eq!((v["meeting"]["detect"].as_str(), v["meeting"]["ignoredApps"].as_array().map(Vec::len)), (Some("ask"), Some(0)));
         let m: MeetingSettings = serde_json::from_str(r#"{"detect":"auto","ignoredApps":[{"id":"zoom","name":"Zoom"}]}"#).unwrap();
         assert_eq!((m.detect, m.ignored_apps), (CallDetect::Auto, vec![IgnoredApp { id: "zoom".into(), name: "Zoom".into() }]));
+    }
+
+    #[test]
+    fn note_templates_and_their_migration() {
+        // An old custom style becomes a template of the user's own, and stays the default.
+        let mut m: MeetingSettings = serde_json::from_str(r###"{"summary":"custom","summaryInstructions":" ## Next steps only "}"###).unwrap();
+        m.migrate();
+        assert_eq!((m.summary.as_str(), m.summary_instructions.as_str()), ("custom", ""));
+        assert_eq!(m.template(None).instructions, "## Next steps only");
+        assert!(!m.template(None).built_in);
+        // An old custom style with nothing in it falls back to Minutes.
+        let mut m: MeetingSettings = serde_json::from_str(r#"{"summary":"custom"}"#).unwrap();
+        m.migrate();
+        assert_eq!((m.summary.as_str(), m.templates.len()), ("minutes", 0));
+        // Old built-in styles are template ids already.
+        let mut m: MeetingSettings = serde_json::from_str(r#"{"summary":"summary"}"#).unwrap();
+        m.migrate();
+        assert_eq!(m.template(None).name, "Brief summary");
+        // A meeting's own pick wins; an unknown one falls back to the default.
+        assert_eq!(m.template(Some("stand-up")).name, "Stand-up");
+        assert_eq!(m.template(Some("gone")).id, "summary");
+        // A user template can't shadow a built-in, and an empty one is left out.
+        m.templates = vec![
+            NoteTemplate { id: "minutes".into(), name: "Mine".into(), instructions: "x".into(), description: String::new(), built_in: false },
+            NoteTemplate { id: "blank".into(), name: "Blank".into(), instructions: " ".into(), description: String::new(), built_in: false },
+        ];
+        assert_eq!(m.all_templates().len(), built_in_templates().len());
+        assert_eq!(m.template(Some("minutes")).name, "Minutes");
+        // `builtIn` goes out to the UI but is never read back.
+        let t: NoteTemplate = serde_json::from_str(r#"{"id":"a","name":"A","instructions":"x","builtIn":true,"description":"d"}"#).unwrap();
+        assert!(!t.built_in && t.description.is_empty());
+        assert!(built_in_templates().iter().all(|t| !t.description.is_empty()));
+        assert_eq!(serde_json::to_value(&built_in_templates()[0]).unwrap()["builtIn"], true);
     }
 
     #[test]

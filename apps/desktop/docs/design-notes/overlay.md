@@ -1,8 +1,13 @@
 # Overlay (Sushi and the pill) — Design Notes
 
-Last updated: 2026-11-06
+Last updated: 2026-11-16
 
 ## What changed
+
+### 2026-11-16 (drag to the top of the screen)
+- The `YammerOverlayPanel` class now overrides `constrainFrameRect:toScreen:` with `constrain_frame`. It lets the window's top go above the menu bar, and stops it only once the bottom `SUSHI_BAND` (72 pt), where Sushi and the idle pill sit, would go under the screen's visible frame (`apps/desktop/src-tauri/src/panel.rs`). `SUSHI_BAND` lives in `apps/desktop/src-tauri/src/overlay.rs`.
+- `on_screen` now accepts a saved position if Sushi's band is on a screen, not the window's middle, so a position near the top is kept (`overlay.rs`).
+- New `lower_into_view` (`overlay.rs`): when `show` puts up a card (transcript, words, failed, call started or call ended) and the window's top is above its monitor's work area, the window moves down until its top fits. The lowered position isn't saved. `LOWERED` records the move, and the next non-card state calls `place`, which puts the window back where it was dropped. In any other position, cards show exactly as before.
 
 ### 2026-11-06 (cleanup failures)
 - A dictation pasted after cleanup failed now flashes as an error for 5 seconds, with the red alert icon and border, instead of a green check for 3.5 seconds (`show_done` in `apps/desktop/src-tauri/src/dictation.rs`). It plays no error sound, because the text was still pasted.
@@ -40,6 +45,8 @@ The island first relied on DOM `mouseenter`, and it opened only on click. macOS 
 
 A green check beside "Cleanup failed (HTTP 401): invalid x-api-key" reported a failure as a success, and it didn't say what to do next. A failed cleanup also recurs on every dictation until it's fixed, so it needs to be noticed. The pill clamps text to two lines of about 44 characters, so the new message is short enough to fit with "(pasted the raw transcript)" after it. The cost is that other 401 details from the provider are no longer shown.
 
+The overlay is a 320 pt square with Sushi at its bottom, because the cards and Sushi's tricks grow upward. macOS stops a dragged window's top at the menu bar, so Sushi couldn't get within about 270 pt of the top of the screen. Letting the window go above the menu bar fixes the drag. Cards would then open off screen, so they move the window down only in that case and only while they show. Sushi jumps down while a card is up near the top of the screen, which is better than a card you can't read.
+
 ## What makes it stand out
 
 - Keeps the Dock icon. The usual fix is to go back to `LSUIElement` or the Accessory activation policy, which removes it.
@@ -49,3 +56,4 @@ A green check beside "Cleanup failed (HTTP 401): invalid x-api-key" reported a f
 - Hover works on a window that never takes focus. DOM hover events and CSS `:hover` do not fire there on macOS, so the island hit-tests against the polled cursor position instead.
 - Clicking an island button keeps focus in the app being dictated into, so Dictate behaves like the hotkey.
 - `Stationary` and `IgnoresCycle` keep the pet still during Space-switch animations and out of the Cmd+` window cycle.
+- Sushi can be dragged right up to the menu bar, though it sits at the bottom of a much taller transparent window. Nothing changes anywhere else on screen: cards only move the window when they would otherwise open above the screen, and they never overwrite the saved position.

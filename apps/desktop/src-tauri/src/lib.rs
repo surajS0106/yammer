@@ -5,6 +5,7 @@
 
 #[cfg(target_os = "android")]
 mod android;
+mod calendar;
 #[cfg(desktop)]
 mod calls;
 mod commands;
@@ -40,6 +41,8 @@ mod secrets;
 mod sounds;
 mod state;
 #[cfg(desktop)]
+mod sush;
+#[cfg(desktop)]
 mod tray;
 #[cfg(desktop)]
 mod whisper;
@@ -60,8 +63,53 @@ pub fn run() {
     android::run();
 }
 
+/// Tauri's app identifier (`identifier` in tauri.conf.json), which names the data dir.
+#[cfg(desktop)]
+const IDENTIFIER: &str = "com.sush.yammer";
+
+/// `yammer --mcp`: serve the meetings to an MCP client (Sush, Claude Desktop, Cursor) over
+/// stdio, then exit. Runs before Tauri, and before the single-instance plugin, which would
+/// otherwise hand the launch to the running app. No windows, tray or microphone: it only
+/// reads the meeting files, so it's safe beside the app.
+#[cfg(desktop)]
+fn mcp() -> ! {
+    let Some(data) = dirs::data_dir() else {
+        eprintln!("yammer --mcp: couldn't find the app data folder");
+        std::process::exit(1);
+    };
+    let server = voice_core::mcp::Server::new(data.join(IDENTIFIER).join("meetings"), env!("CARGO_PKG_VERSION"));
+    let result = server.serve(std::io::stdin().lock(), std::io::stdout().lock());
+    if let Err(e) = result {
+        eprintln!("yammer --mcp: {e}");
+        std::process::exit(1);
+    }
+    std::process::exit(0)
+}
+
+/// Tell Sush how to reach the meetings: `mcp.json` in the config dir names this binary
+/// with `--mcp`. Sush adds its Yammer connector only once it finds this, so a Yammer too
+/// old to serve them is never launched with a flag it doesn't know.
+#[cfg(desktop)]
+fn advertise_mcp(config_dir: &std::path::Path) {
+    // An AppImage runs from a mount that's gone once it quits; $APPIMAGE is the file itself.
+    let exe = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from).or_else(|| std::env::current_exe().ok());
+    let Some(exe) = exe else { return };
+    let spec = serde_json::json!({ "command": exe, "args": ["--mcp"], "version": env!("CARGO_PKG_VERSION") });
+    let path = config_dir.join("mcp.json");
+    if std::fs::read(&path).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()).as_ref() == Some(&spec) {
+        return;
+    }
+    let _ = std::fs::create_dir_all(config_dir);
+    if let Err(e) = std::fs::write(&path, spec.to_string()) {
+        eprintln!("couldn't write {}: {e}", path.display());
+    }
+}
+
 #[cfg(desktop)]
 pub fn run() {
+    if std::env::args().any(|a| a == "--mcp") {
+        mcp();
+    }
     // Wayland has no keep-above, so GNOME lets other apps cover the overlay and ignores
     // where it's placed. Under XWayland both work. Must be set before GTK starts.
     // Overrides an inherited GDK_BACKEND=wayland, which VS Code's terminal (for one) passes on.
@@ -72,7 +120,8 @@ pub fn run() {
         // Must come first: a second launch hands its arguments to this instance and exits.
         // `yammer --toggle` is how Wayland users bind a system shortcut to dictation (gnome.rs
         // binds it, `--edit`, `--transform=<id>` and `--meeting` for the other hotkeys, and `--cancel`
-        // to Esc while recording, on GNOME).
+        // to Esc while recording, on GNOME). Sush starts and stops meetings with `--meeting=start|stop`,
+        // which do nothing when the meeting is already in that state, unlike the toggle.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             let transform = args.iter().find_map(|a| a.strip_prefix("--transform="));
             if args.iter().any(|a| a == "--toggle") {
@@ -83,6 +132,14 @@ pub fn run() {
                 app.state::<Dictation>().send(Input::Toggle(Mode::Transform(id.into())));
             } else if args.iter().any(|a| a == "--meeting") {
                 meeting::toggle(app);
+            } else if let Some(id) = args.iter().find_map(|a| a.strip_prefix("--open-meeting=")).and_then(|id| id.parse::<u64>().ok()) {
+                // A yammer://meeting/<id> link Sush cited: show that meeting.
+                tray::show_main(app);
+                let _ = tauri::Emitter::emit_to(app, "main", "open-meeting", id);
+            } else if args.iter().any(|a| a == "--meeting=start") {
+                meeting::set_live(app, true);
+            } else if args.iter().any(|a| a == "--meeting=stop") {
+                meeting::set_live(app, false);
             } else if args.iter().any(|a| a == "--cancel") {
                 app.state::<Dictation>().send(Input::Cancel);
             } else {
@@ -107,11 +164,13 @@ pub fn run() {
             adopt_larp_dir(&config_dir);
             adopt_larp_dir(&data_dir);
             secrets::init(&config_dir);
+            advertise_mcp(&config_dir);
             #[cfg(target_os = "linux")]
             if gnome::available() {
                 portal::init(&config_dir);
             }
             app.manage(meeting::Meetings::new(data_dir.join("meetings")));
+            app.manage(calendar::Calendar::default());
             app.manage(state::AppState::new(config_dir, data_dir)?);
             app.manage(dictation::spawn(app.handle().clone()));
 
@@ -119,6 +178,7 @@ pub fn run() {
             secrets::migrate(&settings);
             overlay::create(app.handle())?;
             overlay::set_always_visible(app.handle(), settings.overlay_always_visible);
+            calendar::watch(app.handle().clone());
             calls::watch(app.handle().clone());
             tray::create(app.handle(), &settings)?;
             if let Err(e) = hotkey::register(app.handle(), &settings) {
@@ -195,6 +255,17 @@ pub fn run() {
             commands::meeting_update,
             commands::meeting_delete,
             commands::meeting_summarize,
+            commands::meeting_revise,
+            commands::meeting_ask,
+            commands::meeting_delete_segments,
+            commands::meeting_search,
+            commands::meeting_templates,
+            commands::meeting_set_template,
+            commands::calendar_status,
+            commands::calendar_connect,
+            commands::calendar_refresh,
+            sush::sush_installed,
+            sush::ask_in_sush,
             commands::call_answer,
             commands::scratchpad_list,
             commands::scratchpad_save,

@@ -30,9 +30,9 @@ pub enum Outcome {
 fn with_clipboard<T>(f: impl FnOnce(&mut arboard::Clipboard) -> Result<T, arboard::Error>) -> AppResult<T> {
     let mut guard = CLIPBOARD.lock().unwrap_or_else(|e| e.into_inner());
     if guard.is_none() {
-        *guard = Some(arboard::Clipboard::new().map_err(|e| AppError::Invalid(format!("Clipboard unavailable: {e}")))?);
+        *guard = Some(arboard::Clipboard::new().map_err(AppError::because("Yammer couldn't use the clipboard. Try again."))?);
     }
-    f(guard.as_mut().unwrap()).map_err(|e| AppError::Invalid(format!("Clipboard error: {e}")))
+    f(guard.as_mut().unwrap()).map_err(AppError::because("Yammer couldn't use the clipboard. Try again."))
 }
 
 pub fn copy(text: &str) -> AppResult<()> {
@@ -71,7 +71,9 @@ pub fn paste(app: &tauri::AppHandle, text: &str, restore_clipboard: bool) -> App
 pub fn copy_selection(app: &tauri::AppHandle, held: Modifiers) -> AppResult<Option<String>> {
     let previous = with_clipboard(|c| c.get_text()).ok();
     with_clipboard(|c| c.clear())?;
-    send_shortcut(app, Letter::C, held).map_err(|e| AppError::Invalid(format!("Couldn't copy the selection ({e}).")))?;
+    send_shortcut(app, Letter::C, held).map_err(AppError::because(
+        "Couldn't copy the selected text. Check that Yammer may control your keyboard (Accessibility), then try again.",
+    ))?;
     // Apps fill the clipboard a moment after the keystroke.
     let deadline = Instant::now() + Duration::from_millis(500);
     let selection = loop {

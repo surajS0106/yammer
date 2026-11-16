@@ -15,6 +15,40 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
   stops if that heading is missing. The app never shows Unreleased.
 -->
 
+## Unreleased
+
+### New
+
+- Meeting notes now come from templates: Minutes, Brief summary, Action items, 1:1, Stand-up, Customer call, Interview and Lecture, plus your own on the new Templates page under Teach.
+- Pick which template your meetings are written with right on the Meetings page, before you start.
+- While a meeting is going on, the floating pill shows which template its notes will be written with, and you can click it there to pick another, or change it from the top of the meeting.
+- You can write any meeting's notes again with a different template, straight from the meeting.
+- A meeting's notes now have an Enhanced and a My notes side, so you can switch between the written notes and what you typed.
+- You can edit the written notes by hand, or ask for changes such as "make it shorter" and undo them if you don't like the result.
+- Ask questions about a meeting, or have a follow-up email or the action items drafted from it, and the answers stay with the meeting.
+- While a meeting is going on you can ask "What did I miss?" or write notes of what's been said so far, without stopping it.
+- You can take lines out of a meeting's transcript, such as something said off the record.
+- Search your meetings by their titles, notes and transcripts from the top of the Meetings page.
+- When Sush links one of your meetings in an answer, clicking the link opens that meeting in Yammer.
+- If you have Sush, Ask in Sush on a meeting opens a chat about it there, where you can also ask across all your meetings.
+- Connect your calendar under Settings → Meetings with its secret iCal address from Google Calendar or Outlook: a meeting recorded during an event takes its name, shows who was invited, and its notes spell their names right.
+- The Meetings page shows what's coming up on your calendar, with Start notes for each event and Join for its video call.
+- When an event on your calendar begins, Sushi offers to take notes, and a call it spots during an event is named after the event.
+- Sush can now read your meetings, so you can ask it about them, such as what you promised someone last week. Claude Desktop, Cursor and other apps that take MCP servers can read them too with yammer --mcp.
+
+### Improved
+
+- Error messages are now plain sentences that say what went wrong and what to do, instead of technical codes like HTTP 503 or os error 2.
+- Meeting settings are easier to scan: what to listen to and which engine transcribes are cards you can compare at a glance, and the tips shown match what you picked.
+- Past meetings are grouped by day, so each one shows just its time and length, and its preview starts with the notes rather than their heading.
+- A meeting starts transcribing as soon as you click Transcribe, and Yammer notices a call has ended within about a second instead of several.
+
+### Fixed
+
+- The floating pill and Sushi's cards no longer have a grey box around them.
+- On Sushi's call offer, "Don't ask for Zoom again" is spelled out in full instead of cut off.
+- On a Mac you can now drag Sushi all the way up to the top of the screen, instead of it stopping partway down.
+
 ## 0.9.0 — 2026-11-16
 
 ### New

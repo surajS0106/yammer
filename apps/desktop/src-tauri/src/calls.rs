@@ -1,4 +1,4 @@
-//! Spotting calls. Every couple of seconds this asks the OS which apps are
+//! Spotting calls. Twice a second this asks the OS which apps are
 //! using the microphone, and `voice_core::calls::Detector` turns that into
 //! calls beginning and ending:
 //!
@@ -7,6 +7,9 @@
 //!   counts down and starts by itself unless cancelled. Each call is offered once.
 //! - The call the meeting is transcribing ends: Sushi counts down to stopping
 //!   the meeting (`OverlayState::CallEnded`), unless told to keep going.
+//! - An event on the calendar begins and nothing is being transcribed: Sushi
+//!   offers to take notes (`calendar_offer`), whether or not a call app is open.
+//!   A call offered during an event is named after it ("Weekly sync, in Zoom").
 //!
 //! A card only goes up while the overlay has nothing else to show, so it never
 //! covers a dictation. The cards' countdowns run in the overlay, which pauses
@@ -29,15 +32,19 @@ use tauri::{AppHandle, Emitter, Manager};
 use voice_core::calls::{Change, Detector, MicUser};
 use voice_core::settings::{CallDetect, IgnoredApp};
 
+use crate::calendar::Calendar;
 use crate::meeting;
 use crate::overlay::{self, OverlayState};
 use crate::state::{now_ms, AppState};
 
-const POLL: Duration = Duration::from_secs(2);
+/// Often enough that a call's end is noticed within about a second (`LEAVE_MS`).
+const POLL: Duration = Duration::from_millis(500);
 /// The countdown before a call is transcribed by itself (`CallDetect::Auto`).
 const AUTO_MS: u64 = 5_000;
 /// The countdown before the meeting stops once its call has ended.
 const ENDED_MS: u64 = 10_000;
+/// An event is offered this long after it begins, so starting Yammer late still offers it.
+const EVENT_GRACE_MS: u64 = 2 * 60_000;
 /// Yammer's own dictations and meetings use the microphone too.
 const YAMMER: &[&str] = &["yammer", "com.sush.yammer"];
 
@@ -49,7 +56,8 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 struct Offer {
     id: u64,
-    user: MicUser,
+    /// The app with the call; none for a calendar event alone.
+    user: Option<MicUser>,
     kind: Kind,
 }
 
@@ -81,6 +89,8 @@ pub fn watch(app: AppHandle) {
         let mut asked = HashSet::<String>::new();
         // The meeting's call has ended: offer to stop it once the overlay is free.
         let mut ended: Option<MicUser> = None;
+        // Calendar events already offered (`Event::key`).
+        let mut asked_events = HashSet::<String>::new();
         loop {
             std::thread::sleep(POLL);
             let settings = app.state::<AppState>().settings().meeting;
@@ -88,7 +98,8 @@ pub fn watch(app: AppHandle) {
                 detector.reset();
                 asked.clear();
                 ended = None;
-                withdraw(&app, |_| true);
+                withdraw(&app, |o| o.user.is_some());
+                offer_event(&app, &mut asked_events, settings.calendar_offer);
                 continue;
             }
             let present: Vec<_> = users().into_iter().filter(|u| !settings.ignored_apps.iter().any(|a| a.id == u.id)).collect();
@@ -106,11 +117,11 @@ pub fn watch(app: AppHandle) {
                         if ended.as_ref().is_some_and(|e| e.id == u.id) {
                             ended = None;
                         }
-                        withdraw(&app, |o| o.kind == Kind::Stop && o.user.id == u.id);
+                        withdraw(&app, |o| o.kind == Kind::Stop && o.user.as_ref().is_some_and(|x| x.id == u.id));
                     }
                     Change::Left(u) => {
                         asked.remove(&u.id);
-                        withdraw(&app, |o| o.kind == Kind::Start && o.user.id == u.id);
+                        withdraw(&app, |o| o.kind == Kind::Start && o.user.as_ref().is_some_and(|x| x.id == u.id));
                         if live && CALL.lock().unwrap().as_ref().is_some_and(|c| c.id == u.id) {
                             ended = Some(u);
                         }
@@ -144,8 +155,8 @@ pub fn watch(app: AppHandle) {
                 }
             };
             match replaced {
-                Some(Offer { user, kind: Kind::Start, .. }) => drop(asked.remove(&user.id)),
-                Some(Offer { user, kind: Kind::Stop, .. }) if live => ended = Some(user),
+                Some(Offer { user: Some(user), kind: Kind::Start, .. }) => drop(asked.remove(&user.id)),
+                Some(Offer { user: Some(user), kind: Kind::Stop, .. }) if live => ended = Some(user),
                 _ => {}
             }
 
@@ -155,11 +166,18 @@ pub fn watch(app: AppHandle) {
             }
             if live {
                 if let Some(u) = ended.take() {
-                    offer(&app, u, Kind::Stop, Some(ENDED_MS));
+                    offer(&app, Some(u), None, Kind::Stop, Some(ENDED_MS));
                 }
             } else if let Some(u) = active.into_iter().find(|u| !asked.contains(&u.id)) {
                 asked.insert(u.id.clone());
-                offer(&app, u, Kind::Start, (settings.detect == CallDetect::Auto).then_some(AUTO_MS));
+                // A call during an event is that event: it's offered by name, and not again on its own.
+                let event = app.state::<Calendar>().for_meeting_peek(now_ms());
+                if let Some(e) = &event {
+                    asked_events.insert(e.key());
+                }
+                offer(&app, Some(u), event.map(|e| e.title), Kind::Start, (settings.detect == CallDetect::Auto).then_some(AUTO_MS));
+            } else {
+                offer_event(&app, &mut asked_events, settings.calendar_offer);
             }
         }
     });
@@ -168,15 +186,31 @@ pub fn watch(app: AppHandle) {
     }
 }
 
-fn offer(app: &AppHandle, user: MicUser, kind: Kind, countdown_ms: Option<u64>) {
+fn offer(app: &AppHandle, user: Option<MicUser>, event: Option<String>, kind: Kind, countdown_ms: Option<u64>) {
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-    let name = user.name.clone();
+    let name = user.as_ref().map(|u| u.name.clone()).unwrap_or_default();
     *OFFER.lock().unwrap() = Some(Offer { id, user, kind });
     let state = match kind {
-        Kind::Start => OverlayState::CallStarted { id, app: name, countdown_ms },
+        Kind::Start => OverlayState::CallStarted { id, app: name, event, countdown_ms },
         Kind::Stop => OverlayState::CallEnded { id, app: name, countdown_ms: countdown_ms.unwrap_or(ENDED_MS) },
     };
     overlay::show(app, state);
+}
+
+/// An event on the calendar has just begun and nothing's being transcribed: offer to take notes, once.
+/// Only called while the overlay is free, no card is up and no meeting is live.
+fn offer_event(app: &AppHandle, asked: &mut HashSet<String>, enabled: bool) {
+    if !enabled || meeting::is_live() || OFFER.lock().unwrap().is_some() {
+        return;
+    }
+    if !matches!(overlay::current(), OverlayState::Hidden | OverlayState::Idle) {
+        return;
+    }
+    let now = now_ms();
+    let events = app.state::<Calendar>().events();
+    let Some(event) = events.into_iter().find(|e| e.start <= now && now < e.start + EVENT_GRACE_MS && !asked.contains(&e.key())) else { return };
+    asked.insert(event.key());
+    offer(app, None, Some(event.title), Kind::Start, None);
 }
 
 /// Take down the card, if it's one `which` picks.
@@ -218,12 +252,16 @@ pub fn answer(app: &AppHandle, id: u64, answer: Answer) {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 match meeting::start(&app).await {
-                    Ok(_) => *CALL.lock().unwrap() = Some(user),
+                    Ok(_) => *CALL.lock().unwrap() = user,
                     Err(e) => meeting::report(&app, &e),
                 }
             });
         }
-        (Kind::Start, Answer::Never) => ignore(app, user),
+        (Kind::Start, Answer::Never) => {
+            if let Some(user) = user {
+                ignore(app, user);
+            }
+        }
         (Kind::Stop, Answer::Stop) => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {

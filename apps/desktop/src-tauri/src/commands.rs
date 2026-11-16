@@ -11,6 +11,7 @@ use voice_core::history::Entry;
 use voice_core::scratchpad::{self, Note};
 #[cfg(desktop)]
 use voice_core::settings::Engine;
+use voice_core::settings::NoteTemplate;
 use voice_core::Settings;
 
 #[cfg(desktop)]
@@ -26,7 +27,7 @@ use crate::whisper::{self, Whisper};
 #[cfg(desktop)]
 use crate::{paste, recorder, tray};
 use crate::{pipeline, platform, secrets};
-use voice_core::meetings::{Meeting, Overview};
+use voice_core::meetings::{Hit, Meeting, Overview};
 
 #[tauri::command]
 pub fn settings_get(state: State<'_, AppState>) -> Settings {
@@ -261,7 +262,9 @@ pub fn export_file(app: AppHandle, name: String, contents: String) -> AppResult<
 
 /// Start transcribing a meeting. Resolves once it's listening.
 #[tauri::command]
-pub async fn meeting_start(app: AppHandle) -> AppResult<meeting::LiveInfo> {
+/// `event` (`Event::key`): the calendar event it's for, from "Start notes" on it; else the one under way.
+pub async fn meeting_start(app: AppHandle, event: Option<String>) -> AppResult<meeting::LiveInfo> {
+    app.state::<crate::calendar::Calendar>().choose(event);
     meeting::start(&app).await
 }
 
@@ -292,7 +295,7 @@ pub fn meeting_get(meetings: State<'_, Meetings>, id: u64) -> AppResult<Meeting>
     meetings.get(id)
 }
 
-/// Rename a meeting, change the notes typed during it, or edit the notes written from it.
+/// Rename a meeting, change the notes typed during it, edit the notes written from it, or clear its Ask thread.
 #[tauri::command]
 pub fn meeting_update(
     meetings: State<'_, Meetings>,
@@ -300,8 +303,12 @@ pub fn meeting_update(
     title: Option<String>,
     notes: Option<String>,
     summary: Option<String>,
+    clear_chat: Option<bool>,
 ) -> AppResult<Meeting> {
     meetings.update(id, |m| {
+        if clear_chat == Some(true) {
+            m.chat.clear();
+        }
         if let Some(title) = title {
             m.title = title.trim().to_string();
         }
@@ -312,6 +319,15 @@ pub fn meeting_update(
             m.summary = Some(summary);
         }
     })
+}
+
+/// Pick the template a meeting's notes will be written with, without writing them: from the
+/// live view or the pill's menu. Sent as `meeting-updated`, so the other window follows.
+#[tauri::command]
+pub fn meeting_set_template(app: AppHandle, meetings: State<'_, Meetings>, id: u64, template: String) -> AppResult<Meeting> {
+    let saved = meetings.update(id, |m| m.template = Some(template).filter(|t| !t.trim().is_empty()))?;
+    let _ = app.emit("meeting-updated", &saved);
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -326,10 +342,61 @@ pub fn call_answer(app: AppHandle, id: u64, answer: crate::calls::Answer) {
     crate::calls::answer(&app, id, answer);
 }
 
-/// Write (or rewrite) a stopped meeting's notes with the AI cleanup model.
+/// Write (or rewrite) a meeting's notes with the AI cleanup model, with `template` if given.
+/// A meeting in progress gets notes of what's been said so far.
 #[tauri::command]
-pub async fn meeting_summarize(app: AppHandle, id: u64) -> AppResult<Meeting> {
-    meeting::summarize(&app, id).await
+pub async fn meeting_summarize(app: AppHandle, id: u64, template: Option<String>) -> AppResult<Meeting> {
+    meeting::summarize(&app, id, template).await
+}
+
+/// Rewrite a meeting's written notes as asked ("make it shorter").
+#[tauri::command]
+pub async fn meeting_revise(app: AppHandle, id: u64, request: String) -> AppResult<Meeting> {
+    meeting::revise(&app, id, &request).await
+}
+
+/// Ask a question about a meeting; resolves to the meeting with the question and answer added to its thread.
+#[tauri::command]
+pub async fn meeting_ask(app: AppHandle, id: u64, question: String) -> AppResult<Meeting> {
+    meeting::ask(&app, id, &question).await
+}
+
+/// Take lines out of a meeting's transcript.
+#[tauri::command]
+pub fn meeting_delete_segments(app: AppHandle, meetings: State<'_, Meetings>, id: u64, segments: Vec<String>) -> AppResult<Meeting> {
+    let saved = meetings.update(id, |m| {
+        m.delete_segments(&segments);
+    })?;
+    let _ = app.emit("meeting-updated", &saved);
+    Ok(saved)
+}
+
+#[tauri::command]
+pub fn meeting_search(meetings: State<'_, Meetings>, query: String) -> Vec<Hit> {
+    meetings.search(&query)
+}
+
+/// The calendar: whether it's connected, and its events for the week ahead.
+#[tauri::command]
+pub fn calendar_status(calendar: State<'_, crate::calendar::Calendar>) -> crate::calendar::Status {
+    calendar.status()
+}
+
+/// Save the calendar's secret iCal address (checked first), or forget it with an empty one.
+#[tauri::command]
+pub async fn calendar_connect(app: AppHandle, url: String) -> AppResult<crate::calendar::Status> {
+    crate::calendar::connect(&app, &url).await
+}
+
+#[tauri::command]
+pub async fn calendar_refresh(app: AppHandle) -> crate::calendar::Status {
+    crate::calendar::refresh(&app).await
+}
+
+/// Every note template: Yammer's own, then the user's.
+#[tauri::command]
+pub fn meeting_templates(state: State<'_, AppState>) -> Vec<NoteTemplate> {
+    state.settings().meeting.all_templates()
 }
 
 #[tauri::command]
@@ -365,14 +432,15 @@ pub fn platform_info(app: tauri::AppHandle) -> platform::Platform {
 #[cfg(desktop)]
 #[tauri::command]
 pub fn autostart_get(app: AppHandle) -> AppResult<bool> {
-    app.autolaunch().is_enabled().map_err(AppError::invalid)
+    app.autolaunch().is_enabled().map_err(AppError::because("Couldn't check whether Yammer starts with your computer."))
 }
 
 #[cfg(desktop)]
 #[tauri::command]
 pub fn autostart_set(app: AppHandle, enabled: bool) -> AppResult<()> {
     let launcher = app.autolaunch();
-    if enabled { launcher.enable() } else { launcher.disable() }.map_err(AppError::invalid)
+    if enabled { launcher.enable() } else { launcher.disable() }
+        .map_err(AppError::because("Couldn't change whether Yammer starts with your computer. Try again."))
 }
 
 #[cfg(desktop)]
@@ -394,7 +462,8 @@ pub fn open_permission_settings(pane: PermissionPane) -> AppResult<()> {
     if !cfg!(target_os = "macos") {
         return Err(AppError::Invalid("Only macOS has these permission settings.".into()));
     }
-    tauri_plugin_opener::open_url(url, None::<&str>).map_err(AppError::invalid)
+    tauri_plugin_opener::open_url(url, None::<&str>)
+        .map_err(AppError::because("Couldn't open System Settings. Open it yourself and go to Privacy & Security."))
 }
 
 #[cfg(desktop)]

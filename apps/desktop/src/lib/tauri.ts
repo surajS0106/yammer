@@ -46,7 +46,17 @@ export interface Transform {
 
 export type CallAudio = "both" | "mic" | "system";
 export type LiveEngine = "dictation" | "openai-realtime" | "sarvam-streaming";
-export type SummaryStyle = "minutes" | "summary" | "action-items" | "custom";
+/** How a meeting's notes are laid out: one of Yammer's own (`builtIn`), or the user's. */
+export interface NoteTemplate {
+  id: string;
+  name: string;
+  /** The layout, as the notes prompt tells it to the model. */
+  instructions: string;
+  /** What it's for, in a line. Only Yammer's own have one. */
+  description?: string;
+  /** Shipped with Yammer: can't be changed. Only set on what `meetingTemplates` returns. */
+  builtIn?: boolean;
+}
 /** When another app starts a call: do nothing, ask to transcribe it, or count down and transcribe it. */
 export type CallDetect = "off" | "ask" | "auto";
 /** An app Sushi never offers to transcribe a call from. */
@@ -62,11 +72,14 @@ export interface MeetingSettings {
   engine: LiveEngine;
   /** The streaming engine's model; "" for its default. */
   model: string;
-  summary: SummaryStyle;
-  /** The notes' format with the "custom" style. */
-  summaryInstructions: string;
+  /** Id of the template notes are written with, unless a meeting picks another. */
+  summary: string;
+  /** The user's own templates, after Yammer's. */
+  templates: NoteTemplate[];
   /** Write the notes as soon as the meeting ends. */
   autoSummary: boolean;
+  /** Offer to take notes when an event on the calendar begins. */
+  calendarOffer: boolean;
   detect: CallDetect;
   ignoredApps: IgnoredApp[];
 }
@@ -137,10 +150,62 @@ export interface Meeting {
   /** The notes written from it, in Markdown. */
   summary?: string;
   summaryBy?: string;
+  /** The template the notes were written with. */
+  template?: string;
+  /** The calendar event it was recorded during: its title and who was invited. */
+  event?: CalendarEvent;
+  /** Questions asked about the meeting and their answers, oldest first. */
+  chat?: ChatTurn[];
   /** Why writing the notes failed. */
   error?: string;
   /** Something that went wrong while transcribing. */
   notice?: string;
+}
+
+export interface Attendee {
+  name: string;
+  email?: string;
+}
+
+/** One occurrence of a calendar event (`voice_core::calendar::Event`); times in Unix ms. */
+export interface CalendarEvent {
+  uid: string;
+  title: string;
+  start: number;
+  end: number;
+  attendees: Attendee[];
+  /** A video call link from the invite. */
+  joinUrl?: string;
+}
+
+/** `calendar::Status`: sent as `calendar-updated` after every refresh. */
+export interface CalendarStatus {
+  connected: boolean;
+  /** From now (and those under way) to a week ahead, soonest first. */
+  events: CalendarEvent[];
+  error: string | null;
+  fetchedAt: number | null;
+}
+
+/** An occurrence's key (`Event::key`): a repeating event's occurrences share a UID. */
+export const eventKey = (e: CalendarEvent) => `${e.uid}@${e.start}`;
+
+export interface ChatTurn {
+  role: "user" | "assistant";
+  text: string;
+  /** Unix ms. */
+  at: number;
+}
+
+/** A meeting that matches a search, and where. */
+export interface MeetingHit {
+  id: number;
+  title: string;
+  startedAt: number;
+  /** Where the best match is: the title, the written notes ("summary"), the user's notes, or the transcript. */
+  field: "title" | "summary" | "notes" | "transcript";
+  snippet: string;
+  score: number;
 }
 
 export interface MeetingOverview {
@@ -151,6 +216,8 @@ export interface MeetingOverview {
   words: number;
   preview: string;
   hasSummary: boolean;
+  /** Who was invited, from its calendar event. */
+  attendees?: string[];
 }
 
 export interface LiveMeeting {
@@ -228,7 +295,8 @@ export interface Platform {
 
 /** `live` is the streaming engine's key for meetings. */
 /** Keys are saved per provider, so one key serves every feature set to it. Mirrors `KEY_NAMES` in voice-core's settings.rs. */
-export type SecretName = "openai" | "anthropic" | "groq" | "sarvam" | "xai" | "custom-stt" | "custom-cleanup";
+/** `calendar` is the calendar's secret iCal address, kept like a key. */
+export type SecretName = "openai" | "anthropic" | "groq" | "sarvam" | "xai" | "custom-stt" | "custom-cleanup" | "calendar";
 
 /** A newer Android release than the one running (`voice_core::releases::AndroidRelease`). */
 export interface AndroidRelease {
@@ -272,7 +340,8 @@ export type OverlayState =
   /** Between dictations while a meeting is being transcribed. `startedAt` is Unix ms. */
   | { phase: "meeting"; startedAt: number }
   /** `app` started a call: offer to transcribe it. With `countdownMs`, it starts when the count runs out. */
-  | { phase: "call-started"; id: number; app: string; countdownMs: number | null }
+  /** `app` is empty for a calendar event alone; `event` is the event's title when there is one. */
+  | { phase: "call-started"; id: number; app: string; event: string | null; countdownMs: number | null }
   /** The call being transcribed ended: count down to stopping the meeting. */
   | { phase: "call-ended"; id: number; app: string; countdownMs: number }
   | { phase: "hidden" };
@@ -309,7 +378,12 @@ export const api = {
   historyRetry: (id: number) => invoke<HistoryEntry>("history_retry", { id }),
   /** Save a file to Downloads and show it; resolves to its path. */
   exportFile: (name: string, contents: string) => invoke<string>("export_file", { name, contents }),
-  meetingStart: () => invoke<LiveMeeting>("meeting_start"),
+  /** `event`: the calendar event it's for (`eventKey`), from "Start notes" on it; else the one under way. */
+  meetingStart: (event?: string) => invoke<LiveMeeting>("meeting_start", { event }),
+  calendarStatus: () => invoke<CalendarStatus>("calendar_status"),
+  /** Save the calendar's secret iCal address (it's read first), or forget it with "". */
+  calendarConnect: (url: string) => invoke<CalendarStatus>("calendar_connect", { url }),
+  calendarRefresh: () => invoke<CalendarStatus>("calendar_refresh"),
   /** Resolves to the meeting transcribed to the end; its notes follow as `meetingUpdated`. */
   meetingStop: () => invoke<Meeting | null>("meeting_stop"),
   /** Start or stop, showing any error on the overlay. */
@@ -319,10 +393,25 @@ export const api = {
   meetingStatus: () => invoke<MeetingStatus>("meeting_status"),
   meetingsList: () => invoke<MeetingOverview[]>("meetings_list"),
   meetingGet: (id: number) => invoke<Meeting>("meeting_get", { id }),
-  meetingUpdate: (id: number, change: { title?: string; notes?: string; summary?: string }) => invoke<Meeting>("meeting_update", { id, ...change }),
+  meetingUpdate: (id: number, change: { title?: string; notes?: string; summary?: string; clearChat?: boolean }) =>
+    invoke<Meeting>("meeting_update", { id, ...change }),
   meetingDelete: (id: number) => invoke<void>("meeting_delete", { id }),
-  /** Write (or rewrite) a stopped meeting's notes with the AI cleanup model. */
-  meetingSummarize: (id: number) => invoke<Meeting>("meeting_summarize", { id }),
+  /** Write (or rewrite) a meeting's notes with the AI cleanup model; one in progress gets notes of what's been said so far. */
+  meetingSummarize: (id: number, template?: string) => invoke<Meeting>("meeting_summarize", { id, template }),
+  /** Rewrite a meeting's written notes as asked ("make it shorter"). */
+  meetingRevise: (id: number, request: string) => invoke<Meeting>("meeting_revise", { id, request }),
+  /** Resolves to the meeting with the question and its answer added to `chat`. */
+  meetingAsk: (id: number, question: string) => invoke<Meeting>("meeting_ask", { id, question }),
+  meetingDeleteSegments: (id: number, segments: string[]) => invoke<Meeting>("meeting_delete_segments", { id, segments }),
+  meetingSearch: (query: string) => invoke<MeetingHit[]>("meeting_search", { query }),
+  /** Pick the template a meeting's notes will be written with, without writing them. */
+  meetingSetTemplate: (id: number, template: string) => invoke<Meeting>("meeting_set_template", { id, template }),
+  /** Whether Sush is installed and takes `sush://` links (desktop only). */
+  sushInstalled: () => invoke<boolean>("sush_installed"),
+  /** Open Sush on a chat about this meeting: "copied" when Sush is too old for links, so it was opened with the question on the clipboard. */
+  askInSush: (id: number, title: string) => invoke<"opened" | "copied">("ask_in_sush", { id, title }),
+  /** Yammer's templates, then the user's. */
+  meetingTemplates: () => invoke<NoteTemplate[]>("meeting_templates"),
   scratchpadList: () => invoke<Note[]>("scratchpad_list"),
   scratchpadSave: (notes: Note[]) => invoke<void>("scratchpad_save", { notes }),
   copyText: (text: string) => invoke<void>("copy_text", { text }),
@@ -372,11 +461,28 @@ export const on = {
     listen<{ speaker: Speaker; level: number }>("meeting-level", (e) => f(e.payload)),
   /** The island asked the settings window to show a page. */
   navigate: (f: (page: string) => void): Promise<UnlistenFn> => listen<string>("navigate", (e) => f(e.payload)),
+  calendarUpdated: (f: (s: CalendarStatus) => void): Promise<UnlistenFn> => listen<CalendarStatus>("calendar-updated", (e) => f(e.payload)),
+  /** Show this meeting (`yammer --open-meeting=<id>`, from a link Sush cited). */
+  openMeeting: (f: (id: number) => void): Promise<UnlistenFn> => listen<number>("open-meeting", (e) => f(e.payload)),
 };
 
-/** Commands reject with the Rust error's message as a plain string. */
-export function errorMessage(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e instanceof Error) return e.message;
-  return String(e);
+/** What's shown when an error's own text is too technical to show. */
+export const SOMETHING_WRONG = "Something went wrong. Try again, or restart Yammer.";
+
+/** Text that comes from a library or the OS rather than Yammer: codes, stack details, raw protocol words. */
+const TECHNICAL =
+  /os error|[Ee]xit ?[Ss]tatus|\bHTTP \d{3}\b|error sending request|\b([Tt]cp|TCP|DNS|dns|TLS|tls|SSL|ssl|IPC|ipc|JNI|jni|errno)\b|[Cc]ertificate|\bE[A-Z]{3,}\b|panicked|unwrap|[Dd]eseriali[sz]|[Ss]eriali[sz]|invalid type|at line \d|Command \S+ not found|is not a function|\b(undefined|null|NaN)\b|::|\(\)/;
+
+/**
+ * An error as the user should read it. Commands reject with a sentence from Rust (`AppError`), shown as is.
+ * Anything technical (a JavaScript exception, a plugin's raw message) is logged for debugging and replaced
+ * with a plain sentence, so the UI never shows a library's own words.
+ */
+export function errorMessage(e: unknown, fallback = SOMETHING_WRONG): string {
+  const text = typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+  if (e instanceof Error || !text.trim() || TECHNICAL.test(text)) {
+    console.error(e);
+    return fallback;
+  }
+  return text;
 }

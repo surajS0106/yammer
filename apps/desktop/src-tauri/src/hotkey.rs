@@ -37,7 +37,10 @@ fn escape() -> Shortcut {
 }
 
 pub fn parse(accelerator: &str) -> AppResult<Shortcut> {
-    Shortcut::from_str(accelerator).map_err(|e| AppError::Invalid(format!("“{accelerator}” isn't a valid shortcut: {e}")))
+    Shortcut::from_str(accelerator).map_err(|e| {
+        eprintln!("{accelerator}: {e}");
+        AppError::Invalid(format!("“{accelerator}” isn't a shortcut Yammer can use. Pick another."))
+    })
 }
 
 /// A configured hotkey: its accelerator, what it starts, and its name in errors.
@@ -112,7 +115,8 @@ pub fn register(app: &AppHandle, settings: &Settings) -> AppResult<()> {
     let result = parse_all(&list).and_then(|shortcuts| {
         if gnome::available() {
             let entries: Vec<_> = list.iter().zip(&shortcuts).map(|(b, s)| (s, &b.action)).collect();
-            gnome::bind(&entries).map_err(|e| AppError::Invalid(format!("Couldn't add the hotkeys as GNOME shortcuts ({e}).")))?;
+            gnome::bind(&entries)
+                .map_err(AppError::because("Couldn't add the hotkeys as GNOME shortcuts. Check that GNOME Settings works, then try again."))?;
             current.extend(shortcuts.into_iter().zip(list.iter().map(|b| b.action.clone())));
             return Ok(());
         }

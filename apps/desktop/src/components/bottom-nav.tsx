@@ -17,7 +17,7 @@ const tabs: { id: PageId; label: string; icon: React.ElementType; pages: PageId[
   { id: "home", label: "Home", icon: House, pages: ["home", "insights", "general", "engine", "cleanup", "meetings", "meeting-settings", "help", "changelog"] },
   { id: "scratchpad", label: "Scratchpad", icon: NotePencil, pages: ["scratchpad"] },
   { id: "history", label: "History", icon: ClockCounterClockwise, pages: ["history"] },
-  { id: "dictionary", label: "Teach", icon: BookOpenText, pages: ["dictionary", "snippets", "transforms"] },
+  { id: "dictionary", label: "Teach", icon: BookOpenText, pages: ["dictionary", "snippets", "transforms", "templates"] },
 ];
 
 const glass =

@@ -28,8 +28,10 @@ fn cleanup_label(settings: &Settings, transform: Option<&Transform>) -> String {
     }
 }
 
+/// A background task that died: say so plainly, and log why.
 pub fn join_err(e: impl std::fmt::Display) -> AppError {
-    AppError::Invalid(format!("internal error: {e}"))
+    eprintln!("a background task failed: {e}");
+    AppError::Invalid("Something went wrong inside Yammer. Try again.".into())
 }
 
 /// What a recording is turned into.

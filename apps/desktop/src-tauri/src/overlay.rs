@@ -19,6 +19,9 @@ pub const LABEL: &str = "overlay";
 /// Square, so the pill and Sushi fit along any edge: wide enough for the
 /// longest pill, deep enough for Sushi's hops, flips and floating notes.
 const SIZE: f64 = 320.0;
+/// The strip at the bottom of the window that holds Sushi and the idle pill,
+/// which has to stay on screen; the rest of the window is mostly empty.
+pub const SUSHI_BAND: f64 = 72.0;
 /// Gap between the window and the screen edge's work area.
 const EDGE_MARGIN: f64 = 4.0;
 /// How long the window has to sit still before a drag counts as dropped.
@@ -41,6 +44,8 @@ static HIT_AREAS: Mutex<Vec<HitArea>> = Mutex::new(Vec::new());
 static GRABBABLE: AtomicBool = AtomicBool::new(false);
 /// Where `place` last put the window, to tell its own moves from the user's drags.
 static PLACED: Mutex<Option<PhysicalPosition<i32>>> = Mutex::new(None);
+/// A card moved the window down from above the top of the screen (`lower_into_view`).
+static LOWERED: AtomicBool = AtomicBool::new(false);
 /// Bumped on every drag move, so only the last one in a burst is saved.
 static DRAG_GENERATION: AtomicU64 = AtomicU64::new(0);
 /// How often to check whether the cursor is over Sushi or the pill.
@@ -232,11 +237,12 @@ fn save_position(app: &AppHandle, position: Option<OverlayPosition>) {
     let _ = app.emit("settings-changed", &settings);
 }
 
-/// Whether the window, put at `pos`, would have its middle on some screen.
+/// Whether the window, put at `pos`, would have Sushi on some screen. Sushi sits
+/// at the bottom of the window, which can be dragged up past the top of the screen.
 fn on_screen(app: &AppHandle, pos: PhysicalPosition<i32>) -> bool {
     app.available_monitors().unwrap_or_default().iter().any(|m| {
-        let half = SIZE * m.scale_factor() / 2.0;
-        let (x, y) = (pos.x as f64 + half, pos.y as f64 + half);
+        let scale = m.scale_factor();
+        let (x, y) = (pos.x as f64 + SIZE * scale / 2.0, pos.y as f64 + (SIZE - SUSHI_BAND / 2.0) * scale);
         let (mp, ms) = (m.position(), m.size());
         let (left, top) = (mp.x as f64, mp.y as f64);
         x >= left && x < left + ms.width as f64 && y >= top && y < top + ms.height as f64
@@ -248,6 +254,7 @@ fn on_screen(app: &AppHandle, pos: PhysicalPosition<i32>) -> bool {
 /// screen the cursor is on.
 pub fn place(app: &AppHandle) {
     let Some(window) = app.get_webview_window(LABEL) else { return };
+    LOWERED.store(false, Ordering::SeqCst);
     let saved = app
         .state::<AppState>()
         .settings()
@@ -300,11 +307,41 @@ pub fn show(app: &AppHandle, state: OverlayState) {
     if !visible || matches!(state, OverlayState::Listening { .. }) {
         place(app);
     }
+    let card = matches!(
+        state,
+        OverlayState::Transcript { .. }
+            | OverlayState::Words { .. }
+            | OverlayState::Failed { .. }
+            | OverlayState::CallStarted { .. }
+            | OverlayState::CallEnded { .. }
+    );
+    if card {
+        lower_into_view(app, &window);
+    } else if LOWERED.load(Ordering::SeqCst) {
+        place(app);
+    }
     if !visible {
         let _ = window.show();
         // Some window managers drop always-on-top across hide/show.
         let _ = window.set_always_on_top(true);
     }
+}
+
+/// A card grows up from Sushi, so with Sushi dragged up against the top of the
+/// screen it would open above it. Only then, move the window down until its top
+/// fits, while the card shows; `place` puts it back afterwards. Not saved.
+fn lower_into_view(app: &AppHandle, window: &WebviewWindow) {
+    let (Ok(pos), Ok(scale)) = (window.outer_position(), window.scale_factor()) else { return };
+    let sushi = (pos.x as f64 + SIZE * scale / 2.0, pos.y as f64 + (SIZE - SUSHI_BAND / 2.0) * scale);
+    let Some(monitor) = app.monitor_from_point(sushi.0, sushi.1).ok().flatten() else { return };
+    let top = monitor.work_area().position.y;
+    if pos.y >= top {
+        return;
+    }
+    let lowered = PhysicalPosition::new(pos.x, top);
+    *PLACED.lock().unwrap() = Some(lowered);
+    LOWERED.store(true, Ordering::SeqCst);
+    let _ = window.set_position(lowered);
 }
 
 /// A meeting started (when, in Unix ms) or ended. A dictation showing now

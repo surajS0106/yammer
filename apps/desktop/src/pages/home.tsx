@@ -325,7 +325,10 @@ export function HomePage({ go }: { go: (page: PageId) => void }) {
         {/* Focused on arrival, so the hotkey works here straight away; the coral edge says it's live. */}
         <div className="border-t border-primary/15 bg-card/70 p-3">
           <div className="flex items-start gap-2.5 rounded-lg bg-background/60 px-3 py-2 ring-1 ring-primary/30 transition-shadow focus-within:ring-2 focus-within:ring-primary/60 focus-within:shadow-[0_0_0_4px_color-mix(in_oklch,var(--brand)_12%,transparent)]">
-            <Mic className="mt-1.5 size-4 shrink-0 text-primary" />
+            {/* As tall as the textarea's first line (text-sm, leading-relaxed) and as far down, so the mic sits centred on it. */}
+            <span className="mt-2 flex h-[1.625em] shrink-0 items-center text-sm">
+              <Mic className="size-4 text-primary" />
+            </span>
             <Textarea
               autoFocus
               rows={1}
@@ -600,7 +603,10 @@ function PhoneHome({
       />
 
       <Card className="col-span-2 flex items-start gap-2.5 rounded-3xl px-4 py-3 transition-shadow focus-within:ring-2 focus-within:ring-primary/60">
-        <Mic className="mt-2 size-5 shrink-0 text-primary" />
+        {/* The textarea's first line on a phone is text-base, leading-relaxed: the mic centres on it. */}
+        <span className="mt-2 flex h-[1.625em] shrink-0 items-center text-base">
+          <Mic className="size-5 text-primary" />
+        </span>
         <Textarea
           rows={1}
           aria-label="Try dictating here"

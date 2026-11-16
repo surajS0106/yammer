@@ -41,7 +41,8 @@ pub struct DownloadProgress {
 }
 
 fn model(id: &str) -> AppResult<&'static Model> {
-    models::find(id).ok_or_else(|| AppError::NotFound(format!("unknown speech model {id}")))
+    models::find(id)
+        .ok_or_else(|| AppError::NotFound(format!("Yammer doesn't know the speech model “{id}”. Pick another in Settings → Speech engine.")))
 }
 
 pub fn model_path(dir: &Path, model: &Model) -> PathBuf {
@@ -75,7 +76,10 @@ pub async fn model_download(
     std::fs::create_dir_all(&state.models_dir)?;
     let part = path.with_extension("bin.part");
 
-    let failed = |e: &dyn std::fmt::Display| AppError::Invalid(format!("Model download failed: {e}"));
+    let failed = |e: &dyn std::fmt::Display| {
+        eprintln!("model download failed: {e}");
+        AppError::Invalid("The speech model didn't finish downloading. Check your internet connection and try again.".into())
+    };
     let resp = state.http.get(model.url()).send().await.map_err(|e| failed(&e))?;
     if !resp.status().is_success() {
         return Err(failed(&format!("HTTP {}", resp.status())));
@@ -138,7 +142,7 @@ impl Whisper {
         whisper_rs::install_logging_hooks(); // keep whisper.cpp's chatter off stdout
         let ctx = WhisperContext::new_with_params(&path, WhisperContextParameters::default())
             .map(Arc::new)
-            .map_err(|e| AppError::Invalid(format!("Couldn't load the speech model: {e}")))?;
+            .map_err(AppError::because("Couldn't load the speech model. Download it again in Settings → Speech engine."))?;
         *self.ctx.lock().unwrap() = Some((id.to_string(), ctx.clone()));
         Ok(ctx)
     }
@@ -154,7 +158,7 @@ impl Whisper {
 /// Transcribe 16 kHz mono samples, returning the text and the language spoken (detected when
 /// `language` is None). Blocking; run it off the async runtime.
 pub fn run(ctx: &WhisperContext, samples: &[f32], language: Option<&str>, vocabulary: &str) -> AppResult<(String, Option<String>)> {
-    let err = |e: whisper_rs::WhisperError| AppError::Invalid(format!("Transcription failed: {e}"));
+    let err = |e: whisper_rs::WhisperError| AppError::because("The on-device speech model couldn't transcribe that. Try again.")(e);
     let mut state = ctx.create_state().map_err(err)?;
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     // Scales with every logical core (measured on a Ryzen 3700X), so use them all.

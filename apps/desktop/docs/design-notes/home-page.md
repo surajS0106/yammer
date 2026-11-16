@@ -1,8 +1,11 @@
 # Home page — Design Notes
 
-Last updated: 2026-10-20
+Last updated: 2026-11-16
 
 ## What changed
+
+### 2026-11-16 (mic in the try-it box)
+- The mic icon beside the "Try it here" box now sits in a box as tall as the textarea's first line (`h-[1.625em]`, matching `leading-relaxed`) and as far down (`mt-2`, matching its `py-2`), centred in it. It used a hand-picked `mt-1.5`, which left it about 5px above the text on desktop and 3px above on a phone (`src/pages/home.tsx`, both `Home` and `PhoneHome`).
 
 ### 2026-10-20 (revision 2)
 - Hero: Sushi's column now spans all of the space to the right of the text (`auto 1fr`, replacing `auto 12rem 1fr`). A new `Stroll` wrapper (`src/pages/home.tsx`) walks Sushi and its plate shadow to a random spot in that column every 5 to 11 seconds while idle. It moves at about 60px/s with a 3px step bob and a 5° lean in the direction of travel. Sushi stays where it is while dictation is running, and stands still under reduced motion.
@@ -37,6 +40,8 @@ The previous page gave every block the same bordered card, weight and spacing, s
 Pinning Sushi next to the text left the rest of the dotted grid empty on wide windows. Centring Sushi there would have brought back the earlier problem of it drifting away from the text. Letting it stroll uses the whole area and keeps the mascot doing something in an idle moment. It stops during dictation so its listening and transcribing reactions stay readable. The trade-off is constant movement in the page's peripheral vision, so it rests for several seconds between walks.
 
 Engine and cleanup are configuration rather than home content, so they shrank to summary rows that link to Settings. The trade-off: on narrow windows the side lists stack below Recent, which pushes Explore further down.
+
+The mic was nudged into place with a fixed margin, which only matches the text by luck. Sizing its box from the line height in `em`, at the textarea's own font size, keeps it centred on the first line even when the text size changes (a phone steps it up) or the box grows to several lines.
 
 ## What makes it stand out
 

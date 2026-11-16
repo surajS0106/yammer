@@ -94,7 +94,7 @@ mod dev {
     static LOCK: Mutex<()> = Mutex::new(());
 
     fn path() -> AppResult<&'static PathBuf> {
-        PATH.get().ok_or_else(|| AppError::Invalid("secrets not initialised".into()))
+        PATH.get().ok_or_else(|| AppError::Invalid("Yammer's key storage isn't ready yet. Try again in a moment.".into()))
     }
 
     fn load() -> AppResult<BTreeMap<String, String>> {
@@ -171,7 +171,7 @@ mod vault {
     }
 
     fn paths() -> AppResult<(PathBuf, PathBuf)> {
-        let dir = DIR.get().ok_or_else(|| AppError::Invalid("secrets not initialised".into()))?;
+        let dir = DIR.get().ok_or_else(|| AppError::Invalid("Yammer's key storage isn't ready yet. Try again in a moment.".into()))?;
         Ok((dir.join("secrets.bin"), dir.join("dev-secrets.json")))
     }
 
@@ -257,7 +257,7 @@ fn entry_name(name: &str) -> AppResult<String> {
     if NAMES.contains(&name) {
         Ok(format!("key:{name}"))
     } else {
-        Err(AppError::Invalid(format!("unknown secret {name}")))
+        Err(AppError::Invalid(format!("Yammer doesn't keep a key called “{name}”.")))
     }
 }
 

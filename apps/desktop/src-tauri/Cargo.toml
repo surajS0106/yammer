@@ -42,6 +42,8 @@ sha2 = "0.10"
 # Live meeting transcripts stream audio to OpenAI Realtime and Sarvam over WebSockets (meeting.rs).
 # TLS is picked per target, as for reqwest in voice-core: native-tls would need OpenSSL on Android.
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+# `yammer --mcp` finds the meetings dir before Tauri starts, where Tauri itself would (lib.rs::mcp).
+dirs = "6"
 
 [target.'cfg(target_os = "android")'.dependencies]
 # The Kotlin side calls into Rust directly (android/mod.rs), so it works with the app's activity gone.
