@@ -17,12 +17,17 @@ from the desktop app's CHANGELOG.md.
   shows Unreleased.
 -->
 
+## Unreleased
+
+### New
+
+- Turn off Live transcript on the Meetings page, or in its settings, to just get notes when a meeting ends: your speech engine writes it down in the background, which usually costs less than streaming, and the transcript is still kept.
+
 ## 0.11.0 — 2026-11-16
 
 ### New
 
 - Meeting notes now come from templates: Minutes, Brief summary, Action items, 1:1, Stand-up, Customer call, Interview and Lecture, plus your own on the new Templates page under Teach.
-- Turn off Live transcript on the Meetings page, or in its settings, to just get notes when a meeting ends: your speech engine writes it down in the background, which usually costs less than streaming, and the transcript is still kept.
 - Pick which template your meetings are written with right on the Meetings page, before you start.
 - While a meeting is going on, you can change the template its notes will be written with from the top of the meeting.
 - You can write any meeting's notes again with a different template, straight from the meeting.

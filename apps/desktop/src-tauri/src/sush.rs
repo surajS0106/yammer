@@ -20,6 +20,7 @@ pub enum Asked {
     /// Sush took the link and opened a chat with the question.
     Opened,
     /// Sush can't take links yet: it was opened, and the question is on the clipboard.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Copied,
 }
 

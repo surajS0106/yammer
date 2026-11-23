@@ -10,29 +10,45 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
 - One plain sentence per bullet, from the user's side ("You can now…").
   No markdown inside a bullet: the app shows the text as written.
 - Sections are `### New`, `### Improved` and `### Fixed`; skip empty ones.
-- Add to `## Unreleased` as you go. To release, rename it to
+- Add to `## 0.11.0 — 2026-11-24` as you go. To release, rename it to
   `## <version> — <YYYY-MM-DD>` matching tauri.conf.json; the release workflow
   stops if that heading is missing. The app never shows Unreleased.
 -->
 
-## Unreleased
+## 0.11.0 — 2026-11-24
+
+### New
+
+- Music, videos and calls can keep playing while you dictate, and Yammer leaves them out of what you said: choose it under Other audio while you dictate in Settings.
+- Turn off Live transcript on the Meetings page, or in its settings, to just get notes when a meeting ends: your speech engine writes it down in the background, which usually costs less than streaming, and the transcript is still kept.
 
 ### Improved
 
+- The sidebar has a calmer look that matches the rest of Yammer.
+- The Meetings page is easier to scan: what's coming up sits beside Start transcribing, previews run to two lines, and meetings where nothing was said stand back.
+- A finished meeting's transcript and written notes each scroll in their own box, so the meeting's title, tabs and buttons stay in view.
+- The template picker, Edit, Write again and Copy are at the top of a meeting's notes and stay in view as you scroll.
+- Finished meetings have a fresh look: notes are laid out like a page with an outline beside them, action items show who they're for and how many are done.
+- Find words in a meeting's transcript, or read just your side or theirs, with each side's share of the talking.
+- Scrollbars are slimmer and lighter, so they no longer stand out against the page.
+- Arrows, ticks and checkboxes are drawn in the same style as the rest of Yammer's icons.
+- A meeting's Enhanced and My notes sides are now Notes and My notes tabs.
 - Questions about a meeting are now asked in Sush instead of on a separate Ask tab, and the Ask Sush button is there while a meeting is going on too.
 - Questions you already asked about a meeting are still saved with it, and are included when you export it.
+
+### Fixed
+
+- In dropdown menus, the text of an option no longer flashes white as you move over it.
 
 ## 0.10.0 — 2026-11-16
 
 ### New
 
-- Music, videos and calls can keep playing while you dictate, and Yammer leaves them out of what you said: choose it under Other audio while you dictate in Settings.
 - Meeting notes now come from templates: Minutes, Brief summary, Action items, 1:1, Stand-up, Customer call, Interview and Lecture, plus your own on the new Templates page under Teach.
-- Turn off Live transcript on the Meetings page, or in its settings, to just get notes when a meeting ends: your speech engine writes it down in the background, which usually costs less than streaming, and the transcript is still kept.
 - Pick which template your meetings are written with right on the Meetings page, before you start.
 - While a meeting is going on, the floating pill shows which template its notes will be written with, and you can click it there to pick another, or change it from the top of the meeting.
 - You can write any meeting's notes again with a different template, straight from the meeting.
-- A meeting has Notes and My notes tabs, so you can switch between the written notes and what you typed.
+- A meeting's notes now have an Enhanced and a My notes side, so you can switch between the written notes and what you typed.
 - You can edit the written notes by hand, or ask for changes such as "make it shorter" and undo them if you don't like the result.
 - Ask questions about a meeting, or have a follow-up email or the action items drafted from it, and the answers stay with the meeting.
 - While a meeting is going on you can ask "What did I miss?" or write notes of what's been said so far, without stopping it.
@@ -47,23 +63,14 @@ release's section as the GitHub release notes (which "Upgrade now" shows too).
 
 ### Improved
 
-- The sidebar has a calmer look that matches the rest of Yammer.
 - Error messages are now plain sentences that say what went wrong and what to do, instead of technical codes like HTTP 503 or os error 2.
 - Meeting settings are easier to scan: what to listen to and which engine transcribes are cards you can compare at a glance, and the tips shown match what you picked.
 - Past meetings are grouped by day, so each one shows just its time and length, and its preview starts with the notes rather than their heading.
-- The Meetings page is easier to scan: what's coming up sits beside Start transcribing, previews run to two lines, and meetings where nothing was said stand back.
-- A finished meeting's transcript and written notes each scroll in their own box, so the meeting's title, tabs and buttons stay in view.
-- The template picker, Edit, Write again and Copy are at the top of a meeting's notes and stay in view as you scroll.
-- Finished meetings have a fresh look: notes are laid out like a page with an outline beside them, action items show who they're for and how many are done.
-- Find words in a meeting's transcript, or read just your side or theirs, with each side's share of the talking.
-- Scrollbars are slimmer and lighter, so they no longer stand out against the page.
-- Arrows, ticks and checkboxes are drawn in the same style as the rest of Yammer's icons.
 - A meeting starts transcribing as soon as you click Transcribe, and Yammer notices a call has ended within about a second instead of several.
 
 ### Fixed
 
 - The floating pill and Sushi's cards no longer have a grey box around them.
-- In dropdown menus, the text of an option no longer flashes white as you move over it.
 - On Sushi's call offer, "Don't ask for Zoom again" is spelled out in full instead of cut off.
 - On a Mac you can now drag Sushi all the way up to the top of the screen, instead of it stopping partway down.
 
