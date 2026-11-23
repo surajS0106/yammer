@@ -1,4 +1,4 @@
-import { ArrowCounterClockwise, Question } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Check, Question } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { PlatformContext, type PageId } from "@/App";
@@ -7,7 +7,7 @@ import { HotkeyRecorder } from "@/components/hotkey-recorder";
 import { SettingsHero } from "@/components/settings-hero";
 import { Button, Row, Section, Segmented, Select, Switch } from "@/components/ui";
 import { useSettings } from "@/lib/settings";
-import { api, errorMessage, type Theme } from "@/lib/tauri";
+import { api, errorMessage, type OtherAudio, type Theme } from "@/lib/tauri";
 import { isAndroid, isMac } from "@/lib/utils";
 
 // 0 means none for recordings and forever for days, so it goes first in one list and last in the other.
@@ -25,6 +25,7 @@ export function GeneralPage({ go }: { go: (page: PageId) => void }) {
   const { settings, update, toast } = useSettings();
   const platform = React.useContext(PlatformContext);
   const [devices, setDevices] = React.useState<string[]>([]);
+  const [checkingAudio, setCheckingAudio] = React.useState(false);
   const [autostart, setAutostart] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
@@ -39,6 +40,22 @@ export function GeneralPage({ go }: { go: (page: PageId) => void }) {
     } catch (e) {
       toast(errorMessage(e));
     }
+  };
+
+  const setOtherAudio = async (otherAudio: OtherAudio) => {
+    if (checkingAudio) return;
+    if (otherAudio === "ignore") {
+      setCheckingAudio(true);
+      try {
+        await api.referenceCheck();
+      } catch (e) {
+        toast(errorMessage(e));
+        return;
+      } finally {
+        setCheckingAudio(false);
+      }
+    }
+    await update({ otherAudio });
   };
 
   if (isAndroid) {
@@ -159,8 +176,29 @@ export function GeneralPage({ go }: { go: (page: PageId) => void }) {
         <Row label="Sounds" description="A short chime when recording starts and stops.">
           <Switch checked={settings.sounds} onChange={(sounds) => void update({ sounds })} label="Sounds" />
         </Row>
-        <Row label="Mute other audio" description="Silence music, videos and calls while you dictate, so they don’t end up in the recording. Sound comes back when you stop.">
-          <Switch checked={settings.muteAudio} onChange={(muteAudio) => void update({ muteAudio })} label="Mute other audio" />
+        <Row
+          label="Other audio while you dictate"
+          description={
+            checkingAudio
+              ? "Playing a chime to check Yammer can hear this computer’s sound…"
+              : settings.otherAudio === "ignore"
+                ? "Music, videos and calls keep playing, and Yammer takes them out of what you said. It can’t take out other sounds in the room."
+                : settings.otherAudio === "mute"
+                  ? "Music, videos and calls go silent while you dictate, and come back when you stop."
+                  : "Music, videos and calls keep playing, and the microphone may pick them up."
+          }
+        >
+          <Select<OtherAudio>
+            className="w-56"
+            label="Other audio while you dictate"
+            value={settings.otherAudio}
+            onChange={(otherAudio) => void setOtherAudio(otherAudio)}
+            options={[
+              { value: "leave", label: "Leave it on" },
+              { value: "mute", label: "Mute it" },
+              { value: "ignore", label: "Keep playing, but ignore it" },
+            ]}
+          />
         </Row>
       </Section>
 
@@ -220,8 +258,8 @@ export function GeneralPage({ go }: { go: (page: PageId) => void }) {
               <button type="button" className="text-xs text-primary hover:underline" onClick={() => void api.openPermissionSettings("microphone")}>
                 Microphone
               </button>
-              <button type="button" className="text-xs text-primary hover:underline" onClick={() => void api.openPermissionSettings("accessibility")}>
-                Accessibility {platform.accessibility ? "✓" : ""}
+              <button type="button" className="inline-flex items-center gap-1 text-xs text-primary hover:underline" onClick={() => void api.openPermissionSettings("accessibility")}>
+                Accessibility {platform.accessibility && <Check aria-label="allowed" className="size-3" weight="bold" />}
               </button>
             </div>
           </Row>

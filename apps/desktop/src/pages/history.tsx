@@ -5,7 +5,7 @@ import * as React from "react";
 import { PageHeader } from "@/App";
 import { NigiriCard } from "@/components/nigiri-card";
 import { PixelBars } from "@/components/pixel";
-import { Badge, Button, Card, EmptyState, Input, Select, Sheet, SheetAction, useLongPress } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Input, Select, Sheet, SheetAction, Trend, useLongPress } from "@/components/ui";
 import { exportHistory, type ExportFormat } from "@/lib/export";
 import { useSettings } from "@/lib/settings";
 import { dayKey, engineLabel, lastDays, replaceEntry, weekOverWeek, wordCount } from "@/lib/stats";
@@ -32,7 +32,7 @@ function HistoryCard({ entries }: { entries: HistoryEntry[] }) {
       label="In your history"
       value={words}
       caption="words, every one searchable"
-      badge={delta === undefined ? undefined : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(Math.round(delta))}% this week`}
+      badge={delta === undefined ? undefined : <Trend delta={delta} suffix="this week" />}
       bandLabel="Dictations, last 14 days"
       band={<PixelBars values={counts} labels={days.map((d) => weekday.format(d))} titles={days.map((d, i) => `${dayFmt.format(d)}: ${counts[i]} dictations`)} stack={5} />}
       stats={[

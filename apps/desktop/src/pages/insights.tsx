@@ -4,7 +4,7 @@ import { PageHeader, type PageId } from "@/App";
 import { NavCards } from "@/components/nav-cards";
 import { NigiriCard } from "@/components/nigiri-card";
 import { PixelBars } from "@/components/pixel";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, Trend } from "@/components/ui";
 import { FunnelChart } from "@/components/ui/FunnelChart";
 import { HeatMap } from "@/components/ui/HeatMap";
 import { PieChart } from "@/components/ui/PieChart";
@@ -221,7 +221,7 @@ export function InsightsPage({ go }: { go: (page: PageId) => void }) {
         label="All time"
         value={stats.words}
         caption="words said out loud"
-        badge={delta === undefined ? undefined : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(Math.round(delta))}% this week`}
+        badge={delta === undefined ? undefined : <Trend delta={delta} suffix="this week" />}
         phoneBand
         bandLabel="Words, last 14 days"
         band={<PixelBars values={days.map(wordsOn)} labels={days.map((d) => weekday.format(d))} titles={days.map((d) => `${dayFmt.format(d)}: ${wordsOn(d).toLocaleString()} words`)} stack={5} />}

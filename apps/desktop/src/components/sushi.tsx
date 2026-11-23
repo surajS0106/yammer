@@ -146,6 +146,19 @@ function Glyph({ rows, px }: { rows: string[]; px: number }) {
   );
 }
 
+/** Sushi standing still, as a button's icon. The square box centres it on whole pixels at 16 px. */
+export function SushiIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 -2 16 16" width={16} height={16} shapeRendering="crispEdges" aria-hidden className={className}>
+      <Pixels runs={BODY_RUNS} />
+      {EYES.map((e) => (
+        <rect key={e.x} x={e.x} y={e.y} width={2} height={2} fill={COLORS.E} />
+      ))}
+      <Pixels runs={LEG_RUNS[0]} />
+    </svg>
+  );
+}
+
 export type SushiMood = "idle" | "listening" | "transcribing" | "polishing" | "done" | "error";
 
 export function moodOf(s: OverlayState): SushiMood {

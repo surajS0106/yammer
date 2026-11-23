@@ -1,6 +1,6 @@
 // Small, dependency-free UI primitives in the Sush look (tokens from index.css).
 
-import { Check, CaretDown as ChevronDown } from "@phosphor-icons/react";
+import { ArrowRight, Check, CaretDown as ChevronDown, TrendDown, TrendUp } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useDragControls, useReducedMotion } from "motion/react";
 import * as React from "react";
 import { createPortal } from "react-dom";
@@ -294,6 +294,13 @@ export function Select<T extends string | number>({
     list.style.maxHeight = `${Math.max(LIST_MIN, Math.min(LIST_MAX, (side === "bottom" ? below : above) - chrome - GAP - EDGE))}px`;
   }, [open, options.length]);
 
+  // Where the highlighted row is, for the highlight under it.
+  const [mark, setMark] = React.useState<{ top: number; height: number } | null>(null);
+  React.useLayoutEffect(() => {
+    const row = open ? listRef.current?.querySelector<HTMLElement>(`[data-index="${highlighted}"]`) : null;
+    setMark(row ? { top: row.offsetTop, height: row.offsetHeight } : null);
+  }, [open, highlighted, options.length]);
+
   React.useEffect(() => {
     if (open) listRef.current?.querySelector(`[data-index="${highlighted}"]`)?.scrollIntoView({ block: "nearest" });
   }, [open, highlighted]);
@@ -410,12 +417,20 @@ export function Select<T extends string | number>({
           >
             <motion.ul
               ref={listRef}
-              layoutScroll
               id={`${uid}-list`}
               role="listbox"
               aria-label={label}
-              className="isolate max-h-64 overflow-y-auto overscroll-contain p-1 [scrollbar-width:thin]"
+              className="relative isolate max-h-64 overflow-y-auto overscroll-contain p-1"
             >
+              {/* One highlight under every row, sliding between them. Inside a row it could paint over the text of the row it's leaving. */}
+              {mark && (
+                <li
+                  aria-hidden
+                  role="presentation"
+                  style={mark}
+                  className={cn("pointer-events-none absolute inset-x-1 z-0 rounded-md bg-accent", !reduce && "transition-[top,height] duration-150 ease-smooth")}
+                />
+              )}
               {options.map((o, i) => (
                 <motion.li
                   key={String(o.value)}
@@ -424,28 +439,18 @@ export function Select<T extends string | number>({
                   role="option"
                   aria-selected={i === selected}
                   aria-disabled={o.disabled || undefined}
-                  // Opacity only: a transform would make each row its own stacking context and undo the z-order below.
                   initial={reduce ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: reduce ? 0 : Math.min(i, 10) * 0.015, duration: 0.15 }}
                   onMouseEnter={() => !o.disabled && setHighlighted(i)}
                   onClick={() => choose(i)}
-                  className={cn("relative flex cursor-pointer items-center gap-2 rounded-md px-2 text-sm", isAndroid ? "py-3" : "py-1.5", o.disabled && "cursor-default opacity-50")}
+                  className={cn("relative z-10 flex cursor-pointer items-center gap-2 rounded-md px-2 text-sm", isAndroid ? "py-3" : "py-1.5", o.disabled && "cursor-default opacity-50")}
                 >
-                  {/* The highlight slides in from the row it left, so it sits under every row's content (z-0 vs z-10),
-                      not just its own; otherwise moving down, a later row's highlight covers the earlier row's text. */}
-                  {i === highlighted && (
-                    <motion.span
-                      layoutId={`${uid}-highlight`}
-                      transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 600, damping: 40 }}
-                      className="absolute inset-0 z-0 rounded-md bg-accent"
-                    />
-                  )}
-                  {o.icon && <span className="relative z-10 flex shrink-0">{o.icon}</span>}
-                  <span className={cn("relative z-10 min-w-0 flex-1 truncate", i === highlighted ? "text-accent-foreground" : "text-foreground/85")}>
+                  {o.icon && <span className="flex shrink-0">{o.icon}</span>}
+                  <span className={cn("min-w-0 flex-1 truncate", i === highlighted ? "text-accent-foreground" : "text-foreground/85")}>
                     {o.label}
                   </span>
-                  <Check className={cn("relative z-10 size-4 shrink-0 text-primary", i !== selected && "invisible")} />
+                  <Check className={cn("size-4 shrink-0 text-primary", i !== selected && "invisible")} />
                 </motion.li>
               ))}
             </motion.ul>
@@ -589,11 +594,12 @@ export function Segmented<T extends string>({
   // The selected thumb slides between options; the id keeps two Segmented controls from sharing it.
   const id = React.useId();
   return (
-    <div className={cn("max-w-full overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none]", fill ? "flex" : "inline-flex")}>
+    <div className={cn("max-w-full overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", fill ? "flex" : "inline-flex")}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
+          aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
             "relative shrink-0 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
@@ -647,12 +653,39 @@ export function Intro({ title, children, example }: { title: string; children: R
   );
 }
 
+/** A change on the week before: "↗ 12%", drawn with an arrow icon. */
+export function Trend({ delta, suffix }: { delta: number; suffix?: string }) {
+  const Icon = delta >= 0 ? TrendUp : TrendDown;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Icon aria-label={delta >= 0 ? "Up" : "Down"} className="size-3 shrink-0" weight="bold" />
+      <span>
+        {Math.abs(Math.round(delta))}%{suffix && ` ${suffix}`}
+      </span>
+    </span>
+  );
+}
+
+/** A real checkbox, ticked with Yammer's check icon rather than the OS's. Its color is `className`'s text color. */
+export function Checkbox({ className, ...props }: Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">) {
+  return (
+    <span className={cn("relative inline-flex size-4 shrink-0 text-primary", className)}>
+      <input
+        type="checkbox"
+        className="peer size-full cursor-pointer appearance-none rounded border border-input bg-background outline-none checked:border-current checked:bg-current focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
+        {...props}
+      />
+      <Check aria-hidden weight="bold" className="pointer-events-none absolute inset-0 m-auto hidden size-3 text-background peer-checked:block" />
+    </span>
+  );
+}
+
 /** "my linkedin" → "linkedin.com/in/…", as an example in an Intro. */
 export function Mapping({ from, to }: { from: string; to: string }) {
   return (
     <span className="inline-flex max-w-full items-center gap-1.5">
       <span className="rounded-md bg-muted px-2 py-1 font-medium">“{from}”</span>
-      <span className="text-muted-foreground">→</span>
+      <ArrowRight aria-label="becomes" className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="truncate rounded-md border bg-card px-2 py-1">{to}</span>
     </span>
   );

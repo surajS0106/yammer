@@ -260,7 +260,8 @@ impl Meeting {
             Some(s) => strip_markdown(&s.lines().filter(|l| !l.trim_start().starts_with('#')).collect::<Vec<_>>().join("\n")),
             None => self.segments.iter().map(|s| s.text.trim()).collect::<Vec<_>>().join(" "),
         };
-        let preview: String = source.chars().take(160).collect();
+        // Longer than the list shows, so the list cuts it off with an ellipsis rather than mid-word.
+        let preview: String = source.chars().take(400).collect();
         Overview {
             id: self.id,
             title: self.title.clone(),

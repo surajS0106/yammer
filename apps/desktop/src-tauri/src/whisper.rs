@@ -222,4 +222,49 @@ mod tests {
         println!("{:.1}s audio in {:?}: {text}", samples.len() as f32 / 16000.0, start.elapsed());
         assert!(!text.is_empty());
     }
+
+    /// Word errors with and without the echo canceller, for each `<name>.mic.wav`,
+    /// `<name>.reference.wav` and `<name>.txt` in `ECHO_DIR` (16 kHz mono):
+    /// `cargo test -p yammer echo_word_errors -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn echo_word_errors() {
+        let model = std::env::var("WHISPER_MODEL").expect("WHISPER_MODEL");
+        let dir = std::path::PathBuf::from(std::env::var("ECHO_DIR").expect("ECHO_DIR"));
+        let ctx = WhisperContext::new_with_params(&model, WhisperContextParameters::default()).unwrap();
+        let words = |s: &str| -> Vec<String> {
+            s.to_lowercase()
+                .replace(|c: char| !c.is_alphanumeric() && c != '\'', " ")
+                .split_whitespace()
+                .map(String::from)
+                .collect()
+        };
+        let errors = |said: &[String], heard: &[String]| {
+            let mut row: Vec<usize> = (0..=heard.len()).collect();
+            for (i, s) in said.iter().enumerate() {
+                let mut diagonal = row[0];
+                row[0] = i + 1;
+                for (j, h) in heard.iter().enumerate() {
+                    let best = (diagonal + usize::from(s != h)).min(row[j] + 1).min(row[j + 1] + 1);
+                    diagonal = std::mem::replace(&mut row[j + 1], best);
+                }
+            }
+            row[heard.len()]
+        };
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|f| f.ok()?.file_name().into_string().ok()?.strip_suffix(".mic.wav").map(String::from))
+            .collect();
+        names.sort();
+        for name in names {
+            let wav = |kind: &str| voice_core::audio::decode_wav(&std::fs::read(dir.join(format!("{name}.{kind}.wav"))).unwrap()).unwrap();
+            let said = words(&std::fs::read_to_string(dir.join(format!("{name}.txt"))).unwrap());
+            let (mic, reference) = (wav("mic"), wav("reference"));
+            let transcribe = |samples: Vec<f32>| run(&ctx, &voice_core::audio::pad_for_whisper(samples), Some("en"), "").unwrap().0;
+            let raw = transcribe(mic.clone());
+            let cancelled = transcribe(voice_core::echo::cancel(&mic, &reference));
+            let percent = |text: &str| 100 * errors(&said, &words(text)) / said.len().max(1);
+            println!("{name}: raw {}%, cancelled {}%\n  raw: {raw}\n  cancelled: {cancelled}", percent(&raw), percent(&cancelled));
+        }
+    }
 }

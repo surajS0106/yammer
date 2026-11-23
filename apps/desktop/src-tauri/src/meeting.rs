@@ -14,6 +14,10 @@
 //! reconnected; one that can't be falls back to the dictation engine, so the
 //! rest of the call still gets transcribed.
 //!
+//! A meeting for notes only (`MeetingSettings::notes_only`) never streams: the
+//! dictation engine transcribes it, the live view hides the transcript, and its
+//! notes are always written when it stops.
+//!
 //! The meeting is saved every few seconds while it runs, and once more when
 //! it stops. Then the AI cleanup model writes the notes from the transcript
 //! and whatever the user typed during the call.
@@ -73,6 +77,10 @@ const SEND_SAMPLES: usize = voice_core::SAMPLE_RATE as usize / 5;
 const FINISH_WAIT: Duration = Duration::from_secs(8);
 /// How long a transcription task may take to wind down when stopped.
 const STOP_WAIT: Duration = Duration::from_secs(60);
+/// The same for notes only, where nobody's watching the text come in and a slow engine may be well behind.
+const NOTES_STOP_WAIT: Duration = Duration::from_secs(600);
+/// Before a piece that failed to transcribe is tried again.
+const RETRY_WAIT: Duration = Duration::from_secs(1);
 const SAVE_EVERY: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// Attempts to reconnect a dropped stream before falling back to the dictation engine.
@@ -106,6 +114,8 @@ pub struct LiveInfo {
     pub id: u64,
     pub started_at: u64,
     pub engine: String,
+    /// Started without a live transcript. Fixed for the whole meeting, whatever the setting becomes.
+    pub notes_only: bool,
     /// Which channels are being captured.
     pub speakers: Vec<Speaker>,
 }
@@ -287,7 +297,7 @@ pub async fn start(app: &AppHandle) -> AppResult<LiveInfo> {
     if let Some(live) = me.live.lock().unwrap().as_ref() {
         return Ok(live.info.clone());
     }
-    let settings = app.state::<AppState>().settings();
+    let settings = app.state::<AppState>().settings().for_meeting();
     check_engine(app, &settings)?;
 
     let id = now_ms();
@@ -347,7 +357,7 @@ pub async fn start(app: &AppHandle) -> AppResult<LiveInfo> {
             }
         })
     };
-    let info = LiveInfo { id, started_at: id, engine: settings.meeting_engine_label(), speakers };
+    let info = LiveInfo { id, started_at: id, engine: settings.meeting_engine_label(), notes_only: settings.meeting.notes_only, speakers };
     *me.live.lock().unwrap() = Some(Live { meeting, captures, tasks, saver, info: info.clone() });
     LIVE.store(true, Ordering::SeqCst);
 
@@ -384,8 +394,9 @@ pub async fn stop(app: &AppHandle) -> AppResult<Option<Meeting>> {
 
     // Stopping the captures closes their channels, which ends each task once it has caught up.
     tauri::async_runtime::spawn_blocking(move || captures.into_iter().for_each(Capture::stop)).await.map_err(join_err)?;
+    let wait = if info.notes_only { NOTES_STOP_WAIT } else { STOP_WAIT };
     for mut task in tasks {
-        if tokio::time::timeout(STOP_WAIT, &mut task).await.is_err() {
+        if tokio::time::timeout(wait, &mut task).await.is_err() {
             task.abort();
         }
     }
@@ -400,7 +411,7 @@ pub async fn stop(app: &AppHandle) -> AppResult<Option<Meeting>> {
     let _ = app.emit("meeting-updated", &finished);
 
     let has_content = finished.words() > 0 || !finished.notes.trim().is_empty();
-    if settings.meeting.auto_summary && has_content {
+    if (settings.meeting.auto_summary || info.notes_only) && has_content {
         overlay::show(app, OverlayState::Polishing { model: settings.cleanup.label() });
         let (app, id) = (app.clone(), finished.id);
         tauri::async_runtime::spawn(async move {
@@ -636,6 +647,10 @@ fn check_engine(#[cfg_attr(not(desktop), allow(unused_variables))] app: &AppHand
             Engine::Cloud if settings.cloud.base_url.trim().is_empty() || settings.cloud.model.trim().is_empty() => {
                 Err(AppError::Invalid("Choose a speech provider and model in Settings → Speech engine.".into()))
             }
+            // Without its key every piece would fail. A custom server may not need one.
+            Engine::Cloud if settings.cloud.preset != "custom" && settings.cloud.key_name().is_some() && secrets::stt(settings)?.is_none() => {
+                Err(AppError::Invalid("Add your speech provider's API key in Settings → Speech engine.".into()))
+            }
             _ => Ok(()),
         },
         // `connect` checks the key and the model.
@@ -828,7 +843,13 @@ async fn pieces(
                     let id = format!("{}-piece-{n}", prefix(speaker));
                     // An empty partial shows that something's being transcribed.
                     put(app, meeting, Segment { id: id.clone(), at_ms: at, speaker, text: String::new(), partial: true });
-                    let text = match pipeline::transcribe(app, settings, std::mem::take(&mut turn).into()).await {
+                    let audio: Arc<[f32]> = std::mem::take(&mut turn).into();
+                    let mut result = pipeline::transcribe(app, settings, audio.clone()).await;
+                    if result.is_err() {
+                        tokio::time::sleep(RETRY_WAIT).await;
+                        result = pipeline::transcribe(app, settings, audio).await;
+                    }
+                    let text = match result {
                         Ok((text, ..)) => fixes::apply(text.trim(), &settings.replacements, &[]),
                         Err(e) => {
                             if !failed {

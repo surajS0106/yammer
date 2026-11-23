@@ -5,6 +5,8 @@ pub mod audio;
 pub mod calendar;
 pub mod calls;
 pub mod cleanup;
+#[cfg(not(target_os = "android"))]
+pub mod echo;
 pub mod error;
 pub mod history;
 pub mod live;

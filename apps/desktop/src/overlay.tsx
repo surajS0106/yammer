@@ -296,7 +296,7 @@ const ContextMenu = React.forwardRef<
           e.stopPropagation();
         }}
       >
-        <motion.div layoutScroll className="isolate min-h-0 overflow-y-auto overscroll-contain scroll-smooth p-1.5 [scrollbar-width:thin]">
+        <motion.div layoutScroll className="isolate min-h-0 overflow-y-auto overscroll-contain scroll-smooth p-1.5">
           {groups.map((group, g) => (
             <React.Fragment key={g}>
               {g > 0 && <div className="mx-2 my-1 h-px bg-white/[0.08]" />}

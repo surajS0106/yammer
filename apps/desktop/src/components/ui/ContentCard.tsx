@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowRight } from "@phosphor-icons/react";
 import { motion } from "framer-motion";
 
 export function ContentCard({
@@ -28,7 +29,7 @@ export function ContentCard({
       <span className="mt-auto inline-flex items-center gap-1 text-sm font-medium text-emerald-700 dark:text-emerald-400">
         Read more
         <span aria-hidden className="inline-block transition-transform duration-300 ease-out group-hover:translate-x-1">
-          →
+          <ArrowRight className="size-3.5" weight="bold" />
         </span>
       </span>
     </motion.a>

@@ -31,7 +31,7 @@ export function NigiriCard({
   label: string;
   value: number;
   caption: string;
-  badge?: string;
+  badge?: React.ReactNode;
   /** A small heading over the band, saying what it shows. */
   bandLabel?: string;
   band: React.ReactNode;

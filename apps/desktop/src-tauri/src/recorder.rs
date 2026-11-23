@@ -12,10 +12,11 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
+use voice_core::echo::{Mark, Resampler, Track};
 
 use crate::error::{AppError, AppResult};
 
@@ -26,6 +27,16 @@ pub struct Captured {
     pub samples: Vec<f32>,
     pub channels: usize,
     pub rate: u32,
+    /// When the audio arrived, to line it up with the computer's (`Reference`).
+    pub marks: Vec<Mark>,
+}
+
+/// What a stream has delivered. `marks` count every frame, even ones already taken.
+#[derive(Default)]
+struct Buffer {
+    samples: Vec<f32>,
+    frames: usize,
+    marks: Vec<Mark>,
 }
 
 pub struct Recording {
@@ -37,7 +48,9 @@ impl Recording {
     /// Stop capturing and return everything recorded.
     pub fn stop(self) -> Captured {
         let _ = self.stop.send(());
-        self.thread.join().unwrap_or(Captured { samples: Vec::new(), channels: 1, rate: voice_core::SAMPLE_RATE })
+        self.thread
+            .join()
+            .unwrap_or(Captured { samples: Vec::new(), channels: 1, rate: voice_core::SAMPLE_RATE, marks: Vec::new() })
     }
 }
 
@@ -66,7 +79,7 @@ pub fn start(device: Option<String>, on_level: impl Fn(f32) + Send + 'static) ->
     let thread = std::thread::Builder::new()
         .name("recorder".into())
         .spawn(move || {
-            let buffer = Arc::new(Mutex::new(Vec::<f32>::with_capacity(48_000 * 30)));
+            let buffer = Arc::new(Mutex::new(Buffer { samples: Vec::with_capacity(48_000 * 30), ..Buffer::default() }));
             let level = Arc::new(AtomicU32::new(0));
             let opened = open(device.as_deref(), buffer.clone(), level.clone());
             let (stream, channels, rate) = match opened {
@@ -76,15 +89,15 @@ pub fn start(device: Option<String>, on_level: impl Fn(f32) + Send + 'static) ->
                 }
                 Err(e) => {
                     let _ = ready_tx.send(Err(e));
-                    return Captured { samples: Vec::new(), channels: 1, rate: voice_core::SAMPLE_RATE };
+                    return Captured { samples: Vec::new(), channels: 1, rate: voice_core::SAMPLE_RATE, marks: Vec::new() };
                 }
             };
             while let Err(mpsc::RecvTimeoutError::Timeout) = stop_rx.recv_timeout(Duration::from_millis(50)) {
                 on_level(f32::from_bits(level.load(Ordering::Relaxed)));
             }
             drop(stream);
-            let samples = std::mem::take(&mut *buffer.lock().unwrap());
-            Captured { samples, channels, rate }
+            let Buffer { samples, marks, .. } = std::mem::take(&mut *buffer.lock().unwrap());
+            Captured { samples, channels, rate, marks }
         })
         .map_err(AppError::from)?;
 
@@ -98,7 +111,7 @@ pub fn start(device: Option<String>, on_level: impl Fn(f32) + Send + 'static) ->
     }
 }
 
-fn open(device: Option<&str>, buffer: Arc<Mutex<Vec<f32>>>, level: Arc<AtomicU32>) -> AppResult<(cpal::Stream, usize, u32)> {
+fn open(device: Option<&str>, buffer: Arc<Mutex<Buffer>>, level: Arc<AtomicU32>) -> AppResult<(cpal::Stream, usize, u32)> {
     let device = pick_device(device)?;
     let mic_err = |e: &dyn std::fmt::Display| {
         eprintln!("couldn't open the microphone: {e}");
@@ -110,7 +123,7 @@ fn open(device: Option<&str>, buffer: Arc<Mutex<Vec<f32>>>, level: Arc<AtomicU32
 
 /// Record what the default output device plays (cpal's loopback).
 #[cfg(not(target_os = "linux"))]
-fn open_output(buffer: Arc<Mutex<Vec<f32>>>, level: Arc<AtomicU32>) -> AppResult<(cpal::Stream, usize, u32)> {
+fn open_output(buffer: Arc<Mutex<Buffer>>, level: Arc<AtomicU32>) -> AppResult<(cpal::Stream, usize, u32)> {
     let err = |e: &dyn std::fmt::Display| {
         let hint = if cfg!(target_os = "macos") {
             " It needs macOS 14.6 or later, and Yammer allowed under System Settings → Privacy & Security → Screen & System Audio Recording."
@@ -130,7 +143,7 @@ fn open_output(buffer: Arc<Mutex<Vec<f32>>>, level: Arc<AtomicU32>) -> AppResult
 fn open_with(
     device: &cpal::Device,
     supported: cpal::SupportedStreamConfig,
-    buffer: Arc<Mutex<Vec<f32>>>,
+    buffer: Arc<Mutex<Buffer>>,
     level: Arc<AtomicU32>,
     mic_err: &dyn Fn(&dyn std::fmt::Display) -> AppError,
 ) -> AppResult<(cpal::Stream, usize, u32)> {
@@ -155,32 +168,109 @@ fn open_with(
 fn build<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    buffer: Arc<Mutex<Vec<f32>>>,
+    buffer: Arc<Mutex<Buffer>>,
     level: Arc<AtomicU32>,
 ) -> Result<cpal::Stream, cpal::Error>
 where
     T: SizedSample,
     f32: FromSample<T>,
 {
+    let channels = (config.channels as usize).max(1);
     device.build_input_stream::<T, _, _>(
         *config,
         move |data: &[T], _| {
             let mut sum = 0.0f32;
             let mut buf = buffer.lock().unwrap();
-            let room = MAX_SAMPLES.saturating_sub(buf.len());
+            let room = MAX_SAMPLES.saturating_sub(buf.samples.len());
             for (i, s) in data.iter().enumerate() {
                 let v = s.to_sample::<f32>();
                 sum += v * v;
                 if i < room {
-                    buf.push(v);
+                    buf.samples.push(v);
                 }
             }
+            buf.frames += data.len().min(room) / channels;
+            let mark = Mark { at: Instant::now(), end: buf.frames };
+            buf.marks.push(mark);
             let rms = if data.is_empty() { 0.0 } else { (sum / data.len() as f32).sqrt() };
             level.store(rms.to_bits(), Ordering::Relaxed);
         },
         |e| eprintln!("microphone stream error: {e}"),
         None,
     )
+}
+
+/// Ten minutes at 16 kHz; the reference past it is dropped, as the microphone's audio is.
+const MAX_REFERENCE: usize = voice_core::SAMPLE_RATE as usize * 600;
+
+/// What the computer plays while a dictation records, to take out of it
+/// (`voice_core::echo`). Kept in memory only, and opened on its own thread so
+/// the microphone never waits for it. Dropping it stops it, without waiting.
+pub struct Reference {
+    stop: mpsc::Sender<()>,
+    thread: JoinHandle<AppResult<Track>>,
+}
+
+impl Reference {
+    pub fn start() -> AppResult<Reference> {
+        let (stop, stopped) = mpsc::channel();
+        let thread = std::thread::Builder::new().name("reference".into()).spawn(move || reference(stopped)).map_err(AppError::from)?;
+        Ok(Reference { stop, thread })
+    }
+
+    /// Stop, and return what was played. An error means it couldn't be heard at all.
+    pub fn stop(self) -> AppResult<Track> {
+        drop(self.stop);
+        let gone = || AppError::Invalid("Recording the computer's sound stopped unexpectedly. Try again.".into());
+        self.thread.join().unwrap_or_else(|_| Err(gone()))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn reference(stopped: mpsc::Receiver<()>) -> AppResult<Track> {
+    let buffer = Arc::new(Mutex::new(Buffer::default()));
+    let (stream, channels, rate) = open_output(buffer.clone(), Arc::new(AtomicU32::new(0)))?;
+    let mut resampler = Resampler::new(rate);
+    let mut samples = Vec::new();
+    let mut take = || {
+        let captured = std::mem::take(&mut buffer.lock().unwrap().samples);
+        if samples.len() < MAX_REFERENCE {
+            samples.extend(resampler.push(&voice_core::audio::downmix(&captured, channels)));
+        }
+    };
+    // Resampled as it comes, off the audio callback: 4 MB a minute rather than 23.
+    while let Err(mpsc::RecvTimeoutError::Timeout) = stopped.recv_timeout(LIVE_TICK) {
+        take();
+    }
+    drop(stream);
+    take();
+    samples.extend(resampler.finish());
+    let scale = voice_core::SAMPLE_RATE as f64 / rate as f64;
+    let marks = std::mem::take(&mut buffer.lock().unwrap().marks);
+    Ok(Track { samples, marks: marks.into_iter().map(|m| Mark { at: m.at, end: (m.end as f64 * scale).round() as usize }).collect() })
+}
+
+#[cfg(target_os = "linux")]
+fn reference(stopped: mpsc::Receiver<()>) -> AppResult<Track> {
+    use std::io::Read;
+
+    let (mut child, mut stdout) = parec()?;
+    let reader = std::thread::spawn(move || {
+        let mut track = Track::default();
+        // 10 ms of 16 kHz f32.
+        let mut bytes = [0u8; 640];
+        while track.samples.len() < MAX_REFERENCE && stdout.read_exact(&mut bytes).is_ok() {
+            track.samples.extend(bytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])));
+            track.marks.push(Mark { at: Instant::now(), end: track.samples.len() });
+        }
+        track
+    });
+    // Nothing is ever sent: dropping the sender is the signal.
+    let _ = stopped.recv();
+    // parec may be blocked with nothing playing; killing it ends the read.
+    let _ = child.kill();
+    let _ = child.wait();
+    Ok(reader.join().unwrap_or_default())
 }
 
 /// Where a live capture listens.
@@ -241,7 +331,7 @@ pub fn live(source: Source, on_audio: impl Fn(Vec<f32>) + Send + 'static, on_lev
     let thread = std::thread::Builder::new()
         .name("live-capture".into())
         .spawn(move || {
-            let buffer = Arc::new(Mutex::new(Vec::<f32>::with_capacity(48_000)));
+            let buffer = Arc::new(Mutex::new(Buffer::default()));
             let level = Arc::new(AtomicU32::new(0));
             let opened = match &source {
                 Source::Mic(device) => open(device.as_deref(), buffer.clone(), level.clone()),
@@ -261,7 +351,11 @@ pub fn live(source: Source, on_audio: impl Fn(Vec<f32>) + Send + 'static, on_lev
                 }
             };
             let hand_over = || {
-                let captured = std::mem::take(&mut *buffer.lock().unwrap());
+                let captured = {
+                    let mut buf = buffer.lock().unwrap();
+                    buf.marks.clear();
+                    std::mem::take(&mut buf.samples)
+                };
                 if !captured.is_empty() {
                     on_audio(voice_core::audio::to_whisper(&captured, channels, rate));
                 }
@@ -291,10 +385,9 @@ pub fn live(source: Source, on_audio: impl Fn(Vec<f32>) + Send + 'static, on_lev
     }
 }
 
-/// What the default sink plays, from `parec`, already 16 kHz mono f32.
+/// `parec` recording the default sink's monitor, as 16 kHz mono f32.
 #[cfg(target_os = "linux")]
-fn monitor(on_audio: impl Fn(Vec<f32>) + Send + 'static, on_level: impl Fn(f32) + Send + 'static) -> AppResult<Live> {
-    use std::io::Read;
+fn parec() -> AppResult<(std::process::Child, std::process::ChildStdout)> {
     use std::process::{Command, Stdio};
 
     let mut child = Command::new("parec")
@@ -307,10 +400,19 @@ fn monitor(on_audio: impl Fn(Vec<f32>) + Send + 'static, on_level: impl Fn(f32) 
                 "Couldn't listen to the computer's sound ({e}). Install parec (the pulseaudio-utils package), which works with PipeWire too."
             ))
         })?;
-    let mut stdout = child
+    let stdout = child
         .stdout
         .take()
         .ok_or_else(|| AppError::Invalid("Couldn't listen to the computer's sound. Check that PulseAudio or PipeWire is running.".into()))?;
+    Ok((child, stdout))
+}
+
+/// What the default sink plays, from `parec`, already 16 kHz mono f32.
+#[cfg(target_os = "linux")]
+fn monitor(on_audio: impl Fn(Vec<f32>) + Send + 'static, on_level: impl Fn(f32) + Send + 'static) -> AppResult<Live> {
+    use std::io::Read;
+
+    let (child, mut stdout) = parec()?;
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let thread = std::thread::Builder::new()
         .name("live-monitor".into())
@@ -334,4 +436,32 @@ fn monitor(on_audio: impl Fn(Vec<f32>) + Send + 'static, on_level: impl Fn(f32) 
         })
         .map_err(AppError::from)?;
     Ok(Live { stop: Some(stop_tx), thread: Some(thread), child: Arc::new(Mutex::new(Some(child))) })
+}
+
+#[cfg(test)]
+mod tests {
+    /// Records the microphone and the computer's sound for `ECHO_SECS` (20), and saves the raw,
+    /// reference and cancelled audio in `ECHO_DIR`. Play something and speak over it:
+    /// `cargo test -p yammer records_an_echo -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn records_an_echo() {
+        use voice_core::audio::{encode_wav, rms};
+        let dir = std::path::PathBuf::from(std::env::var("ECHO_DIR").expect("ECHO_DIR"));
+        let secs = std::env::var("ECHO_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(20);
+        std::fs::create_dir_all(&dir).unwrap();
+        let reference = super::Reference::start().unwrap();
+        let mic = super::start(None, |_| {}).unwrap();
+        println!("Recording for {secs} s: speak now.");
+        std::thread::sleep(std::time::Duration::from_secs(secs));
+        let mic = mic.stop();
+        let reference = reference.stop().unwrap();
+        let mic = voice_core::echo::Track::new(&mic.samples, mic.channels, mic.rate, &mic.marks);
+        let out = voice_core::echo::without(&mic, &reference);
+        println!("mic {:.4}, reference {:.4}, cancelled {:.4}", rms(&mic.samples), rms(&reference.samples), rms(&out));
+        println!("{}", if out == mic.samples { "No echo found, so nothing was changed." } else { "Echo found and taken out." });
+        for (name, samples) in [("mic", &mic.samples), ("reference", &reference.samples), ("cancelled", &out)] {
+            std::fs::write(dir.join(format!("live.{name}.wav")), encode_wav(samples)).unwrap();
+        }
+    }
 }

@@ -69,6 +69,8 @@ export interface MeetingSettings {
   /** Starts and stops a meeting transcript; "" for none. */
   hotkey: string;
   audio: CallAudio;
+  /** No live transcript, only notes when it ends; the speech engine transcribes it, whatever `engine` says. */
+  notesOnly: boolean;
   engine: LiveEngine;
   /** The streaming engine's model; "" for its default. */
   model: string;
@@ -84,14 +86,16 @@ export interface MeetingSettings {
   ignoredApps: IgnoredApp[];
 }
 
+export type OtherAudio = "leave" | "mute" | "ignore";
+
 export interface Settings {
   hotkey: string;
   /** Select text, then hold this and say how to change it; "" for none. */
   editHotkey: string;
   micDevice: string | null;
   sounds: boolean;
-  /** Mute the computer's sound output while recording. */
-  muteAudio: boolean;
+  /** What happens to the computer's own sound while recording. */
+  otherAudio: OtherAudio;
   restoreClipboard: boolean;
   trailingSpace: boolean;
   overlayAlwaysVisible: boolean;
@@ -224,6 +228,8 @@ export interface LiveMeeting {
   id: number;
   startedAt: number;
   engine: string;
+  /** Started without a live transcript. */
+  notesOnly: boolean;
   speakers: Speaker[];
 }
 
@@ -369,6 +375,8 @@ export const api = {
   hotkeySuspend: (suspended: boolean) => invoke<void>("hotkey_suspend", { suspended }),
   hotkeyError: () => invoke<string | null>("hotkey_error"),
   micDevices: () => invoke<string[]>("mic_devices"),
+  /** Rejects when the computer’s sound can’t be recorded. */
+  referenceCheck: () => invoke<void>("reference_check"),
   secretStatus: () => invoke<Record<SecretName, boolean>>("secret_status"),
   secretSet: (name: SecretName, value: string) => invoke<void>("secret_set", { name, value }),
   historyList: () => invoke<HistoryEntry[]>("history_list"),

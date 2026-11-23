@@ -61,7 +61,7 @@ export function useNoteTemplates(own: NoteTemplate[]): NoteTemplate[] {
 
 let sush: Promise<boolean> | null = null;
 
-/** Whether Sush is installed to take "Ask in Sush" (desktop only). Checked once per session. */
+/** Whether Sush is installed to take "Ask Sush" (desktop only). Checked once per session. */
 export function useSushInstalled(): boolean {
   const [installed, setInstalled] = React.useState(false);
   React.useEffect(() => {

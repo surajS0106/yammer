@@ -148,7 +148,7 @@ export function MeetingSettingsPage({ go }: { go: (page: PageId) => void }) {
   const { settings, update, secrets } = useSettings();
   const m = settings.meeting;
   const set = (change: Partial<MeetingSettings>) => update((s) => ({ ...s, meeting: { ...s.meeting, ...change } }));
-  const stream = m.engine === "dictation" ? null : liveEngines[m.engine];
+  const stream = m.notesOnly || m.engine === "dictation" ? null : liveEngines[m.engine];
   const model = m.model.trim() || stream?.models[0].id || "";
   const templates = useNoteTemplates(m.templates);
   const template = templates.find((t) => t.id === m.summary);
@@ -187,15 +187,15 @@ export function MeetingSettingsPage({ go }: { go: (page: PageId) => void }) {
         title="Meetings"
         description={
           isAndroid
-            ? "Transcribe a meeting in the room as it happens, and get notes written up when it ends."
-            : "Transcribe a call as it happens, both sides of it, and get notes written up when it ends."
+            ? "Transcribe a meeting in the room as it happens, or just get notes written up when it ends."
+            : "Transcribe a call as it happens, both sides of it, or just get notes written up when it ends."
         }
         mood="listening"
       >
         <HeroChip>{isAndroid ? "Your phone's microphone" : audioLabels[m.audio]}</HeroChip>
         <HeroChip>
           {stream ? <ProviderLogo id={stream.provider} tile={false} className="size-3.5" /> : null}
-          {stream ? `${stream.label} · ${model}` : "Your speech engine"}
+          {stream ? `${stream.label} · ${model}` : m.notesOnly ? "Notes only" : "Your speech engine"}
         </HeroChip>
         {template && (
           <HeroChip>
@@ -275,8 +275,22 @@ export function MeetingSettingsPage({ go }: { go: (page: PageId) => void }) {
 
       {/* 2. How it transcribes. */}
       <section className="space-y-2">
-        <SectionHeader title="Live transcription" description="What turns the meeting into text while it happens." />
-        <RadioCards<LiveEngine> label="Live transcription engine" value={m.engine} onChange={(engine) => void set({ engine, model: "" })} options={engineOptions} />
+        <SectionHeader title="Transcription" description="Whether you see the words during the meeting, and what writes them down." />
+        <Card className="shadow-xs">
+          <Row
+            label="Live transcript"
+            description={
+              m.notesOnly
+                ? `Off: you get notes when the meeting ends, and its transcript is kept with them. ${speechEngine} writes it down in the background, which usually costs less than streaming.`
+                : "See what's said as it's said. Turn it off to just get notes when the meeting ends, which usually costs less than streaming."
+            }
+          >
+            <Switch label="Live transcript" checked={!m.notesOnly} onChange={(on) => void set({ notesOnly: !on })} />
+          </Row>
+        </Card>
+        <Collapse show={!m.notesOnly} gap={0}>
+          <RadioCards<LiveEngine> label="Live transcription engine" value={m.engine} onChange={(engine) => void set({ engine, model: "" })} options={engineOptions} />
+        </Collapse>
         <Collapse show={!!stream} gap={0}>
           <Card className="mt-1 divide-y shadow-xs">
             {stream && (
@@ -327,8 +341,11 @@ export function MeetingSettingsPage({ go }: { go: (page: PageId) => void }) {
             </Button>
           </div>
         </Row>
-        <Row label="Write notes when a meeting ends" description="Otherwise, write them from the meeting whenever you like.">
-          <Switch label="Write notes when a meeting ends" checked={m.autoSummary} onChange={(autoSummary) => void set({ autoSummary })} />
+        <Row
+          label="Write notes when a meeting ends"
+          description={m.notesOnly ? "Always, while the live transcript is off." : "Otherwise, write them from the meeting whenever you like."}
+        >
+          <Switch label="Write notes when a meeting ends" checked={m.notesOnly || m.autoSummary} disabled={m.notesOnly} onChange={(autoSummary) => void set({ autoSummary })} />
         </Row>
       </Section>
 

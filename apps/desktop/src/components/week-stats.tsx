@@ -3,6 +3,7 @@
 // and streak. Pixels dissolve in on mount; under reduced motion (index.css) they just appear.
 
 import { INK, NORI, PixelBars, PixelFlame, PixelNumber, RICE, RICE_SHADE, SALMON, STRIPE } from "@/components/pixel";
+import { Trend } from "@/components/ui";
 import { lastDays, TYPING_WPM, weekOverWeek, type Stats } from "@/lib/stats";
 
 const weekday = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
@@ -33,7 +34,7 @@ export function WeekBento({ stats, onOpen }: { stats: Stats; onOpen: () => void 
             <span className="text-sm font-semibold">This week</span>
             {delta !== undefined && (
               <span className="rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums" style={{ backgroundColor: NORI }}>
-                {delta >= 0 ? "▲" : "▼"} {Math.abs(Math.round(delta))}%
+                <Trend delta={delta} />
               </span>
             )}
           </div>
@@ -87,7 +88,7 @@ export function WeekStats({ stats, onOpen }: { stats: Stats; onOpen: () => void 
           <span className="text-sm font-semibold">This week</span>
           {delta !== undefined && (
             <span className="rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums" style={{ backgroundColor: NORI }}>
-              {delta >= 0 ? "▲" : "▼"} {Math.abs(Math.round(delta))}%
+              <Trend delta={delta} />
             </span>
           )}
         </div>

@@ -21,6 +21,10 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"
 [profile.dev]
 debug = "line-tables-only"
 
+# The echo canceller (echo.rs) takes seconds unoptimised.
+[profile.dev.package.voice-core]
+opt-level = 2
+
 [profile.dev.package."*"]
 debug = false
 # whisper.cpp is unbearably slow unoptimised, even in dev.

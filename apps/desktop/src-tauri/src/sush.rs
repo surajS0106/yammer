@@ -1,5 +1,5 @@
 //! Sush, Yammer's sibling AI app, reads Yammer's meetings through `yammer --mcp`
-//! (voice-core's `mcp.rs`). This is the way back: "Ask in Sush" on a meeting
+//! (voice-core's `mcp.rs`). This is the way back: "Ask Sush" on a meeting
 //! opens `sush://ask?meeting=<id>&title=<title>`, and Sush opens a chat ready
 //! to ask about it.
 //!
@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::error::{AppError, AppResult};
 
-/// What "Ask in Sush" did.
+/// What "Ask Sush" did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Asked {
@@ -23,7 +23,7 @@ pub enum Asked {
     Copied,
 }
 
-/// Whether Sush is installed, for showing "Ask in Sush".
+/// Whether Sush is installed, for showing "Ask Sush".
 #[tauri::command]
 pub async fn sush_installed() -> bool {
     tauri::async_runtime::spawn_blocking(installed).await.unwrap_or(false)

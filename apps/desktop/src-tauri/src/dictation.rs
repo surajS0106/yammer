@@ -17,16 +17,18 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::Modifiers;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use voice_core::history::Entry;
-use voice_core::{audio, Settings};
+use voice_core::{audio, echo, Settings};
 
 use crate::error::{AppError, AppResult};
 use crate::overlay::{self, OverlayState};
 use crate::paste::{self, Outcome};
 use crate::pipeline::{join_err, make, redo, save, Job, Made};
-use crate::recorder::{self, Recording};
+use crate::recorder::{self, Recording, Reference};
 use crate::sounds::{self, Cue};
 use crate::state::AppState;
 use crate::{focus, hotkey, meeting, mute};
+use voice_core::echo::Track;
+use voice_core::settings::OtherAudio;
 
 const TAP: Duration = Duration::from_millis(300);
 const MIN_SPEECH_SAMPLES: usize = voice_core::SAMPLE_RATE as usize * 3 / 10;
@@ -82,7 +84,15 @@ type Selection = tauri::async_runtime::JoinHandle<AppResult<Option<String>>>;
 
 enum Phase {
     Idle,
-    Recording { rec: Recording, pressed_at: Instant, latched: bool, session: u64, mode: Mode, selection: Option<Selection> },
+    Recording {
+        rec: Recording,
+        reference: Option<Reference>,
+        pressed_at: Instant,
+        latched: bool,
+        session: u64,
+        mode: Mode,
+        selection: Option<Selection>,
+    },
     Busy,
 }
 
@@ -220,14 +230,15 @@ impl Controller {
             sounds::play(Cue::Start);
         }
         // Muting would silence the call being transcribed.
-        if settings.mute_audio && !meeting::is_live() {
+        if settings.other_audio == OtherAudio::Mute && !meeting::is_live() {
             mute::mute_after(Duration::from_millis(if settings.sounds { CUE_MS } else { 0 }));
         }
+        let reference = (settings.other_audio == OtherAudio::Ignore).then(Reference::start).and_then(|r| r.map_err(no_reference).ok());
         self.session += 1;
         let session = self.session;
         let selection = (mode == Mode::Edit).then(|| self.copy_selection(session, &settings));
         let hint = latched.then(|| self.stop_hint(&mode));
-        self.phase = Phase::Recording { rec, pressed_at: Instant::now(), latched, session, mode, selection };
+        self.phase = Phase::Recording { rec, reference, pressed_at: Instant::now(), latched, session, mode, selection };
         overlay::show(&self.app, OverlayState::Listening { hint });
         hotkey::set_escape(&self.app, true);
         focus::prime();
@@ -256,7 +267,7 @@ impl Controller {
     }
 
     fn finish(&mut self) {
-        let Phase::Recording { rec, mode, selection, .. } = std::mem::replace(&mut self.phase, Phase::Busy) else { return };
+        let Phase::Recording { rec, reference, mode, selection, .. } = std::mem::replace(&mut self.phase, Phase::Busy) else { return };
         hotkey::set_escape(&self.app, false);
         let settings = self.app.state::<AppState>().settings();
         // Unmute first, or the stop cue would be lost.
@@ -271,7 +282,7 @@ impl Controller {
         let app = self.app.clone();
         let tx = self.tx.clone();
         tauri::async_runtime::spawn(async move {
-            show_done(&app, pipeline(&app, rec, mode, selection).await);
+            show_done(&app, pipeline(&app, rec, reference, mode, selection).await);
             let _ = tx.send(Input::Finished);
         });
     }
@@ -349,9 +360,31 @@ fn done(outcome: Option<Outcome>, made: Made) -> Done {
     }
 }
 
-async fn pipeline(app: &AppHandle, rec: Recording, mode: Mode, selection: Option<Selection>) -> AppResult<Done> {
-    let captured = tauri::async_runtime::spawn_blocking(move || rec.stop()).await.map_err(join_err)?;
-    let samples = audio::to_whisper(&captured.samples, captured.channels, captured.rate);
+fn no_reference(e: AppError) {
+    eprintln!("couldn't take the computer's sound out of the dictation: {e}");
+}
+
+/// Stop recording: what was said, at 16 kHz, without what the computer was playing if it was recorded too.
+fn heard(rec: Recording, reference: Option<Reference>) -> Vec<f32> {
+    let captured = rec.stop();
+    let reference = reference.and_then(|r| r.stop().map_err(no_reference).ok());
+    let Some(reference) = reference else { return audio::to_whisper(&captured.samples, captured.channels, captured.rate) };
+    let began = Instant::now();
+    let mic = Track::new(&captured.samples, captured.channels, captured.rate, &captured.marks);
+    let out = echo::without(&mic, &reference);
+    eprintln!(
+        "other audio: mic {:.4}, computer {:.4}, {} {:.4} in {:?}",
+        audio::rms(&mic.samples),
+        audio::rms(&reference.samples),
+        if out == mic.samples { "left as it was" } else { "taken out, leaving" },
+        audio::rms(&out),
+        began.elapsed()
+    );
+    out
+}
+
+async fn pipeline(app: &AppHandle, rec: Recording, reference: Option<Reference>, mode: Mode, selection: Option<Selection>) -> AppResult<Done> {
+    let samples = tauri::async_runtime::spawn_blocking(move || heard(rec, reference)).await.map_err(join_err)?;
     if samples.len() < MIN_SPEECH_SAMPLES || audio::is_silent(&samples) {
         return Ok(Done::NothingHeard);
     }

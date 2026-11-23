@@ -66,13 +66,13 @@ export function Sidebar({
   ];
 
   return (
-    <nav className="relative isolate flex h-full w-56 flex-col border-r bg-sidebar">
-      {/* A coral wash in the top corner, fading out. */}
+    <nav className="relative isolate flex h-full w-56 flex-col border-r border-border/60 bg-background">
+      {/* The same canvas as the pages, with their glow carried into the corner. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-56"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72"
         style={{
-          background: "radial-gradient(120% 70% at 0% 0%, color-mix(in oklch, var(--brand) 13%, transparent), transparent 70%)",
+          background: "radial-gradient(120% 80% at 0% 0%, color-mix(in oklch, var(--brand) 9%, transparent), transparent 70%)",
         }}
       />
 
@@ -80,22 +80,19 @@ export function Sidebar({
       <div className="shrink-0 px-3 pt-3">
         {/* No native title bar: on macOS this strip sits under the traffic lights. */}
         {dragStrip && <div data-tauri-drag-region className="h-7" />}
-        <div data-tauri-drag-region className="group/brand mb-2 flex items-center gap-2.5 px-1.5 pt-1">
-          <span className="pointer-events-none flex size-9 items-center justify-center rounded-xl bg-background shadow-xs ring-1 ring-border transition-transform duration-300 group-hover/brand:-rotate-6 group-hover/brand:scale-105">
-            <img src="/yammer-mark.png" alt="" className="size-6" />
-          </span>
+        <div data-tauri-drag-region className="mb-2 flex h-11 items-center gap-2.5 px-2">
+          {/* 28px wide from 8px in, so it sits centred over the icons below. */}
+          <img src="/yammer-mark.png" alt="" className="pointer-events-none size-7" />
           <span className="pointer-events-none flex flex-col leading-none">
-            <span className="text-lg font-semibold tracking-tight">Yammer</span>
-            <span className="mt-1 text-[11px] text-muted-foreground">
-              by <span className="font-medium text-primary">Sush</span>
-            </span>
+            <span className="text-base leading-5 font-semibold tracking-tight">Yammer</span>
+            <span className="text-[11px] leading-4 text-muted-foreground">by Sush</span>
           </span>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
         {/* One hover background glides between items as the pointer moves, as in Sush's sidebar; the selected pill slides too. */}
-        <HoverHighlight className="flex flex-1 flex-col" highlightClassName="rounded-lg bg-sidebar-accent/70">
+        <HoverHighlight className="flex flex-1 flex-col" highlightClassName="rounded-lg bg-foreground/[0.04] dark:bg-foreground/[0.06]">
           {groups.map((g) => (
             <div key={g.label} className="flex flex-col gap-0.5">
               <SectionLabel>{g.label}</SectionLabel>
@@ -112,11 +109,11 @@ export function Sidebar({
             </div>
           ))}
 
-          <div className="mt-auto flex flex-col gap-3 pt-6">
+          <div className="mt-auto flex flex-col gap-2 pt-6">
             <MicCard streak={stats.dayStreak} todayWords={stats.byDay.get(today) ?? 0} onClick={() => go("home")} />
             <UpdateCard onNotes={() => go("changelog")} />
             <WhatsNewCard onOpen={() => go("changelog")} />
-            <div className="flex flex-col gap-0.5 border-t pt-2">
+            <div className="flex flex-col gap-0.5">
               {footer.map((item) => (
                 <NavButton key={item.id} item={item} active={item.active} onClick={() => go(item.id)} />
               ))}
@@ -130,10 +127,7 @@ export function Sidebar({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 px-2.5 pt-4 pb-1.5">
-      <span className="text-[10.5px] font-semibold tracking-[0.12em] text-muted-foreground/70 uppercase">{children}</span>
-      <span className="h-px flex-1 bg-gradient-to-r from-sidebar-border to-transparent" />
-    </div>
+    <div className="px-3 pt-4 pb-1 text-xs font-medium text-muted-foreground">{children}</div>
   );
 }
 
@@ -158,7 +152,7 @@ function NavButton({
       aria-current={active ? "page" : undefined}
       data-hover-item
       className={cn(
-        "group relative flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        "group relative flex w-full items-center gap-3 rounded-lg h-9 px-3 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground"
       )}
     >
@@ -166,25 +160,16 @@ function NavButton({
         <motion.span
           layoutId="sidebar-active"
           transition={SPRING}
-          className="absolute inset-0 rounded-lg bg-background shadow-xs ring-1 ring-border dark:bg-sidebar-accent"
-        >
-          {/* A coral notch on the sidebar's edge marks where you are. */}
-          <span className="absolute inset-y-1.5 -left-3 w-[3px] rounded-r-full bg-primary" />
-        </motion.span>
+          className="absolute inset-0 rounded-lg bg-primary/10 dark:bg-primary/15"
+        />
       )}
-      <span
-        className={cn(
-          "relative flex size-7 shrink-0 items-center justify-center rounded-md transition-[background-color,color,rotate,scale] duration-300",
-          active
-            ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30"
-            : "group-hover:-rotate-8 group-hover:scale-110 group-hover:text-primary"
-        )}
-      >
-        <Icon className="size-4" weight={active ? "fill" : "regular"} />
-      </span>
+      <Icon
+        className={cn("relative size-5 shrink-0 transition-colors", active ? "text-primary" : "group-hover:text-foreground")}
+        weight={active ? "fill" : "regular"}
+      />
       <span className="relative truncate">{label}</span>
       {recording && (
-        <span title="Transcribing a meeting" className="relative mr-1 ml-auto flex size-2">
+        <span title="Transcribing a meeting" className="relative ml-auto flex size-2">
           <span className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-60" />
           <span className="relative size-2 rounded-full bg-red-500" />
         </span>
@@ -192,7 +177,7 @@ function NavButton({
       {badge !== undefined && (
         <span
           title={`${badge} today`}
-          className="relative ml-auto rounded-full bg-primary/12 px-1.5 py-px text-[10.5px] font-semibold text-primary tabular-nums"
+          className="relative ml-auto text-xs font-normal text-muted-foreground tabular-nums"
         >
           {badge}
         </span>
@@ -234,18 +219,11 @@ function MicCard({ streak, todayWords, onClick }: { streak: number; todayWords: 
       type="button"
       onClick={onClick}
       className={cn(
-        "relative overflow-hidden rounded-xl border bg-background/80 p-3 text-left shadow-xs transition-[border-color,box-shadow] outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-card",
-        busy && "border-primary/50 shadow-md shadow-primary/10"
+        "relative overflow-hidden rounded-xl border border-primary/20 bg-primary/[0.05] p-3 text-left transition-colors outline-none hover:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-primary/[0.08]",
+        busy && "border-primary/50"
       )}
     >
-      <span
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute -top-8 -right-8 size-24 rounded-full bg-primary/15 blur-2xl transition-opacity duration-500",
-          busy ? "opacity-100" : "opacity-50"
-        )}
-      />
-      <span className="relative flex items-center gap-2 text-xs font-medium">
+      <span className="relative flex items-center gap-2 text-sm font-medium">
         <span className="relative flex size-2">
           {busy && <span className="absolute inset-0 animate-ping rounded-full bg-primary opacity-60" />}
           <span className={cn("relative size-2 rounded-full", busy ? "bg-primary" : "bg-emerald-500")} />
@@ -253,12 +231,12 @@ function MicCard({ streak, todayWords, onClick }: { streak: number; todayWords: 
         {statusLabel[phase] ?? "Ready to yap"}
         {listening && <LevelBars level={level} />}
       </span>
-      <span className="relative mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+      <span className="relative mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         Hold
-        <Hotkey accelerator={settings.hotkey} className="[&_kbd]:h-5 [&_kbd]:min-w-5 [&_kbd]:bg-background [&_kbd]:px-1 [&_kbd]:text-[10.5px]" />
+        <Hotkey accelerator={settings.hotkey} className="[&_kbd]:h-5 [&_kbd]:min-w-5 [&_kbd]:bg-background [&_kbd]:px-1 [&_kbd]:text-[11px]" />
         and talk
       </span>
-      <span className="relative mt-3 flex items-center justify-between border-t border-dashed pt-2 text-[11px] text-muted-foreground">
+      <span className="relative mt-3 flex items-center justify-between border-t border-primary/15 pt-2 text-xs text-muted-foreground">
         <span className={cn("flex items-center gap-1", streak > 0 && "text-foreground")}>
           <Flame className={cn("size-3.5", streak > 0 && "text-primary")} weight={streak > 0 ? "fill" : "regular"} />
           {streak > 0 ? `${streak}-day streak` : "No streak yet"}
@@ -337,6 +315,31 @@ export function WhatsNewCard({ onOpen }: { onOpen: () => void }) {
   const pending = useUpdate();
   // An "Upgrade now" card already sits here; one card at a time.
   if (!version || settings.seenChangelog === version || !releaseOf(version) || pending.phase !== "idle") return null;
+
+  // In the sidebar it's one row, in line with the nav below it.
+  if (!isAndroid) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={SPRING} data-hover-item className="relative flex h-9 items-center rounded-lg">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-lg pr-9 pl-3 text-left text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <Sparkles className="size-5 shrink-0 text-primary" weight="fill" />
+          <span className="truncate">New in {version}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void update({ seenChangelog: version })}
+          title="Dismiss"
+          aria-label="Dismiss what's new"
+          className="absolute right-2 flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-foreground/[0.06] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <X className="size-3.5" />
+        </button>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

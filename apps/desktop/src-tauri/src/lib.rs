@@ -238,6 +238,7 @@ pub fn run() {
             commands::hotkey_suspend,
             commands::hotkey_error,
             commands::mic_devices,
+            commands::reference_check,
             commands::secret_status,
             commands::secret_set,
             commands::history_list,

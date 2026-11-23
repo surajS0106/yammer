@@ -18,7 +18,10 @@ pub struct Settings {
     /// Input device name; `None` follows the system default.
     pub mic_device: Option<String>,
     pub sounds: bool,
-    /// Mute the computer's sound output while recording, so music or a video doesn't play into the mic.
+    /// What happens to the computer's own sound while recording, so music or a video doesn't end up in it.
+    pub other_audio: OtherAudio,
+    /// What `other_audio` was before it could be anything but muted. Read from old files, never written.
+    #[serde(skip_serializing)]
     pub mute_audio: bool,
     /// Put back whatever was on the clipboard after pasting.
     pub restore_clipboard: bool,
@@ -223,6 +226,8 @@ pub struct MeetingSettings {
     /// Starts and stops a meeting transcript. Empty for none.
     pub hotkey: String,
     pub audio: CallAudio,
+    /// No live transcript, only notes when it ends: the (cheaper) dictation engine transcribes it, whatever `engine` says.
+    pub notes_only: bool,
     pub engine: LiveEngine,
     /// The streaming engine's model; empty for its default.
     pub model: String,
@@ -248,6 +253,7 @@ impl Default for MeetingSettings {
         Self {
             hotkey: String::new(),
             audio: CallAudio::Both,
+            notes_only: false,
             engine: LiveEngine::Dictation,
             model: String::new(),
             summary: DEFAULT_TEMPLATE.into(),
@@ -308,6 +314,18 @@ impl MeetingSettings {
 pub struct OverlayPosition {
     pub x: i32,
     pub y: i32,
+}
+
+/// What the computer plays while a dictation records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum OtherAudio {
+    #[default]
+    Leave,
+    /// Mute the output until recording stops.
+    Mute,
+    /// Let it play, and take it out of the recording (`echo`).
+    Ignore,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -559,6 +577,7 @@ impl Default for Settings {
             edit_hotkey: String::new(),
             mic_device: None,
             sounds: true,
+            other_audio: OtherAudio::default(),
             mute_audio: false,
             restore_clipboard: true,
             trailing_space: true,
@@ -598,6 +617,15 @@ impl Settings {
         }
     }
 
+    /// The settings a meeting runs with: one for notes only doesn't stream, so `meeting.engine` is the dictation engine.
+    pub fn for_meeting(&self) -> Settings {
+        let mut settings = self.clone();
+        if settings.meeting.notes_only {
+            settings.meeting.engine = LiveEngine::Dictation;
+        }
+        settings
+    }
+
     /// What transcribes a meeting: "OpenAI Realtime · gpt-live-transcribe", or the dictation engine's label.
     pub fn meeting_engine_label(&self) -> String {
         match self.meeting.engine {
@@ -631,6 +659,9 @@ impl Settings {
     pub fn load(path: &Path) -> Settings {
         let mut settings: Settings = std::fs::read(path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
         settings.meeting.migrate();
+        if std::mem::take(&mut settings.mute_audio) && settings.other_audio == OtherAudio::Leave {
+            settings.other_audio = OtherAudio::Mute;
+        }
         settings
     }
 
@@ -699,7 +730,7 @@ mod tests {
         assert!(s.replacements.is_empty() && s.snippets.is_empty());
         assert_eq!(s.transforms, default_transforms());
         assert_eq!(s.active_transform, "");
-        assert_eq!((s.edit_hotkey.as_str(), s.mute_audio, s.keep_recordings, s.history_days), ("", false, 20, 0));
+        assert_eq!((s.edit_hotkey.as_str(), s.other_audio, s.keep_recordings, s.history_days), ("", OtherAudio::Leave, 20, 0));
         assert_eq!(s.seen_changelog, "");
     }
 
@@ -717,6 +748,30 @@ mod tests {
     }
 
     #[test]
+    fn muting_moves_to_other_audio() {
+        let path = std::env::temp_dir().join(format!("yammer-settings-{}.json", std::process::id()));
+        std::fs::write(&path, r#"{"muteAudio":true}"#).unwrap();
+        let s = Settings::load(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!((s.other_audio, s.mute_audio), (OtherAudio::Mute, false));
+        assert!(serde_json::to_value(&s).unwrap().get("muteAudio").is_none());
+    }
+
+    #[test]
+    fn notes_only_meetings_use_the_dictation_engine() {
+        let mut s: Settings = serde_json::from_str(r#"{"meeting":{"engine":"openai-realtime"}}"#).unwrap();
+        assert!(!s.meeting.notes_only);
+        assert_eq!(s.for_meeting().meeting.engine, LiveEngine::OpenaiRealtime);
+        s.meeting.notes_only = true;
+        let running = s.for_meeting();
+        assert_eq!(running.meeting.engine, LiveEngine::Dictation);
+        assert_eq!(running.meeting_engine_label(), s.engine_label());
+        // Kept, for when the live transcript is turned back on.
+        assert_eq!(s.meeting.engine, LiveEngine::OpenaiRealtime);
+        assert_eq!(serde_json::to_value(&s).unwrap()["meeting"]["notesOnly"], true);
+    }
+
+    #[test]
     fn unknown_fields_are_ignored() {
         let s: Settings = serde_json::from_str(r#"{"someFutureThing":1}"#).unwrap();
         assert_eq!(s, Settings::default());
@@ -730,7 +785,7 @@ mod tests {
         assert_eq!(v["theme"], "system");
         assert_eq!(v["cloud"]["api"], "transcriptions");
         assert_eq!(v["cleanup"]["format"], "anthropic-messages");
-        assert_eq!((v["editHotkey"].as_str(), v["muteAudio"].as_bool()), (Some(""), Some(false)));
+        assert_eq!((v["editHotkey"].as_str(), v["otherAudio"].as_str()), (Some(""), Some("leave")));
         assert_eq!((v["keepRecordings"].as_u64(), v["historyDays"].as_u64()), (Some(20), Some(0)));
         assert_eq!(v["transforms"][0]["hotkey"], "");
         assert_eq!(v["seenChangelog"], "");

@@ -199,6 +199,30 @@ pub async fn mic_devices() -> Vec<String> {
     tauri::async_runtime::spawn_blocking(recorder::input_devices).await.unwrap_or_default()
 }
 
+/// Check that the computer's sound can be recorded, by listening for a chime. This is also what
+/// makes macOS ask for permission; refused, it records silence rather than failing.
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn reference_check() -> AppResult<()> {
+    let heard = tauri::async_runtime::spawn_blocking(|| {
+        let reference = recorder::Reference::start()?;
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        crate::sounds::play(crate::sounds::Cue::Start);
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        reference.stop()
+    })
+    .await
+    .map_err(crate::pipeline::join_err)??;
+    if heard.samples.iter().any(|s| s.abs() > 1e-4) {
+        return Ok(());
+    }
+    Err(AppError::Invalid(if cfg!(target_os = "macos") {
+        "Yammer couldn't hear the computer's sound. Allow it under System Settings → Privacy & Security → Screen & System Audio Recording, check the volume isn't muted, then try again.".into()
+    } else {
+        "Yammer couldn't hear the computer's sound. Check the volume isn't muted, then try again.".into()
+    }))
+}
+
 /// Which keys are saved; the values never leave Rust.
 #[tauri::command]
 pub fn secret_status() -> AppResult<BTreeMap<String, bool>> {
